@@ -1,0 +1,3757 @@
+# ---------------------------------------------------------------
+# HA Display 7" — Guition JC1060P470 (ESP32-P4, MIPI DSI)
+# Screens: Energie | Verlichting | Media
+# ---------------------------------------------------------------
+
+substitutions:
+  spotify_entity: media_player.spotify_tomkortekaas
+  spotify_position_entity: sensor.spotify_huidige_positie
+  spotify_source_fallback: "Keuken Amp"
+  doorbell_active_entity: input_boolean.ha_display_deurbel_actief
+
+globals:
+  - id: album_art_loaded_url
+    type: std::string
+    initial_value: '""'
+  - id: album_art_pending_url
+    type: std::string
+    initial_value: '""'
+  - id: ha_base_url_detected
+    type: std::string
+    initial_value: '"http://homeassistant.local:8123"'
+  - id: album_art_retry_count
+    type: int
+    initial_value: '0'
+  - id: immich_art_loaded_url
+    type: std::string
+    initial_value: '""'
+  - id: immich_art_retry_count
+    type: int
+    initial_value: '0'
+  - id: immich_page_active
+    type: bool
+    initial_value: 'false'
+  - id: immich_overlay_countdown
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: doorbell_page_active
+    type: bool
+    initial_value: 'false'
+  - id: doorbell_art_retry_count
+    type: int
+    initial_value: '0'
+  - id: radar_frame_index
+    type: int
+    initial_value: '0'
+  - id: radar_art_retry_count
+    type: int
+    initial_value: '0'
+  - id: radar_last_frame_label
+    type: std::string
+    initial_value: '"radar laden"'
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/jtenniswood/espcontrol
+      ref: main
+    components: [artwork_image]
+    refresh: never
+
+esphome:
+  name: ha-display-7
+  friendly_name: "HA Display 7\""
+  min_version: 2026.3.0
+
+esp32:
+  board: esp32-p4-evboard
+  variant: esp32p4
+  flash_size: 16MB
+  cpu_frequency: 360MHz
+  framework:
+    type: esp-idf
+    advanced:
+      execute_from_psram: true
+      enable_idf_experimental_features: true
+    sdkconfig_options:
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "60"
+      CONFIG_ESP_HOSTED_USE_MEMPOOL: "n"
+      CONFIG_ESP_HOSTED_DFLT_TASK_FROM_SPIRAM: "y"
+
+psram:
+  mode: hex
+  speed: 200MHz
+
+logger:
+  level: DEBUG
+
+api:
+  reboot_timeout: 0s
+  on_client_connected:
+    - lambda: |-
+        if (client_info.find("Home Assistant") == std::string::npos) return;
+        std::string host = client_address;
+        if (host.rfind("::ffff:", 0) == 0) host = host.substr(7);
+        size_t p = host.find(':');
+        if (p != std::string::npos) host = host.substr(0, p);
+        id(ha_base_url_detected) = "http://" + host + ":8123";
+        ESP_LOGI("api", "HA base URL auto-detected: %s", id(ha_base_url_detected).c_str());
+
+ota:
+  - platform: esphome
+
+http_request:
+  timeout: 10s
+  verify_ssl: false
+
+update:
+  - platform: esp32_hosted
+    name: ESP-Hosted Firmware
+    type: http
+    source: https://esphome.github.io/esp-hosted-firmware/manifest/esp32c6.json
+    update_interval: 6h
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+  reboot_timeout: 15min
+  ap:
+    ssid: "HA Display 7 Fallback"
+    password: "ha-display-7"
+
+captive_portal:
+
+esp32_hosted:
+  variant: ESP32C6
+  reset_pin: GPIO54
+  cmd_pin: GPIO19
+  clk_pin: GPIO18
+  d0_pin: GPIO14
+  d1_pin: GPIO15
+  d2_pin: GPIO16
+  d3_pin: GPIO17
+  active_high: true
+  sdio_frequency: 20MHz
+
+i2c:
+  - id: bus_a
+    sda: GPIO7
+    scl: GPIO8
+    frequency: 400kHz
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+
+output:
+  - id: gpio_backlight_pwm
+    platform: ledc
+    pin: GPIO23
+    frequency: 20000Hz
+
+light:
+  - platform: monochromatic
+    output: gpio_backlight_pwm
+    name: Display Backlight
+    id: display_backlight
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+    gamma_correct: 1.0
+
+touchscreen:
+  - platform: gt911
+    id: my_touchscreen
+    i2c_id: bus_a
+    reset_pin: GPIO22
+    interrupt_pin: GPIO21
+    address: 0x5D
+    transform:
+      swap_xy: false
+      mirror_x: false
+      mirror_y: false
+
+esp_ldo:
+  - channel: 3
+    id: dsi_phy_enable
+    voltage: 2.5V
+    adjustable: true
+  - channel: 4
+    id: sd_card_power
+    voltage: 2.7V
+    adjustable: true
+
+display:
+  - platform: mipi_dsi
+    model: JC1060P470
+    id: my_display
+    update_interval: never
+    reset_pin: GPIO5
+    auto_clear_enabled: false
+
+# ---------------------------------------------------------------
+# Fonts — Montserrat + Material Design Icons, zoals de lokale JC1060 ontwerpconfig.
+# ---------------------------------------------------------------
+font:
+  - file: "gfonts://Montserrat@800"
+    id: font_num_76
+    size: 76
+    bpp: 8
+    glyphs: "0123456789.-+°C"
+  - file: "gfonts://Montserrat@600"
+    id: font_roboto_12
+    size: 12
+    bpp: 8
+  - file: "gfonts://Montserrat@600"
+    id: font_roboto_16
+    size: 16
+    bpp: 8
+  - file: "gfonts://Montserrat@700"
+    id: font_roboto_20
+    size: 20
+    bpp: 8
+  - file: "gfonts://Montserrat@800"
+    id: font_roboto_28
+    size: 28
+    bpp: 8
+  - file: "gfonts://Montserrat@800"
+    id: font_roboto_36
+    size: 36
+    bpp: 8
+  - file: "gfonts://Montserrat@800"
+    id: font_roboto_48
+    size: 48
+    bpp: 8
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_icon_28
+    size: 28
+    bpp: 8
+    glyphs:
+      - "\U000F0335"   # mdi-lightbulb
+      - "\U000F04C3"   # mdi-speaker
+      - "\U000F040A"   # mdi-play
+      - "\U000F03E4"   # mdi-pause
+      - "\U000F04AD"   # mdi-skip-next
+      - "\U000F04AE"   # mdi-skip-previous
+      - "\U000F049D"   # mdi-shuffle
+      - "\U000F0456"   # mdi-repeat
+      - "\U000F01B4"   # mdi-delete
+      - "\U000F075E"   # mdi-music-note
+      - "\U000F0599"   # mdi-weather-sunny
+      - "\U000F0595"   # mdi-weather-partly-cloudy
+      - "\U000F0590"   # mdi-weather-cloudy
+      - "\U000F0597"   # mdi-weather-rainy
+      - "\U000F0596"   # mdi-weather-pouring
+      - "\U000F059D"   # mdi-weather-windy
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_icon_48
+    size: 48
+    bpp: 8
+    glyphs:
+      - "\U000F075E"   # mdi-music-note
+      - "\U000F0335"   # mdi-lightbulb
+      - "\U000F0599"   # mdi-weather-sunny
+      - "\U000F0595"   # mdi-weather-partly-cloudy
+      - "\U000F0590"   # mdi-weather-cloudy
+      - "\U000F0597"   # mdi-weather-rainy
+      - "\U000F0596"   # mdi-weather-pouring
+
+# ---------------------------------------------------------------
+# Tijd
+# ---------------------------------------------------------------
+time:
+  - platform: homeassistant
+    id: ha_time
+
+# ---------------------------------------------------------------
+# Sensors — Energie
+# ---------------------------------------------------------------
+sensor:
+  - platform: homeassistant
+    id: ha_verbruik
+    entity_id: sensor.electricity_meter_energieverbruik
+    internal: true
+  - platform: homeassistant
+    id: ha_productie
+    entity_id: sensor.electricity_meter_energieproductie
+    internal: true
+  - platform: homeassistant
+    id: ha_gas
+    entity_id: sensor.gasverbruik_nu
+    internal: true
+  - platform: homeassistant
+    id: ha_kosten_vandaag
+    entity_id: sensor.kosten_stroom_vandaag
+    internal: true
+  - platform: homeassistant
+    id: ha_kosten_maand
+    entity_id: sensor.kosten_stroom_deze_maand
+    internal: true
+  - platform: homeassistant
+    id: ha_binnen_temp
+    entity_id: sensor.hal_sensor_temperatuur
+    internal: true
+  - platform: homeassistant
+    id: light_woonkamer_bri
+    entity_id: light.woonkamer
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: light_keuken_bri
+    entity_id: light.keuken
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: light_eettafel_bri
+    entity_id: light.eettafel
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: light_hal_bri
+    entity_id: light.hal
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: light_veranda_bri
+    entity_id: light.veranda
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: light_kantoor_bri
+    entity_id: light.kantoor
+    attribute: brightness
+    internal: true
+  - platform: homeassistant
+    id: media_positie
+    entity_id: ${spotify_position_entity}
+    internal: true
+  - platform: homeassistant
+    id: media_duur
+    entity_id: ${spotify_entity}
+    attribute: media_duration
+    internal: true
+  - platform: homeassistant
+    id: media_volume
+    entity_id: ${spotify_entity}
+    attribute: volume_level
+    internal: true
+  - platform: homeassistant
+    id: wx_temp
+    entity_id: sensor.weerstation_temperature
+    internal: true
+  - platform: homeassistant
+    id: wx_wind
+    entity_id: sensor.weerstation_wind_speed
+    internal: true
+  - platform: homeassistant
+    id: wx_feels
+    entity_id: weather.forecast_thuis
+    attribute: apparent_temperature
+    internal: true
+  - platform: homeassistant
+    id: wx_humidity
+    entity_id: weather.forecast_thuis
+    attribute: humidity
+    internal: true
+  - platform: homeassistant
+    id: wx_uv
+    entity_id: sensor.weerstation_uv_index
+    internal: true
+  - { platform: homeassistant, id: wx_d0_hi, entity_id: sensor.weerscherm_d0_hi, internal: true }
+  - { platform: homeassistant, id: wx_d0_lo, entity_id: sensor.weerscherm_d0_lo, internal: true }
+  - { platform: homeassistant, id: wx_d1_hi, entity_id: sensor.weerscherm_d1_hi, internal: true }
+  - { platform: homeassistant, id: wx_d1_lo, entity_id: sensor.weerscherm_d1_lo, internal: true }
+  - { platform: homeassistant, id: wx_d2_hi, entity_id: sensor.weerscherm_d2_hi, internal: true }
+  - { platform: homeassistant, id: wx_d2_lo, entity_id: sensor.weerscherm_d2_lo, internal: true }
+  - { platform: homeassistant, id: wx_d3_hi, entity_id: sensor.weerscherm_d3_hi, internal: true }
+  - { platform: homeassistant, id: wx_d3_lo, entity_id: sensor.weerscherm_d3_lo, internal: true }
+  - { platform: homeassistant, id: wx_d4_hi, entity_id: sensor.weerscherm_d4_hi, internal: true }
+  - { platform: homeassistant, id: wx_d4_lo, entity_id: sensor.weerscherm_d4_lo, internal: true }
+  - { platform: homeassistant, id: wx_d0_wind, entity_id: sensor.weerscherm_d0_wind, internal: true }
+  - { platform: homeassistant, id: wx_d1_wind, entity_id: sensor.weerscherm_d1_wind, internal: true }
+  - { platform: homeassistant, id: wx_d2_wind, entity_id: sensor.weerscherm_d2_wind, internal: true }
+  - { platform: homeassistant, id: wx_d3_wind, entity_id: sensor.weerscherm_d3_wind, internal: true }
+  - { platform: homeassistant, id: wx_d4_wind, entity_id: sensor.weerscherm_d4_wind, internal: true }
+  - { platform: homeassistant, id: wx_sun_pct, entity_id: sensor.weerscherm_daglicht_pct, internal: true }
+
+# ---------------------------------------------------------------
+# Text sensors — Media + Lichten
+# ---------------------------------------------------------------
+text_sensor:
+  - platform: homeassistant
+    id: media_title
+    entity_id: ${spotify_entity}
+    attribute: media_title
+    internal: true
+    on_value:
+      - lambda: 'id(album_art_pending_url).clear();'
+  - platform: homeassistant
+    id: media_artist
+    entity_id: ${spotify_entity}
+    attribute: media_artist
+    internal: true
+  - platform: homeassistant
+    id: media_state
+    entity_id: ${spotify_entity}
+    internal: true
+  - platform: homeassistant
+    id: media_source
+    entity_id: ${spotify_entity}
+    attribute: source
+    internal: true
+  - platform: homeassistant
+    id: media_shuffle
+    entity_id: ${spotify_entity}
+    attribute: shuffle
+    internal: true
+  - platform: homeassistant
+    id: media_repeat
+    entity_id: ${spotify_entity}
+    attribute: repeat
+    internal: true
+  - platform: homeassistant
+    id: media_album_art_local
+    entity_id: ${spotify_entity}
+    attribute: entity_picture_local
+    internal: true
+    on_value:
+      - lambda: |-
+          if (x.empty()) return;
+          std::string url = (x.rfind("http", 0) == 0) ? x : id(ha_base_url_detected) + x;
+          id(album_art_pending_url) = url;
+      - script.execute: album_art_load
+  - platform: homeassistant
+    id: media_album_art_remote
+    entity_id: ${spotify_entity}
+    attribute: entity_picture
+    internal: true
+    on_value:
+      - lambda: |-
+          if (x.empty() || !id(album_art_pending_url).empty()) return;
+          std::string url = (x.rfind("http", 0) == 0) ? x : id(ha_base_url_detected) + x;
+          id(album_art_pending_url) = url;
+      - script.execute: album_art_load
+  - platform: homeassistant
+    id: light_woonkamer_st
+    entity_id: light.woonkamer
+    internal: true
+  - platform: homeassistant
+    id: light_keuken_st
+    entity_id: light.keuken
+    internal: true
+  - platform: homeassistant
+    id: light_eettafel_st
+    entity_id: light.eettafel
+    internal: true
+  - platform: homeassistant
+    id: light_hal_st
+    entity_id: light.hal
+    internal: true
+  - platform: homeassistant
+    id: light_veranda_st
+    entity_id: light.veranda
+    internal: true
+  - platform: homeassistant
+    id: light_kantoor_st
+    entity_id: light.kantoor
+    internal: true
+  - platform: homeassistant
+    id: wx_cond_now
+    entity_id: weather.forecast_thuis
+    internal: true
+  - platform: homeassistant
+    id: wx_wind_dir
+    entity_id: sensor.weerstation_windrichting
+    internal: true
+  - { platform: homeassistant, id: wx_d0_cond, entity_id: sensor.weerscherm_d0_cond, internal: true }
+  - { platform: homeassistant, id: wx_d1_cond, entity_id: sensor.weerscherm_d1_cond, internal: true }
+  - { platform: homeassistant, id: wx_d2_cond, entity_id: sensor.weerscherm_d2_cond, internal: true }
+  - { platform: homeassistant, id: wx_d3_cond, entity_id: sensor.weerscherm_d3_cond, internal: true }
+  - { platform: homeassistant, id: wx_d4_cond, entity_id: sensor.weerscherm_d4_cond, internal: true }
+  - { platform: homeassistant, id: wx_rain_cap, entity_id: sensor.weerscherm_regen_caption, internal: true }
+  - { platform: homeassistant, id: wx_sunrise, entity_id: sensor.weerscherm_zon_op, internal: true }
+  - { platform: homeassistant, id: wx_sunset, entity_id: sensor.weerscherm_zon_onder, internal: true }
+  - { platform: homeassistant, id: wx_sun_cap, entity_id: sensor.weerscherm_daglicht_caption, internal: true }
+  - platform: homeassistant
+    id: immich_url
+    entity_id: sensor.immich_photo_url
+    internal: true
+    on_value:
+      - script.execute: immich_photo_load
+  - { platform: homeassistant, id: immich_place, entity_id: sensor.immich_place, internal: true }
+  - { platform: homeassistant, id: immich_date, entity_id: sensor.immich_date, internal: true }
+  - { platform: homeassistant, id: immich_album_txt, entity_id: sensor.immich_album, internal: true }
+  - { platform: homeassistant, id: immich_status_text, entity_id: sensor.immich_status, internal: true }
+  - platform: homeassistant
+    id: immich_camera_picture
+    entity_id: camera.immich_picture_immich_picture_slideshow_random_assets
+    attribute: entity_picture
+    internal: true
+  - platform: homeassistant
+    id: immich_camera_asset_id
+    entity_id: camera.immich_picture_immich_picture_slideshow_random_assets
+    attribute: asset_id
+    internal: true
+  - platform: homeassistant
+    id: immich_camera_filename
+    entity_id: camera.immich_picture_immich_picture_slideshow_random_assets
+    attribute: filename
+    internal: true
+  - platform: homeassistant
+    id: immich_camera_taken_at
+    entity_id: camera.immich_picture_immich_picture_slideshow_random_assets
+    attribute: taken_at
+    internal: true
+  - platform: homeassistant
+    id: doorbell_active
+    entity_id: ${doorbell_active_entity}
+    internal: true
+
+artwork_image:
+  - id: album_art
+    url: "http://homeassistant.local:8123/api/media_player_proxy/${spotify_entity}"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 256x256
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - script.execute: album_art_apply
+    on_error:
+      - script.execute: album_art_retry
+  - id: immich_art
+    url: "http://homeassistant.local:8123/local/immich/current.jpg"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 1024x600
+    resize_mode: FIT
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - script.execute: immich_photo_apply
+    on_error:
+      - script.execute: immich_photo_retry
+  - id: doorbell_art
+    url: "http://homeassistant.local:8123/local/ha-display-doorbell.jpg"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 936x526
+    resize_mode: FIT
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - script.execute: doorbell_snapshot_apply
+    on_error:
+      - script.execute: doorbell_snapshot_retry
+  - id: radar_art
+    url: "http://homeassistant.local:8123/local/ha-display-radar/radar_0.jpg"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 268x402
+    resize_mode: FIT
+    buffer_size: 65536
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - script.execute: radar_frame_apply
+    on_error:
+      - script.execute: radar_frame_retry
+
+# ---------------------------------------------------------------
+# LVGL
+# ---------------------------------------------------------------
+lvgl:
+  displays:
+    - my_display
+  touchscreens:
+    - my_touchscreen
+  color_depth: 16
+  byte_order: little_endian
+  bg_color: 0x000000
+  bg_opa: COVER
+  text_font: font_roboto_16
+  theme:
+    button:
+      bg_color: 0x1A1A1A
+      bg_opa: COVER
+      text_color: 0xFFFFFF
+      border_width: 0
+      outline_width: 0
+      shadow_width: 0
+      scroll_on_focus: false
+      pressed:
+        bg_color: 0x282828
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_width: 0
+      focused:
+        bg_color: 0x1A1A1A
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_width: 0
+      checked:
+        bg_color: 0x12301C
+        bg_opa: COVER
+        border_width: 0
+        outline_width: 0
+        shadow_width: 0
+
+  # Nav rail + status bar — altijd zichtbaar bovenop alles
+  top_layer:
+    widgets:
+      # Nav rail (links, 88×600)
+      - obj:
+          id: nav_rail_container
+          x: 0
+          y: 0
+          width: 88
+          height: 600
+          bg_color: 0x050505
+          bg_opa: COVER
+          border_width: 0
+          pad_all: 0
+          widgets:
+            # Logo — 44×44 afgerond accentvlak
+            - obj:
+                align: TOP_MID
+                y: 12
+                width: 44
+                height: 44
+                radius: 10
+                bg_color: 0x2EE36A
+                bg_opa: COVER
+                border_width: 0
+                widgets:
+                  - label:
+                      align: CENTER
+                      text_font: font_roboto_28
+                      text_color: 0xFFFFFF
+                      text: "H"
+            # Energie — actief (accentstrip links)
+            - obj:
+                x: 0
+                y: 72
+                width: 88
+                height: 64
+                bg_color: 0x101010
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_energie
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x2EE36A
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_energie
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x202020
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_energy
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x2EE36A
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0x2EE36A
+                            text: "E"
+            # Lichten — inactief
+            - obj:
+                x: 0
+                y: 148
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_lichten
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_lichten
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_lights
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x2EE36A
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "L"
+            # Media — inactief
+            - obj:
+                x: 0
+                y: 224
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_media
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_media
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_media
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x2EE36A
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "M"
+            # Weer — inactief
+            - obj:
+                x: 0
+                y: 300
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_weather
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_weather
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_weather
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x2EE36A
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "W"
+            # Immich — inactief
+            - obj:
+                x: 0
+                y: 376
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_immich
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_immich
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_immich
+                          - lambda: 'id(immich_page_active) = true; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.hide: immich_controls
+                          - lvgl.widget.show: lbl_immich_clock
+                          - lvgl.widget.show: lbl_immich_date
+                          - lvgl.widget.show: lbl_immich_place
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x2EE36A
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "I"
+            # Onderkant — versie label
+            - label:
+                align: BOTTOM_MID
+                y: -40
+                text_font: font_roboto_16
+                text_color: 0x666666
+                text: "P4"
+
+      # Status bar (rechts van nav, 936×56)
+      - obj:
+          id: top_status_bar
+          x: 88
+          y: 0
+          width: 936
+          height: 56
+          bg_color: 0x101010
+          bg_opa: 55%
+          border_width: 0
+          pad_all: 0
+          widgets:
+            - label:
+                id: lbl_clock
+                align: LEFT_MID
+                x: 20
+                text_font: font_roboto_28
+                text_color: 0xFFFFFF
+                text: "--:--"
+            - label:
+                id: lbl_date
+                align: LEFT_MID
+                x: 130
+                text_font: font_roboto_16
+                text_color: 0xA0A0A0
+                text: "—"
+            - label:
+                id: lbl_immich_header
+                align: LEFT_MID
+                x: 260
+                width: 360
+                text_font: font_roboto_16
+                text_color: 0xFFFFFF
+                long_mode: DOT
+                text: ""
+            # Rechts: buiten · W · HA-dot
+            - obj:
+                align: RIGHT_MID
+                x: -16
+                width: 300
+                height: 40
+                bg_color: 0x101010
+                bg_opa: 0%
+                border_width: 0
+                pad_all: 0
+                layout:
+                  type: FLEX
+                  flex_flow: ROW
+                  flex_align_main: END
+                  flex_align_cross: CENTER
+                  pad_column: 14
+                widgets:
+                  - label:
+                      id: lbl_buiten_temp
+                      text_font: font_roboto_16
+                      text_color: 0xA0A0A0
+                      text: "--°"
+                  - label:
+                      id: lbl_power_status
+                      text_font: font_roboto_16
+                      text_color: 0x2EE36A
+                      text: "-- W"
+                  - label:
+                      id: lbl_ha_dot
+                      text_font: font_roboto_16
+                      text_color: 0xFF2A7A
+                      text: "HA"
+
+  pages:
+    # ===========================================================
+    # PAGINA 1: ENERGIE
+    # ===========================================================
+    - id: page_energy
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 56
+            width: 936
+            height: 544
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+
+              # LINKS — Verbruik arc (groot)
+              - obj:
+                  x: 16
+                  y: 16
+                  width: 320
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 14
+                        width: 320
+                        text_align: CENTER
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "STROOM"
+                    - arc:
+                        id: arc_verbruik
+                        align: TOP_MID
+                        y: 30
+                        width: 250
+                        height: 250
+                        arc_color: 0x1a1a1a
+                        arc_width: 18
+                        start_angle: 135
+                        end_angle: 45
+                        min_value: 0
+                        max_value: 6000
+                        value: 0
+                        adjustable: false
+                        indicator:
+                          arc_color: 0x2EE36A
+                          arc_width: 18
+                        widgets:
+                          - label:
+                              id: lbl_verbruik_w
+                              align: CENTER
+                              y: -20
+                              text_font: font_num_76
+                              text_color: 0xFFFFFF
+                              text: "--"
+                          - label:
+                              align: CENTER
+                              y: 46
+                              text_font: font_roboto_20
+                              text_color: 0x2EE36A
+                              text: "W"
+                    - label:
+                        id: lbl_verbruik_kw
+                        align: TOP_MID
+                        y: 295
+                        text_font: font_roboto_16
+                        text_color: 0x2EE36A
+                        text: "-- kW verbruik"
+                    - label:
+                        id: lbl_productie_kw
+                        align: TOP_MID
+                        y: 326
+                        text_font: font_roboto_16
+                        text_color: 0x2EE36A
+                        text: "-- kW productie"
+                    - label:
+                        id: lbl_kosten_vandaag
+                        align: TOP_MID
+                        y: 378
+                        text_font: font_roboto_20
+                        text_color: 0xFFD84A
+                        text: "-- €  vandaag"
+                    - label:
+                        id: lbl_kosten_maand
+                        align: TOP_MID
+                        y: 412
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "-- €  deze maand"
+
+              # MIDDEN — Solar + Gas arcs
+              - obj:
+                  x: 352
+                  y: 16
+                  width: 268
+                  height: 512
+                  bg_color: 0x000000
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  layout:
+                    type: FLEX
+                    flex_flow: COLUMN
+                    flex_align_main: START
+                    flex_align_cross: CENTER
+                  widgets:
+                    # Solar card
+                    - obj:
+                        width: 268
+                        height: 248
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        radius: 18
+                        border_width: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 10
+                              width: 268
+                              text_align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "SOLAR"
+                          - arc:
+                              id: arc_solar
+                              align: TOP_MID
+                              y: 32
+                              width: 160
+                              height: 160
+                              arc_color: 0x061D0E
+                              arc_width: 12
+                              start_angle: 135
+                              end_angle: 45
+                              min_value: 0
+                              max_value: 5000
+                              value: 0
+                              adjustable: false
+                              indicator:
+                                arc_color: 0x2EE36A
+                                arc_width: 12
+                              widgets:
+                                - label:
+                                    id: lbl_solar_w
+                                    align: CENTER
+                                    y: -10
+                                    text_font: font_roboto_20
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                - label:
+                                    align: CENTER
+                                    y: 16
+                                    text_font: font_roboto_16
+                                    text_color: 0x2EE36A
+                                    text: "W"
+                    # Gas card
+                    - obj:
+                        width: 268
+                        height: 248
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        radius: 18
+                        border_width: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 10
+                              width: 268
+                              text_align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "GAS"
+                          - arc:
+                              id: arc_gas
+                              align: TOP_MID
+                              y: 32
+                              width: 160
+                              height: 160
+                              arc_color: 0x210510
+                              arc_width: 12
+                              start_angle: 135
+                              end_angle: 45
+                              min_value: 0
+                              max_value: 300
+                              value: 0
+                              adjustable: false
+                              indicator:
+                                arc_color: 0xFF2A7A
+                                arc_width: 12
+                              widgets:
+                                - label:
+                                    id: lbl_gas_mh
+                                    align: CENTER
+                                    y: -10
+                                    text_font: font_roboto_20
+                                    text_color: 0xFFFFFF
+                                    text: "--"
+                                - label:
+                                    align: CENTER
+                                    y: 16
+                                    text_font: font_roboto_16
+                                    text_color: 0xFF2A7A
+                                    text: "m3/h"
+
+              # RECHTS — 4 bar metrics
+              - obj:
+                  x: 636
+                  y: 16
+                  width: 284
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  pad_all: 20
+                  layout:
+                    type: FLEX
+                    flex_flow: COLUMN
+                    flex_align_main: SPACE_EVENLY
+                    flex_align_cross: START
+                  widgets:
+                    # Metric 1: Kosten vandaag
+                    - obj:
+                        width: 244
+                        height: 100
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "KOSTEN VANDAAG"
+                          - label:
+                              id: lbl_cost_groot
+                              x: 0
+                              y: 22
+                              text_font: font_roboto_36
+                              text_color: 0xFFD84A
+                              text: "-- €"
+                          - bar:
+                              id: bar_kosten
+                              x: 0
+                              y: 72
+                              width: 244
+                              height: 6
+                              radius: 3
+                              min_value: 0
+                              max_value: 100
+                              value: 0
+                              bg_color: 0x211C0A
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0xFFD84A
+                                bg_opa: COVER
+                    # Metric 2: Verbruik nu
+                    - obj:
+                        width: 244
+                        height: 100
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "VERBRUIK NU"
+                          - label:
+                              id: lbl_vb_rechts
+                              x: 0
+                              y: 22
+                              text_font: font_roboto_36
+                              text_color: 0x2EE36A
+                              text: "-- kW"
+                          - bar:
+                              id: bar_verbruik
+                              x: 0
+                              y: 72
+                              width: 244
+                              height: 6
+                              radius: 3
+                              min_value: 0
+                              max_value: 100
+                              value: 0
+                              bg_color: 0x151515
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0x2EE36A
+                                bg_opa: COVER
+                    # Metric 3: Productie nu
+                    - obj:
+                        width: 244
+                        height: 100
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "PRODUCTIE NU"
+                          - label:
+                              id: lbl_prod_rechts
+                              x: 0
+                              y: 22
+                              text_font: font_roboto_36
+                              text_color: 0x2EE36A
+                              text: "-- kW"
+                          - bar:
+                              id: bar_productie
+                              x: 0
+                              y: 72
+                              width: 244
+                              height: 6
+                              radius: 3
+                              min_value: 0
+                              max_value: 100
+                              value: 0
+                              bg_color: 0x061D0E
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0x2EE36A
+                                bg_opa: COVER
+                    # Metric 4: Binnentemperatuur
+                    - obj:
+                        width: 244
+                        height: 100
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "BINNEN"
+                          - label:
+                              id: lbl_binnen_temp
+                              x: 0
+                              y: 22
+                              text_font: font_roboto_36
+                              text_color: 0xFF8A3A
+                              text: "--°C"
+                          - bar:
+                              id: bar_temp
+                              x: 0
+                              y: 72
+                              width: 244
+                              height: 6
+                              radius: 3
+                              min_value: 0
+                              max_value: 100
+                              value: 0
+                              bg_color: 0x211208
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0xFF8A3A
+                                bg_opa: COVER
+
+    # ===========================================================
+    # PAGINA 2: VERLICHTING
+    # ===========================================================
+    - id: page_lights
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 56
+            width: 936
+            height: 544
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 16
+            scrollable: false
+            layout:
+              type: FLEX
+              flex_flow: ROW
+              flex_align_main: START
+              flex_align_cross: START
+            widgets:
+
+              # LINKS — Verlichting card (612px)
+              - obj:
+                  width: 612
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  pad_all: 16
+                  scrollable: false
+                  widgets:
+                    # Header
+                    - obj:
+                        x: 0
+                        y: 0
+                        width: 580
+                        height: 44
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label:
+                              align: LEFT_MID
+                              text_font: font_roboto_20
+                              text_color: 0xFFFFFF
+                              text: "VERLICHTING"
+                          - button:
+                              id: btn_alles_uit
+                              align: RIGHT_MID
+                              width: 110
+                              height: 36
+                              radius: 8
+                              bg_color: 0x202020
+                              bg_opa: COVER
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.turn_off
+                                      data:
+                                        entity_id: "light.woonkamer,light.keuken,light.eettafel,light.hal,light.veranda,light.kantoor"
+                              widgets:
+                                - label:
+                                    align: CENTER
+                                    text_font: font_roboto_16
+                                    text_color: 0xA0A0A0
+                                    text: "Alles uit"
+                    # Licht tiles grid (2 kolommen)
+                    - obj:
+                        x: 0
+                        y: 52
+                        width: 580
+                        height: 444
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        layout:
+                          type: FLEX
+                          flex_flow: ROW_WRAP
+                          flex_align_main: START
+                          flex_align_cross: START
+                        widgets:
+                          # Tile: Woonkamer
+                          - obj:
+                              id: tile_woonkamer
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.woonkamer
+                              widgets:
+                                - obj:
+                                    id: swatch_woonkamer
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Woonkamer"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.woonkamer"
+                                - slider:
+                                    id: slider_woonkamer
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.woonkamer
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_woonkamer));'
+                          # Tile: Keuken
+                          - obj:
+                              id: tile_keuken
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.keuken
+                              widgets:
+                                - obj:
+                                    id: swatch_keuken
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Keuken"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.keuken"
+                                - slider:
+                                    id: slider_keuken
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.keuken
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_keuken));'
+                          # Tile: Eettafel
+                          - obj:
+                              id: tile_eettafel
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.eettafel
+                              widgets:
+                                - obj:
+                                    id: swatch_eettafel
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Eettafel"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.eettafel"
+                                - slider:
+                                    id: slider_eettafel
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.eettafel
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_eettafel));'
+                          # Tile: Hal
+                          - obj:
+                              id: tile_hal
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.hal
+                              widgets:
+                                - obj:
+                                    id: swatch_hal
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Hal"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.hal"
+                                - slider:
+                                    id: slider_hal
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.hal
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_hal));'
+                          # Tile: Veranda
+                          - obj:
+                              id: tile_veranda
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.veranda
+                              widgets:
+                                - obj:
+                                    id: swatch_veranda
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Veranda"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.veranda"
+                                - slider:
+                                    id: slider_veranda
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.veranda
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_veranda));'
+                          # Tile: Kantoor
+                          - obj:
+                              id: tile_kantoor
+                              width: 278
+                              height: 130
+                              margin_right: 8
+                              margin_bottom: 8
+                              bg_color: 0x141414
+                              bg_opa: COVER
+                              radius: 12
+                              border_width: 0
+                              pad_all: 12
+                              on_click:
+                                then:
+                                  - homeassistant.action:
+                                      action: light.toggle
+                                      data:
+                                        entity_id: light.kantoor
+                              widgets:
+                                - obj:
+                                    id: swatch_kantoor
+                                    align: TOP_LEFT
+                                    width: 28
+                                    height: 28
+                                    radius: 14
+                                    bg_color: 0x3a3a3a
+                                    bg_opa: COVER
+                                    border_width: 0
+                                - label:
+                                    x: 40
+                                    y: 4
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFFFFF
+                                    text: "Kantoor"
+                                - label:
+                                    x: 40
+                                    y: 22
+                                    text_font: font_roboto_12
+                                    text_color: 0x666666
+                                    text: "light.kantoor"
+                                - slider:
+                                    id: slider_kantoor
+                                    align: BOTTOM_MID
+                                    y: -4
+                                    width: 240
+                                    height: 8
+                                    min_value: 0
+                                    max_value: 255
+                                    value: 0
+                                    bg_color: 0x2d2d2d
+                                    bg_opa: COVER
+                                    indicator:
+                                      bg_color: 0x2EE36A
+                                      bg_opa: COVER
+                                    knob:
+                                      bg_color: 0xFFFFFF
+                                      bg_opa: COVER
+                                    on_release:
+                                      then:
+                                        - homeassistant.action:
+                                            action: light.turn_on
+                                            data:
+                                              entity_id: light.kantoor
+                                              brightness: !lambda 'return (int)lv_slider_get_value(id(slider_kantoor));'
+
+              # RECHTS — Scène tiles (292px)
+              - obj:
+                  width: 292
+                  height: 512
+                  bg_color: 0x000000
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  layout:
+                    type: FLEX
+                    flex_flow: ROW_WRAP
+                    flex_align_main: START
+                    flex_align_cross: START
+                  widgets:
+                    # Scene: Ontspannen
+                    - button:
+                        width: 136
+                        height: 136
+                        margin_right: 8
+                        margin_bottom: 8
+                        radius: 14
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        on_click:
+                          then:
+                            - homeassistant.action:
+                                action: scene.turn_on
+                                data:
+                                  entity_id: scene.woonkamer_ontspannen
+                        widgets:
+                          - label:
+                              align: CENTER
+                              y: -16
+                              text_font: font_roboto_20
+                              text_color: 0x2EE36A
+                              text: "~"
+                          - label:
+                              align: CENTER
+                              y: 10
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Ontspannen"
+                    # Scene: Gedimd
+                    - button:
+                        width: 136
+                        height: 136
+                        margin_right: 8
+                        margin_bottom: 8
+                        radius: 14
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        on_click:
+                          then:
+                            - homeassistant.action:
+                                action: scene.turn_on
+                                data:
+                                  entity_id: scene.woonkamer_gedimd
+                        widgets:
+                          - label:
+                              align: CENTER
+                              y: -16
+                              text_font: font_roboto_20
+                              text_color: 0xFFD84A
+                              text: "o"
+                          - label:
+                              align: CENTER
+                              y: 10
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Gedimd"
+                    # Scene: Lezen
+                    - button:
+                        width: 136
+                        height: 136
+                        margin_right: 8
+                        margin_bottom: 8
+                        radius: 14
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        on_click:
+                          then:
+                            - homeassistant.action:
+                                action: scene.turn_on
+                                data:
+                                  entity_id: scene.woonkamer_lezen
+                        widgets:
+                          - label:
+                              align: CENTER
+                              y: -16
+                              text_font: font_roboto_20
+                              text_color: 0x34D0FF
+                              text: "="
+                          - label:
+                              align: CENTER
+                              y: 10
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Lezen"
+                    # Scene: Helder
+                    - button:
+                        width: 136
+                        height: 136
+                        margin_right: 8
+                        margin_bottom: 8
+                        radius: 14
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        on_click:
+                          then:
+                            - homeassistant.action:
+                                action: scene.turn_on
+                                data:
+                                  entity_id: scene.woonkamer_helder
+                        widgets:
+                          - label:
+                              align: CENTER
+                              y: -16
+                              text_font: font_roboto_20
+                              text_color: 0x2EE36A
+                              text: "*"
+                          - label:
+                              align: CENTER
+                              y: 10
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Helder"
+
+    # ===========================================================
+    # PAGINA 3: MEDIA
+    # ===========================================================
+    - id: page_media
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 56
+            width: 936
+            height: 544
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 16
+            scrollable: false
+            layout:
+              type: FLEX
+              flex_flow: ROW
+              flex_align_main: START
+              flex_align_cross: START
+            widgets:
+              # LINKS — Album art placeholder (296px)
+              - obj:
+                  width: 296
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  widgets:
+                    - obj:
+                        align: TOP_MID
+                        y: 20
+                        width: 256
+                        height: 256
+                        bg_color: 0x202020
+                        bg_opa: COVER
+                        radius: 14
+                        border_width: 0
+                        widgets:
+                          - image:
+                              id: img_album
+                              src: album_art
+                              align: CENTER
+                              width: 256
+                              height: 256
+                          - label:
+                              id: lbl_album_fallback
+                              align: CENTER
+                              text_font: font_icon_48
+                              text_color: 0x2EE36A
+                              text: "\U000F075E"
+                    - label:
+                        align: BOTTOM_MID
+                        y: -60
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "Spotify speelt op"
+                    - label:
+                        id: lbl_media_source
+                        align: BOTTOM_MID
+                        y: -36
+                        text_font: font_roboto_16
+                        text_color: 0xFFFFFF
+                        text: "${spotify_source_fallback}"
+                    - label:
+                        align: BOTTOM_MID
+                        y: -14
+                        text_font: font_roboto_12
+                        text_color: 0x666666
+                        text: "${spotify_entity}"
+
+              # RECHTS — Track info + transport (608px)
+              - obj:
+                  width: 608
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  pad_all: 28
+                  scrollable: false
+                  widgets:
+                    - label:
+                        id: lbl_track_titel
+                        x: 0
+                        y: 0
+                        width: 552
+                        text_font: font_roboto_36
+                        text_color: 0xFFFFFF
+                        long_mode: SCROLL_CIRCULAR
+                        text: "—"
+                    - label:
+                        id: lbl_track_artiest
+                        x: 0
+                        y: 52
+                        width: 552
+                        text_font: font_roboto_20
+                        text_color: 0xA0A0A0
+                        text: "—"
+                    # Voortgangsbalk
+                    - bar:
+                        id: bar_media_progress
+                        x: 0
+                        y: 100
+                        width: 552
+                        height: 6
+                        radius: 3
+                        min_value: 0
+                        max_value: 100
+                        value: 0
+                        bg_color: 0x202020
+                        bg_opa: COVER
+                        indicator:
+                          bg_color: 0x2EE36A
+                          bg_opa: COVER
+                    - label:
+                        id: lbl_elapsed
+                        x: 0
+                        y: 114
+                        text_font: font_roboto_12
+                        text_color: 0x666666
+                        text: "0:00"
+                    - label:
+                        id: lbl_remaining
+                        align: TOP_RIGHT
+                        y: 114
+                        text_font: font_roboto_12
+                        text_color: 0x666666
+                        text: "0:00"
+                    # Transport row
+                    - obj:
+                        x: 0
+                        y: 160
+                        width: 552
+                        height: 88
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        layout:
+                          type: FLEX
+                          flex_flow: ROW
+                          flex_align_main: CENTER
+                          flex_align_cross: CENTER
+                          pad_column: 16
+                        widgets:
+                          # Shuffle
+                          - button:
+                              width: 48
+                              height: 48
+                              radius: 24
+                              bg_color: 0x1a1a1a
+                              bg_opa: COVER
+                              on_click:
+                                - homeassistant.action:
+                                    action: media_player.shuffle_set
+                                    data:
+                                      entity_id: ${spotify_entity}
+                                    data_template:
+                                      shuffle: "{{ sh }}"
+                                    variables:
+                                      sh: !lambda |-
+                                        auto s = id(media_shuffle).state;
+                                        bool on = (s == "on" || s == "On" || s == "true" || s == "True" || s == "1");
+                                        return on ? std::string("false") : std::string("true");
+                              widgets:
+                                - label:
+                                    align: CENTER
+                                    text_font: font_icon_28
+                                    text_color: 0xA0A0A0
+                                    text: "\U000F049D"
+                          # Vorige
+                          - button:
+                              width: 56
+                              height: 56
+                              radius: 28
+                              bg_color: 0x1a1a1a
+                              bg_opa: COVER
+                              on_click:
+                                - homeassistant.action:
+                                    action: media_player.media_previous_track
+                                    data:
+                                      entity_id: ${spotify_entity}
+                              widgets:
+                                - label:
+                                    align: CENTER
+                                    text_font: font_icon_28
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F04AE"
+                          # Play/Pause (groot wit)
+                          - button:
+                              id: btn_play_pause
+                              width: 80
+                              height: 80
+                              radius: 40
+                              bg_color: 0xFFFFFF
+                              bg_opa: COVER
+                              on_click:
+                                - homeassistant.action:
+                                    action: media_player.media_play_pause
+                                    data:
+                                      entity_id: ${spotify_entity}
+                              widgets:
+                                - label:
+                                    id: lbl_play_icoon
+                                    align: CENTER
+                                    text_font: font_icon_28
+                                    text_color: 0x000000
+                                    text: "\U000F040A"
+                          # Volgende
+                          - button:
+                              width: 56
+                              height: 56
+                              radius: 28
+                              bg_color: 0x1a1a1a
+                              bg_opa: COVER
+                              on_click:
+                                - homeassistant.action:
+                                    action: media_player.media_next_track
+                                    data:
+                                      entity_id: ${spotify_entity}
+                              widgets:
+                                - label:
+                                    align: CENTER
+                                    text_font: font_icon_28
+                                    text_color: 0xFFFFFF
+                                    text: "\U000F04AD"
+                          # Repeat
+                          - button:
+                              width: 48
+                              height: 48
+                              radius: 24
+                              bg_color: 0x1a1a1a
+                              bg_opa: COVER
+                              on_click:
+                                - homeassistant.action:
+                                    action: media_player.repeat_set
+                                    data:
+                                      entity_id: ${spotify_entity}
+                                    data_template:
+                                      repeat: "{{ rp }}"
+                                    variables:
+                                      rp: !lambda 'return id(media_repeat).state == std::string("off") ? "all" : "off";'
+                              widgets:
+                                - label:
+                                    align: CENTER
+                                    text_font: font_icon_28
+                                    text_color: 0xA0A0A0
+                                    text: "\U000F0456"
+                    # Volume slider
+                    - label:
+                        x: 0
+                        y: 278
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "VOLUME"
+                    - slider:
+                        id: slider_volume
+                        x: 0
+                        y: 306
+                        width: 552
+                        height: 8
+                        min_value: 0
+                        max_value: 100
+                        value: 50
+                        bg_color: 0x202020
+                        bg_opa: COVER
+                        indicator:
+                          bg_color: 0x2EE36A
+                          bg_opa: COVER
+                        knob:
+                          bg_color: 0xFFFFFF
+                          bg_opa: COVER
+                        on_release:
+                          - homeassistant.action:
+                              action: media_player.volume_set
+                              data:
+                                entity_id: ${spotify_entity}
+                              data_template:
+                                volume_level: "{{ vol }}"
+                              variables:
+                                vol: !lambda 'return lv_slider_get_value(id(slider_volume)) / 100.0;'
+
+    # ===========================================================
+    # PAGINA 4: WEER
+    # ===========================================================
+    - id: page_weather
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 56
+            width: 936
+            height: 544
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 16
+            scrollable: false
+            layout:
+              type: FLEX
+              flex_flow: ROW
+              flex_align_main: START
+              flex_align_cross: START
+              pad_column: 16
+            widgets:
+              - obj:
+                  width: 608
+                  height: 512
+                  bg_color: 0x000000
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  layout:
+                    type: FLEX
+                    flex_flow: COLUMN
+                    flex_align_main: START
+                    flex_align_cross: START
+                    pad_row: 14
+                  widgets:
+                    - obj:
+                        width: 608
+                        height: 236
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        radius: 18
+                        border_width: 0
+                        pad_all: 22
+                        scrollable: false
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "WEER THUIS"
+                          - label:
+                              id: lbl_wx_now_icon
+                              x: 0
+                              y: 52
+                              text_font: font_icon_48
+                              text_color: 0xFFD84A
+                              text: "󰖙"
+                          - label:
+                              id: lbl_wx_now_temp
+                              x: 92
+                              y: 28
+                              text_font: font_num_76
+                              text_color: 0xFFFFFF
+                              text: "--"
+                          - label:
+                              id: lbl_wx_now_cond
+                              x: 0
+                              y: 132
+                              width: 260
+                              text_font: font_roboto_28
+                              text_color: 0xFFFFFF
+                              long_mode: DOT
+                              text: "--"
+                          - label:
+                              x: 324
+                              y: 12
+                              text_font: font_roboto_12
+                              text_color: 0x666666
+                              text: "WIND"
+                          - label:
+                              id: lbl_wx_wind
+                              x: 324
+                              y: 34
+                              width: 220
+                              text_font: font_roboto_20
+                              text_color: 0x34D0FF
+                              long_mode: DOT
+                              text: "--"
+                          - label:
+                              x: 324
+                              y: 82
+                              text_font: font_roboto_12
+                              text_color: 0x666666
+                              text: "UV"
+                          - label:
+                              id: lbl_wx_uv
+                              x: 324
+                              y: 104
+                              text_font: font_roboto_20
+                              text_color: 0x2EE36A
+                              text: "--"
+                          - bar:
+                              id: bar_wx_uv
+                              x: 366
+                              y: 113
+                              width: 178
+                              height: 8
+                              min_value: 0
+                              max_value: 11
+                              value: 0
+                              radius: 4
+                              bg_color: 0x202020
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0x2EE36A
+                                bg_opa: COVER
+                          - label:
+                              id: lbl_wx_rain
+                              x: 324
+                              y: 146
+                              width: 220
+                              text_font: font_roboto_20
+                              text_color: 0xA0A0A0
+                              long_mode: DOT
+                              text: "regen --"
+                          - label:
+                              id: lbl_wx_sun
+                              x: 324
+                              y: 180
+                              width: 220
+                              text_font: font_roboto_12
+                              text_color: 0xA0A0A0
+                              long_mode: DOT
+                              text: "zon --"
+                          - bar:
+                              id: bar_wx_sun
+                              x: 324
+                              y: 206
+                              width: 220
+                              height: 8
+                              min_value: 0
+                              max_value: 100
+                              value: 0
+                              radius: 4
+                              bg_color: 0x202020
+                              bg_opa: COVER
+                              indicator:
+                                bg_color: 0xFFD84A
+                                bg_opa: COVER
+
+                    - obj:
+                        width: 608
+                        height: 262
+                        bg_color: 0x101010
+                        bg_opa: COVER
+                        radius: 18
+                        border_width: 0
+                        pad_all: 18
+                        scrollable: false
+                        widgets:
+                          - label:
+                              x: 0
+                              y: 0
+                              text_font: font_roboto_16
+                              text_color: 0xA0A0A0
+                              text: "5 DAGEN"
+                          - obj:
+                              x: 0
+                              y: 42
+                              width: 572
+                              height: 190
+                              bg_color: 0x101010
+                              bg_opa: COVER
+                              border_width: 0
+                              pad_all: 0
+                              layout:
+                                type: FLEX
+                                flex_flow: COLUMN
+                                flex_align_main: START
+                                flex_align_cross: START
+                                pad_row: 8
+                              widgets:
+                                - obj:
+                                    width: 572
+                                    height: 30
+                                    bg_color: 0x141414
+                                    bg_opa: COVER
+                                    radius: 10
+                                    border_width: 0
+                                    pad_all: 4
+                                    widgets:
+                                      - label: { id: lbl_wx_d0_day, x: 8, y: 1, width: 42, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "Nu" }
+                                      - label: { id: lbl_wx_d0_icon, x: 58, y: -1, text_font: font_icon_28, text_color: 0xFFD84A, text: "󰖙" }
+                                      - label: { id: lbl_wx_d0_cond, x: 98, y: 5, width: 150, text_font: font_roboto_16, text_color: 0xA0A0A0, long_mode: DOT, text: "--" }
+                                      - label: { id: lbl_wx_d0_wind, x: 254, y: 7, width: 86, text_font: font_roboto_12, text_color: 0x666666, long_mode: DOT, text: "--" }
+                                      - bar: { id: bar_wx_d0_range, x: 346, y: 14, width: 118, height: 6, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 0, bg_color: 0x202020, radius: 3, indicator: { bg_color: 0x2EE36A, radius: 3 } }
+                                      - label: { id: lbl_wx_d0_temp, x: 472, y: 1, width: 84, text_align: RIGHT, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "-- / --" }
+                                - obj:
+                                    width: 572
+                                    height: 30
+                                    bg_color: 0x141414
+                                    bg_opa: COVER
+                                    radius: 10
+                                    border_width: 0
+                                    pad_all: 4
+                                    widgets:
+                                      - label: { id: lbl_wx_d1_day, x: 8, y: 1, width: 42, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "+1" }
+                                      - label: { id: lbl_wx_d1_icon, x: 58, y: -1, text_font: font_icon_28, text_color: 0xFFD84A, text: "󰖙" }
+                                      - label: { id: lbl_wx_d1_cond, x: 98, y: 5, width: 150, text_font: font_roboto_16, text_color: 0xA0A0A0, long_mode: DOT, text: "--" }
+                                      - label: { id: lbl_wx_d1_wind, x: 254, y: 7, width: 86, text_font: font_roboto_12, text_color: 0x666666, long_mode: DOT, text: "--" }
+                                      - bar: { id: bar_wx_d1_range, x: 346, y: 14, width: 118, height: 6, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 0, bg_color: 0x202020, radius: 3, indicator: { bg_color: 0x2EE36A, radius: 3 } }
+                                      - label: { id: lbl_wx_d1_temp, x: 472, y: 1, width: 84, text_align: RIGHT, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "-- / --" }
+                                - obj:
+                                    width: 572
+                                    height: 30
+                                    bg_color: 0x141414
+                                    bg_opa: COVER
+                                    radius: 10
+                                    border_width: 0
+                                    pad_all: 4
+                                    widgets:
+                                      - label: { id: lbl_wx_d2_day, x: 8, y: 1, width: 42, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "+2" }
+                                      - label: { id: lbl_wx_d2_icon, x: 58, y: -1, text_font: font_icon_28, text_color: 0xFFD84A, text: "󰖙" }
+                                      - label: { id: lbl_wx_d2_cond, x: 98, y: 5, width: 150, text_font: font_roboto_16, text_color: 0xA0A0A0, long_mode: DOT, text: "--" }
+                                      - label: { id: lbl_wx_d2_wind, x: 254, y: 7, width: 86, text_font: font_roboto_12, text_color: 0x666666, long_mode: DOT, text: "--" }
+                                      - bar: { id: bar_wx_d2_range, x: 346, y: 14, width: 118, height: 6, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 0, bg_color: 0x202020, radius: 3, indicator: { bg_color: 0x2EE36A, radius: 3 } }
+                                      - label: { id: lbl_wx_d2_temp, x: 472, y: 1, width: 84, text_align: RIGHT, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "-- / --" }
+                                - obj:
+                                    width: 572
+                                    height: 30
+                                    bg_color: 0x141414
+                                    bg_opa: COVER
+                                    radius: 10
+                                    border_width: 0
+                                    pad_all: 4
+                                    widgets:
+                                      - label: { id: lbl_wx_d3_day, x: 8, y: 1, width: 42, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "+3" }
+                                      - label: { id: lbl_wx_d3_icon, x: 58, y: -1, text_font: font_icon_28, text_color: 0xFFD84A, text: "󰖙" }
+                                      - label: { id: lbl_wx_d3_cond, x: 98, y: 5, width: 150, text_font: font_roboto_16, text_color: 0xA0A0A0, long_mode: DOT, text: "--" }
+                                      - label: { id: lbl_wx_d3_wind, x: 254, y: 7, width: 86, text_font: font_roboto_12, text_color: 0x666666, long_mode: DOT, text: "--" }
+                                      - bar: { id: bar_wx_d3_range, x: 346, y: 14, width: 118, height: 6, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 0, bg_color: 0x202020, radius: 3, indicator: { bg_color: 0x2EE36A, radius: 3 } }
+                                      - label: { id: lbl_wx_d3_temp, x: 472, y: 1, width: 84, text_align: RIGHT, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "-- / --" }
+                                - obj:
+                                    width: 572
+                                    height: 30
+                                    bg_color: 0x141414
+                                    bg_opa: COVER
+                                    radius: 10
+                                    border_width: 0
+                                    pad_all: 4
+                                    widgets:
+                                      - label: { id: lbl_wx_d4_day, x: 8, y: 1, width: 42, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "+4" }
+                                      - label: { id: lbl_wx_d4_icon, x: 58, y: -1, text_font: font_icon_28, text_color: 0xFFD84A, text: "󰖙" }
+                                      - label: { id: lbl_wx_d4_cond, x: 98, y: 5, width: 150, text_font: font_roboto_16, text_color: 0xA0A0A0, long_mode: DOT, text: "--" }
+                                      - label: { id: lbl_wx_d4_wind, x: 254, y: 7, width: 86, text_font: font_roboto_12, text_color: 0x666666, long_mode: DOT, text: "--" }
+                                      - bar: { id: bar_wx_d4_range, x: 346, y: 14, width: 118, height: 6, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 0, bg_color: 0x202020, radius: 3, indicator: { bg_color: 0x2EE36A, radius: 3 } }
+                                      - label: { id: lbl_wx_d4_temp, x: 472, y: 1, width: 84, text_align: RIGHT, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "-- / --" }
+
+              - obj:
+                  width: 296
+                  height: 512
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  radius: 18
+                  border_width: 0
+                  pad_all: 14
+                  scrollable: false
+                  widgets:
+                    - label:
+                        x: 0
+                        y: 0
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "BUIENRADAR"
+                    - label:
+                        id: lbl_radar_frame
+                        x: 0
+                        y: 28
+                        width: 268
+                        text_font: font_roboto_12
+                        text_color: 0x34D0FF
+                        long_mode: DOT
+                        text: "radar laden"
+                    - image:
+                        id: img_buienradar
+                        x: 0
+                        y: 56
+                        width: 268
+                        height: 402
+                        src: radar_art
+                    - bar:
+                        id: bar_radar_progress
+                        x: 0
+                        y: 476
+                        width: 268
+                        height: 8
+                        min_value: 0
+                        max_value: 8
+                        value: 0
+                        radius: 4
+                        bg_color: 0x202020
+                        bg_opa: COVER
+                        indicator:
+                          bg_color: 0x34D0FF
+                          bg_opa: COVER
+
+    # ===========================================================
+    # PAGINA 5: IMMICH
+    # ===========================================================
+    - id: page_immich
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 600
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              - image:
+                  id: img_immich_photo
+                  align: CENTER
+                  width: 1024
+                  height: 600
+                  src: immich_art
+              - obj:
+                  id: immich_placeholder
+                  align: CENTER
+                  width: 1
+                  height: 1
+                  radius: 0
+                  bg_color: 0x000000
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+              # Onzichtbare tik-detector — hele scherm, achterste laag
+              # Aanraken toont controls voor 30 seconden
+              - button:
+                  x: 0
+                  y: 0
+                  width: 1024
+                  height: 600
+                  bg_color: 0x000000
+                  bg_opa: 0%
+                  border_width: 0
+                  outline_width: 0
+                  shadow_width: 0
+                  radius: 0
+                  pad_all: 0
+                  scrollable: false
+                  pressed:
+                    bg_color: 0x000000
+                    bg_opa: 0%
+                    border_width: 0
+                    outline_width: 0
+                    shadow_width: 0
+                  focused:
+                    bg_color: 0x000000
+                    bg_opa: 0%
+                    border_width: 0
+                    outline_width: 0
+                    shadow_width: 0
+                  checked:
+                    bg_color: 0x000000
+                    bg_opa: 0%
+                    border_width: 0
+                    outline_width: 0
+                    shadow_width: 0
+                  on_click:
+                    - lambda: 'id(immich_overlay_countdown) = 30;'
+                    - lvgl.widget.show: immich_controls
+                    - lvgl.widget.show: nav_rail_container
+                    - lvgl.widget.hide: lbl_immich_clock
+                    - lvgl.widget.hide: lbl_immich_date
+                    - lvgl.widget.hide: lbl_immich_place
+
+              # Klok — altijd zichtbaar linksboven
+              - label:
+                  id: lbl_immich_clock
+                  x: 24
+                  y: 20
+                  text_font: font_roboto_36
+                  text_color: 0xFFFFFF
+                  text: "--:--"
+
+              # Jaar — altijd zichtbaar linksonder, eerste regel
+              - label:
+                  id: lbl_immich_date
+                  x: 24
+                  y: 490
+                  width: 300
+                  text_font: font_roboto_36
+                  text_color: 0xFFFFFF
+                  text: ""
+
+              # Plaats + land — altijd zichtbaar linksonder, tweede regel
+              - label:
+                  id: lbl_immich_place
+                  x: 24
+                  y: 536
+                  width: 620
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  long_mode: DOT
+                  text: ""
+
+              # Verborgen album label (voor compat met script)
+              - label:
+                  id: lbl_immich_album
+                  x: -2000
+                  y: 0
+                  width: 1
+                  height: 1
+                  text: ""
+
+              # Controls overlay — verborgen tot aanraking (30s timeout)
+              - obj:
+                  id: immich_controls
+                  x: 0
+                  y: 0
+                  width: 1024
+                  height: 600
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  radius: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    # Midden — zoom knop (onzichtbaar tikgebied)
+                    - button:
+                        x: 220
+                        y: 96
+                        width: 584
+                        height: 392
+                        bg_color: 0x000000
+                        bg_opa: 0%
+                        border_width: 0
+                        outline_width: 0
+                        shadow_width: 0
+                        radius: 0
+                        pad_all: 0
+                        scrollable: false
+                        pressed:
+                          bg_color: 0x000000
+                          bg_opa: 0%
+                          border_width: 0
+                          outline_width: 0
+                          shadow_width: 0
+                        focused:
+                          bg_color: 0x000000
+                          bg_opa: 0%
+                          border_width: 0
+                          outline_width: 0
+                          shadow_width: 0
+                        checked:
+                          bg_color: 0x000000
+                          bg_opa: 0%
+                          border_width: 0
+                          outline_width: 0
+                          shadow_width: 0
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_zoom
+                    # Links — vorige foto
+                    - button:
+                        x: 8
+                        y: 222
+                        width: 88
+                        height: 140
+                        bg_color: 0x101010
+                        bg_opa: 45%
+                        border_width: 0
+                        radius: 20
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_prev
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AE"
+                    # Rechts — volgende foto
+                    - button:
+                        x: 928
+                        y: 222
+                        width: 88
+                        height: 140
+                        bg_color: 0x101010
+                        bg_opa: 45%
+                        border_width: 0
+                        radius: 20
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_next
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFFFFFF
+                              text: "\U000F04AD"
+                    # Rechtsboven — verwijder knop
+                    - button:
+                        x: 928
+                        y: 68
+                        width: 68
+                        height: 68
+                        bg_color: 0x101010
+                        bg_opa: 45%
+                        border_width: 0
+                        radius: 20
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_trash
+                        on_long_press:
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_confirm_trash
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFF5A5A
+                              text: "\U000F01B4"
+              - obj:
+                  id: immich_toast
+                  x: 254
+                  y: 518
+                  width: 516
+                  height: 48
+                  bg_color: 0x050505
+                  bg_opa: 0%
+                  border_width: 0
+                  radius: 18
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label:
+                        id: lbl_immich_status
+                        align: CENTER
+                        width: 480
+                        text_align: CENTER
+                        text_font: font_roboto_16
+                        text_color: 0xFFFFFF
+                        long_mode: DOT
+                        text: ""
+
+    # ===========================================================
+    # PAGINA 6: DEURBEL
+    # ===========================================================
+    - id: page_doorbell
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 44
+            width: 936
+            height: 556
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              - image:
+                  id: img_doorbell_snapshot
+                  x: 0
+                  y: 30
+                  width: 936
+                  height: 526
+                  src: doorbell_art
+              - obj:
+                  x: 20
+                  y: 18
+                  width: 164
+                  height: 38
+                  radius: 18
+                  bg_color: 0x050505
+                  bg_opa: 75%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_roboto_16
+                        text_color: 0xFFFFFF
+                        text: "DEURBEL"
+              - obj:
+                  x: 202
+                  y: 24
+                  width: 10
+                  height: 10
+                  radius: 5
+                  bg_color: 0xFF2A7A
+                  bg_opa: COVER
+                  border_width: 0
+              - label:
+                  id: lbl_doorbell_status
+                  x: 226
+                  y: 20
+                  width: 360
+                  text_font: font_roboto_16
+                  text_color: 0xFFFFFF
+                  text: "snapshot laden..."
+              - button:
+                  x: 848
+                  y: 18
+                  width: 68
+                  height: 48
+                  radius: 16
+                  bg_color: 0x050505
+                  bg_opa: 75%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  on_click:
+                    - homeassistant.action:
+                        action: input_boolean.turn_off
+                        data:
+                          entity_id: ${doorbell_active_entity}
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_roboto_28
+                        text_color: 0xFFFFFF
+                        text: "X"
+
+script:
+  - id: album_art_load
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(album_art_pending_url).empty();'
+          then:
+            - if:
+                condition:
+                  lambda: |-
+                    return id(album_art_pending_url) == id(album_art_loaded_url);
+                then:
+                  - lvgl.widget.show: img_album
+                  - lvgl.widget.hide: lbl_album_fallback
+                else:
+                  - lvgl.widget.hide: img_album
+                  - lvgl.widget.show: lbl_album_fallback
+                  - artwork_image.set_url:
+                      id: album_art
+                      url: !lambda 'return id(album_art_pending_url);'
+
+  - id: album_art_apply
+    mode: restart
+    then:
+      - lambda: |-
+          id(album_art_loaded_url) = std::string(id(album_art)->get_url());
+          id(album_art_retry_count) = 0;
+      - lvgl.image.update:
+          id: img_album
+          src: album_art
+      - lvgl.widget.show: img_album
+      - lvgl.widget.hide: lbl_album_fallback
+
+  - id: album_art_retry
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(album_art_retry_count) < 3;'
+          then:
+            - lambda: 'id(album_art_retry_count)++;'
+            - delay: !lambda |-
+                static const uint32_t d[] = {500, 2000, 5000};
+                int i = id(album_art_retry_count) - 1;
+                if (i < 0) i = 0;
+                if (i > 2) i = 2;
+                return d[i];
+            - artwork_image.set_url:
+                id: album_art
+                url: !lambda 'return id(album_art_pending_url);'
+
+  - id: immich_photo_load
+    mode: restart
+    then:
+      - lambda: |-
+          std::string rel = id(immich_url).state;
+          if (rel.empty() || rel == "unknown" || rel == "unavailable") return;
+          std::string url = (rel.rfind("http", 0) == 0) ? rel : id(ha_base_url_detected) + rel;
+          if (url == id(immich_art_loaded_url)) return;
+          id(immich_art_loaded_url) = url;
+          id(immich_art_retry_count) = 0;
+      - lvgl.label.update:
+          id: lbl_immich_status
+          text: ""
+      - artwork_image.set_url:
+          id: immich_art
+          url: !lambda 'return id(immich_art_loaded_url);'
+
+  - id: immich_photo_apply
+    mode: restart
+    then:
+      - lvgl.image.update:
+          id: img_immich_photo
+          src: immich_art
+      - lvgl.widget.hide: immich_placeholder
+      - lvgl.label.update:
+          id: lbl_immich_status
+          text: ""
+
+  - id: immich_photo_retry
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(immich_art_retry_count) < 2;'
+          then:
+            - lambda: 'id(immich_art_retry_count)++;'
+            - delay: 2s
+            - artwork_image.set_url:
+                id: immich_art
+                url: !lambda 'return id(immich_art_loaded_url);'
+          else:
+            - lvgl.label.update:
+                id: lbl_immich_status
+                text: ""
+
+  - id: doorbell_show
+    mode: restart
+    then:
+      - lambda: |-
+          id(doorbell_page_active) = true;
+          id(immich_page_active) = false;
+          id(immich_overlay_countdown) = 0;
+          id(doorbell_art_retry_count) = 0;
+      - lvgl.widget.show: nav_rail_container
+      - lvgl.widget.show: top_status_bar
+      - lvgl.page.show: page_doorbell
+      - lvgl.label.update:
+          id: lbl_doorbell_status
+          text: "snapshot laden..."
+      - script.execute: doorbell_snapshot_load
+
+  - id: doorbell_hide
+    mode: restart
+    then:
+      - lambda: 'id(doorbell_page_active) = false;'
+      - lvgl.page.show: page_energy
+
+  - id: doorbell_snapshot_load
+    mode: restart
+    then:
+      - artwork_image.set_url:
+          id: doorbell_art
+          url: !lambda |-
+            char bust[24];
+            snprintf(bust, sizeof(bust), "%lu", (unsigned long) millis());
+            return id(ha_base_url_detected) + "/local/ha-display-doorbell.jpg?v=" + std::string(bust);
+
+  - id: doorbell_snapshot_apply
+    mode: restart
+    then:
+      - lambda: 'id(doorbell_art_retry_count) = 0;'
+      - lvgl.image.update:
+          id: img_doorbell_snapshot
+          src: doorbell_art
+      - lvgl.label.update:
+          id: lbl_doorbell_status
+          text: "live snapshot"
+
+  - id: doorbell_snapshot_retry
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(doorbell_page_active) && id(doorbell_art_retry_count) < 2;'
+          then:
+            - lambda: 'id(doorbell_art_retry_count)++;'
+            - delay: 750ms
+            - script.execute: doorbell_snapshot_load
+          else:
+            - lvgl.label.update:
+                id: lbl_doorbell_status
+                text: "geen snapshot"
+
+  - id: radar_frame_load
+    mode: restart
+    then:
+      - lambda: |-
+          int frame = id(radar_frame_index);
+          if (frame < 0) frame = 0;
+          if (frame > 8) frame = 8;
+          int minutes = frame * 15;
+          char label[24];
+          if (minutes == 0) {
+            snprintf(label, sizeof(label), "radar nu");
+          } else {
+            snprintf(label, sizeof(label), "radar +%d min", minutes);
+          }
+          id(radar_last_frame_label) = std::string(label);
+          lv_label_set_text(id(lbl_radar_frame), id(radar_last_frame_label).c_str());
+          lv_bar_set_value(id(bar_radar_progress), frame, LV_ANIM_OFF);
+      - artwork_image.set_url:
+          id: radar_art
+          url: !lambda |-
+            int frame = id(radar_frame_index);
+            if (frame < 0) frame = 0;
+            if (frame > 8) frame = 8;
+            char path[96];
+            snprintf(path, sizeof(path), "/local/ha-display-radar/radar_%d.jpg?v=%lu", frame, (unsigned long) millis());
+            return id(ha_base_url_detected) + std::string(path);
+
+  - id: radar_frame_apply
+    mode: restart
+    then:
+      - lambda: 'id(radar_art_retry_count) = 0;'
+      - lvgl.image.update:
+          id: img_buienradar
+          src: radar_art
+      - lvgl.label.update:
+          id: lbl_radar_frame
+          text: !lambda 'return id(radar_last_frame_label);'
+
+  - id: radar_frame_retry
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(radar_art_retry_count) < 2;'
+          then:
+            - lambda: 'id(radar_art_retry_count)++;'
+            - delay: 750ms
+            - script.execute: radar_frame_load
+          else:
+            - lvgl.label.update:
+                id: lbl_radar_frame
+                text: "radar offline"
+
+# ---------------------------------------------------------------
+# Interval updates — NOOIT on_value gebruiken voor LVGL
+# ---------------------------------------------------------------
+interval:
+  # Immich overlay timeout — telt af van 30 naar 0, verbergt dan controls + nav
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(immich_overlay_countdown) > 0;'
+          then:
+            - lambda: 'id(immich_overlay_countdown)--;'
+            - if:
+                condition:
+                  lambda: 'return id(immich_overlay_countdown) == 0 && id(immich_page_active);'
+                then:
+                  - lvgl.widget.hide: immich_controls
+                  - lvgl.widget.hide: nav_rail_container
+                  - lvgl.widget.show: lbl_immich_clock
+                  - lvgl.widget.show: lbl_immich_date
+                  - lvgl.widget.show: lbl_immich_place
+
+  # Deurbelpagina — korte snapshot-loop zolang Home Assistant de helper actief houdt
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(doorbell_active).state == "on";'
+          then:
+            - if:
+                condition:
+                  lambda: 'return !id(doorbell_page_active);'
+                then:
+                  - script.execute: doorbell_show
+                else:
+                  - script.execute: doorbell_snapshot_load
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(doorbell_page_active);'
+                then:
+                  - script.execute: doorbell_hide
+
+  # Clock, datum, sensor labels — elke 3s
+  - interval: 3s
+    then:
+      - lvgl.label.update:
+          id: lbl_clock
+          text: !lambda |-
+            auto t = id(ha_time).now();
+            if (!t.is_valid()) return std::string("--:--");
+            char buf[6];
+            snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_date
+          text: !lambda |-
+            auto t = id(ha_time).now();
+            if (!t.is_valid()) return std::string("\xe2\x80\x94");
+            const char* days[] = {"zo","ma","di","wo","do","vr","za"};
+            const char* months[] = {"jan","feb","mrt","apr","mei","jun",
+                                    "jul","aug","sep","okt","nov","dec"};
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%s %d %s",
+              days[t.day_of_week % 7],
+              t.day_of_month,
+              months[(t.month - 1) % 12]);
+            return std::string(buf);
+
+      # Status bar — vermogen chip
+      - lvgl.label.update:
+          id: lbl_power_status
+          text: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return std::string("-- W");
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.0f W", v * 1000.0f);
+            return std::string(buf);
+
+      # Verbruik arc + label
+      - lvgl.arc.update:
+          id: arc_verbruik
+          value: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(v * 1000.0f, 6000.0f);
+      - lvgl.label.update:
+          id: lbl_verbruik_w
+          text: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return std::string("--");
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%.0f", v * 1000.0f);
+            return std::string(buf);
+
+      # Solar arc + label
+      - lvgl.arc.update:
+          id: arc_solar
+          value: !lambda |-
+            float v = id(ha_productie).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(v * 1000.0f, 5000.0f);
+      - lvgl.label.update:
+          id: lbl_solar_w
+          text: !lambda |-
+            float v = id(ha_productie).state;
+            if (isnan(v)) return std::string("--");
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%.0f", v * 1000.0f);
+            return std::string(buf);
+
+      # Gas arc + label
+      - lvgl.arc.update:
+          id: arc_gas
+          value: !lambda |-
+            float v = id(ha_gas).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(v * 100.0f, 300.0f);
+      - lvgl.label.update:
+          id: lbl_gas_mh
+          text: !lambda |-
+            float v = id(ha_gas).state;
+            if (isnan(v)) return std::string("--");
+            char buf[10];
+            snprintf(buf, sizeof(buf), "%.3f", v);
+            return std::string(buf);
+
+      # Energie linker kolom
+      - lvgl.label.update:
+          id: lbl_verbruik_kw
+          text: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return std::string("-- kW verbruik");
+            char buf[20];
+            snprintf(buf, sizeof(buf), "%.3f kW verbruik", v);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_productie_kw
+          text: !lambda |-
+            float v = id(ha_productie).state;
+            if (isnan(v)) return std::string("-- kW productie");
+            char buf[20];
+            snprintf(buf, sizeof(buf), "%.3f kW productie", v);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_kosten_vandaag
+          text: !lambda |-
+            float v = id(ha_kosten_vandaag).state;
+            if (isnan(v)) return std::string("--  vandaag");
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%.2f \xe2\x82\xac  vandaag", v);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_kosten_maand
+          text: !lambda |-
+            float v = id(ha_kosten_maand).state;
+            if (isnan(v)) return std::string("--  deze maand");
+            char buf[24];
+            snprintf(buf, sizeof(buf), "%.2f \xe2\x82\xac  deze maand", v);
+            return std::string(buf);
+
+      # Statusbalk buiten temp + HA dot
+      - lvgl.label.update:
+          id: lbl_buiten_temp
+          text: !lambda |-
+            float v = id(wx_temp).state;
+            if (isnan(v)) return std::string("--\xc2\xb0");
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%.0f\xc2\xb0", v);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_ha_dot
+          text_color: !lambda |-
+            return api::global_api_server->is_connected() ? lv_color_hex(0x2EE36A) : lv_color_hex(0xFF2A7A);
+
+      # Rechter kolom bars
+      - lvgl.label.update:
+          id: lbl_cost_groot
+          text: !lambda |-
+            float v = id(ha_kosten_vandaag).state;
+            if (isnan(v)) return std::string("-- \xe2\x82\xac");
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.2f \xe2\x82\xac", v);
+            return std::string(buf);
+      - lvgl.bar.update:
+          id: bar_kosten
+          value: !lambda |-
+            float v = id(ha_kosten_vandaag).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(std::max(v / 20.0f * 100.0f, 0.0f), 100.0f);
+      - lvgl.label.update:
+          id: lbl_vb_rechts
+          text: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return std::string("-- kW");
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.3f kW", v);
+            return std::string(buf);
+      - lvgl.bar.update:
+          id: bar_verbruik
+          value: !lambda |-
+            float v = id(ha_verbruik).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(v / 6.0f * 100.0f, 100.0f);
+      - lvgl.label.update:
+          id: lbl_prod_rechts
+          text: !lambda |-
+            float v = id(ha_productie).state;
+            if (isnan(v)) return std::string("-- kW");
+            char buf[12];
+            snprintf(buf, sizeof(buf), "%.3f kW", v);
+            return std::string(buf);
+      - lvgl.bar.update:
+          id: bar_productie
+          value: !lambda |-
+            float v = id(ha_productie).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(v / 5.0f * 100.0f, 100.0f);
+      - lvgl.label.update:
+          id: lbl_binnen_temp
+          text: !lambda |-
+            float v = id(ha_binnen_temp).state;
+            if (isnan(v)) return std::string("--\xc2\xb0\x43");
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%.1f\xc2\xb0\x43", v);
+            return std::string(buf);
+      - lvgl.bar.update:
+          id: bar_temp
+          value: !lambda |-
+            float v = id(ha_binnen_temp).state;
+            if (isnan(v)) return 0;
+            return (int)std::min(std::max((v - 10.0f) / 20.0f * 100.0f, 0.0f), 100.0f);
+
+      # Media labels + voortgang + volume
+      - lvgl.label.update:
+          id: lbl_track_titel
+          text: !lambda |-
+            std::string s = id(media_title).state;
+            if (s.empty() || s == "None" || s == "none")
+              return std::string("\xe2\x80\x94");
+            return s;
+      - lvgl.label.update:
+          id: lbl_track_artiest
+          text: !lambda |-
+            std::string s = id(media_artist).state;
+            if (s.empty() || s == "None" || s == "none")
+              return std::string("\xe2\x80\x94");
+            return s;
+      - lvgl.label.update:
+          id: lbl_media_source
+          text: !lambda |-
+            std::string s = id(media_source).state;
+            if (s.empty() || s == "None" || s == "none")
+              return std::string("${spotify_source_fallback}");
+            return s;
+      - lvgl.label.update:
+          id: lbl_play_icoon
+          text: !lambda |-
+            return id(media_state).state == "playing"
+              ? std::string("\U000F03E4") : std::string("\U000F040A");
+      - lvgl.bar.update:
+          id: bar_media_progress
+          value: !lambda |-
+            float pos = id(media_positie).state;
+            float dur = id(media_duur).state;
+            if (isnan(pos) || isnan(dur) || dur <= 0) return 0;
+            return (int)std::min((pos / dur) * 100.0f, 100.0f);
+      - lvgl.label.update:
+          id: lbl_elapsed
+          text: !lambda |-
+            float pos = id(media_positie).state;
+            if (isnan(pos)) return std::string("0:00");
+            int m = (int)pos / 60;
+            int s = (int)pos % 60;
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%d:%02d", m, s);
+            return std::string(buf);
+      - lvgl.label.update:
+          id: lbl_remaining
+          text: !lambda |-
+            float pos = id(media_positie).state;
+            float dur = id(media_duur).state;
+            if (isnan(pos) || isnan(dur)) return std::string("0:00");
+            float rem = dur - pos;
+            if (rem < 0) rem = 0;
+            int m = (int)rem / 60;
+            int s = (int)rem % 60;
+            char buf[8];
+            snprintf(buf, sizeof(buf), "-%d:%02d", m, s);
+            return std::string(buf);
+      - lvgl.slider.update:
+          id: slider_volume
+          value: !lambda |-
+            float v = id(media_volume).state;
+            if (isnan(v)) return 50;
+            return (int)(v * 100.0f);
+
+      # Weer labels
+      - lambda: |-
+          auto icon_for = [](const std::string &c) -> const char* {
+            if (c.find("pour") != std::string::npos || c.find("lightning") != std::string::npos) return "\U000F0596";
+            if (c.find("rain") != std::string::npos || c.find("hail") != std::string::npos) return "\U000F0597";
+            if (c.find("partly") != std::string::npos) return "\U000F0595";
+            if (c.find("cloud") != std::string::npos || c.find("fog") != std::string::npos) return "\U000F0590";
+            return "\U000F0599";
+          };
+          auto color_for = [](const std::string &c) -> lv_color_t {
+            if (c.find("rain") != std::string::npos || c.find("pour") != std::string::npos) return lv_color_hex(0x34D0FF);
+            if (c.find("cloud") != std::string::npos || c.find("fog") != std::string::npos) return lv_color_hex(0xA0A0A0);
+            return lv_color_hex(0xFFD84A);
+          };
+          auto label_for = [](std::string c) -> std::string {
+            if (c == "clear-night") return "heldere nacht";
+            if (c == "cloudy") return "bewolkt";
+            if (c == "fog") return "mist";
+            if (c == "hail") return "hagel";
+            if (c == "lightning") return "onweer";
+            if (c == "lightning-rainy") return "onweer en regen";
+            if (c == "partlycloudy") return "half bewolkt";
+            if (c == "pouring") return "zware regen";
+            if (c == "rainy") return "regen";
+            if (c == "snowy") return "sneeuw";
+            if (c == "sunny") return "zonnig";
+            if (c == "windy") return "winderig";
+            if (c.empty() || c == "unknown" || c == "unavailable") return "--";
+            return c;
+          };
+          auto temp_color = [](float t) -> lv_color_t {
+            float x = (t + 5.0f) / 40.0f;
+            if (x < 0) x = 0;
+            if (x > 1) x = 1;
+            uint8_t r = (uint8_t)(0x34 + x * (0xF5 - 0x34));
+            uint8_t g = (uint8_t)(0xD0 + x * (0xB4 - 0xD0));
+            uint8_t b = (uint8_t)(0xFF + x * (0x4A - 0xFF));
+            return lv_color_make(r, g, b);
+          };
+          auto set_forecast = [&](lv_obj_t *icon, lv_obj_t *cond, lv_obj_t *temp, lv_obj_t *wind, lv_obj_t *bar,
+                                  const std::string &c, float lo, float hi, float w, float range_min, float range_span) {
+            char buf[48];
+            lv_label_set_text(icon, icon_for(c));
+            lv_obj_set_style_text_color(icon, color_for(c), LV_PART_MAIN);
+            lv_label_set_text(cond, label_for(c).c_str());
+            if (isnan(lo) || isnan(hi)) {
+              lv_label_set_text(temp, "laden");
+              lv_label_set_text(wind, "verwachting laden");
+              lv_bar_set_start_value(bar, 0, LV_ANIM_OFF);
+              lv_bar_set_value(bar, 0, LV_ANIM_OFF);
+            } else {
+              snprintf(buf, sizeof(buf), "%.0f\xc2\xb0 / %.0f\xc2\xb0", lo, hi);
+              lv_label_set_text(temp, buf);
+              int sv = (int)((lo - range_min) / range_span * 100.0f);
+              int vv = (int)((hi - range_min) / range_span * 100.0f);
+              if (sv < 0) sv = 0;
+              if (vv > 100) vv = 100;
+              if (vv <= sv) vv = sv + 2;
+              if (vv > 100) vv = 100;
+              lv_bar_set_start_value(bar, sv, LV_ANIM_OFF);
+              lv_bar_set_value(bar, vv, LV_ANIM_OFF);
+              lv_obj_set_style_bg_color(bar, temp_color(lo), LV_PART_INDICATOR);
+              lv_obj_set_style_bg_grad_color(bar, temp_color(hi), LV_PART_INDICATOR);
+              lv_obj_set_style_bg_grad_dir(bar, LV_GRAD_DIR_HOR, LV_PART_INDICATOR);
+            }
+            if (!isnan(w)) {
+              snprintf(buf, sizeof(buf), "%.0f km/u", w);
+              lv_label_set_text(wind, buf);
+            }
+          };
+
+          char buf[96];
+          std::string cnow = id(wx_cond_now).state;
+          lv_label_set_text(id(lbl_wx_now_icon), icon_for(cnow));
+          lv_obj_set_style_text_color(id(lbl_wx_now_icon), color_for(cnow), LV_PART_MAIN);
+          lv_label_set_text(id(lbl_wx_now_cond), label_for(cnow).c_str());
+          if (isnan(id(wx_temp).state)) {
+            lv_label_set_text(id(lbl_wx_now_temp), "--");
+          } else {
+            snprintf(buf, sizeof(buf), "%.1f\xc2\xb0\x43", id(wx_temp).state);
+            lv_label_set_text(id(lbl_wx_now_temp), buf);
+          }
+          if (isnan(id(wx_wind).state)) {
+            lv_label_set_text(id(lbl_wx_wind), "--");
+          } else {
+            snprintf(buf, sizeof(buf), "%.0f km/u %s", id(wx_wind).state, id(wx_wind_dir).state.c_str());
+            lv_label_set_text(id(lbl_wx_wind), buf);
+          }
+          if (isnan(id(wx_uv).state)) {
+            lv_label_set_text(id(lbl_wx_uv), "--");
+            lv_bar_set_value(id(bar_wx_uv), 0, LV_ANIM_OFF);
+          } else {
+            snprintf(buf, sizeof(buf), "%.0f", id(wx_uv).state);
+            lv_label_set_text(id(lbl_wx_uv), buf);
+            lv_bar_set_value(id(bar_wx_uv), (int)std::min(std::max(id(wx_uv).state, 0.0f), 11.0f), LV_ANIM_OFF);
+          }
+          std::string rain = id(wx_rain_cap).state;
+          if (rain.empty() || rain == "unknown" || rain == "unavailable") rain = "regen --";
+          lv_label_set_text(id(lbl_wx_rain), rain.c_str());
+          snprintf(buf, sizeof(buf), "op %s  onder %s", id(wx_sunrise).state.c_str(), id(wx_sunset).state.c_str());
+          lv_label_set_text(id(lbl_wx_sun), buf);
+          if (!isnan(id(wx_sun_pct).state)) {
+            lv_bar_set_value(id(bar_wx_sun), (int)std::min(std::max(id(wx_sun_pct).state, 0.0f), 100.0f), LV_ANIM_OFF);
+          }
+
+          auto t = id(ha_time).now();
+          if (t.is_valid()) {
+            const char* days[] = {"zo","ma","di","wo","do","vr","za"};
+            lv_label_set_text(id(lbl_wx_d0_day), "Nu");
+            lv_label_set_text(id(lbl_wx_d1_day), days[(t.day_of_week + 1) % 7]);
+            lv_label_set_text(id(lbl_wx_d2_day), days[(t.day_of_week + 2) % 7]);
+            lv_label_set_text(id(lbl_wx_d3_day), days[(t.day_of_week + 3) % 7]);
+            lv_label_set_text(id(lbl_wx_d4_day), days[(t.day_of_week + 4) % 7]);
+          }
+          float lows[5] = {id(wx_d0_lo).state, id(wx_d1_lo).state, id(wx_d2_lo).state, id(wx_d3_lo).state, id(wx_d4_lo).state};
+          float highs[5] = {id(wx_d0_hi).state, id(wx_d1_hi).state, id(wx_d2_hi).state, id(wx_d3_hi).state, id(wx_d4_hi).state};
+          float range_min = 99.0f;
+          float range_max = -99.0f;
+          for (int i = 0; i < 5; i++) {
+            if (!isnan(lows[i]) && lows[i] < range_min) range_min = lows[i];
+            if (!isnan(highs[i]) && highs[i] > range_max) range_max = highs[i];
+          }
+          if (range_max < range_min) {
+            range_min = 0.0f;
+            range_max = 1.0f;
+          }
+          float range_span = range_max - range_min;
+          if (range_span < 1.0f) range_span = 1.0f;
+
+          set_forecast(id(lbl_wx_d0_icon), id(lbl_wx_d0_cond), id(lbl_wx_d0_temp), id(lbl_wx_d0_wind), id(bar_wx_d0_range),
+                       id(wx_d0_cond).state, id(wx_d0_lo).state, id(wx_d0_hi).state, id(wx_d0_wind).state, range_min, range_span);
+          set_forecast(id(lbl_wx_d1_icon), id(lbl_wx_d1_cond), id(lbl_wx_d1_temp), id(lbl_wx_d1_wind), id(bar_wx_d1_range),
+                       id(wx_d1_cond).state, id(wx_d1_lo).state, id(wx_d1_hi).state, id(wx_d1_wind).state, range_min, range_span);
+          set_forecast(id(lbl_wx_d2_icon), id(lbl_wx_d2_cond), id(lbl_wx_d2_temp), id(lbl_wx_d2_wind), id(bar_wx_d2_range),
+                       id(wx_d2_cond).state, id(wx_d2_lo).state, id(wx_d2_hi).state, id(wx_d2_wind).state, range_min, range_span);
+          set_forecast(id(lbl_wx_d3_icon), id(lbl_wx_d3_cond), id(lbl_wx_d3_temp), id(lbl_wx_d3_wind), id(bar_wx_d3_range),
+                       id(wx_d3_cond).state, id(wx_d3_lo).state, id(wx_d3_hi).state, id(wx_d3_wind).state, range_min, range_span);
+          set_forecast(id(lbl_wx_d4_icon), id(lbl_wx_d4_cond), id(lbl_wx_d4_temp), id(lbl_wx_d4_wind), id(bar_wx_d4_range),
+                       id(wx_d4_cond).state, id(wx_d4_lo).state, id(wx_d4_hi).state, id(wx_d4_wind).state, range_min, range_span);
+
+          auto clean_text = [](std::string s, const char *fallback) -> std::string {
+            if (s.empty() || s == "unknown" || s == "unavailable" || s == "None") return std::string(fallback);
+            return s;
+          };
+          std::string taken_at = clean_text(id(immich_camera_taken_at).state, "");
+          // Plaatsnaam voor de overlay (altijd de echte plaatsnaam, geen filename)
+          std::string place = clean_text(id(immich_place).state, "");
+          // Jaar extraheren uit immich_date of taken_at
+          std::string year = "";
+          std::string header_date = clean_text(id(immich_date).state, "");
+          for (size_t i = 0; i + 3 < header_date.size(); i++) {
+            bool four_digits = true;
+            for (size_t j = 0; j < 4; j++) {
+              char c = header_date[i + j];
+              if (c < '0' || c > '9') four_digits = false;
+            }
+            if (four_digits) year = header_date.substr(i, 4);
+          }
+          if (year.empty() && taken_at.size() >= 4) year = taken_at.substr(0, 4);
+          // Header in status bar (als immich actief)
+          if (id(immich_page_active)) {
+            std::string header = place;
+            if (!year.empty()) header += (!header.empty() ? " · " : "") + year;
+            lv_label_set_text(id(lbl_immich_header), header.c_str());
+          } else {
+            lv_label_set_text(id(lbl_immich_header), "");
+          }
+          // Overlay labels altijd bijwerken (ongeacht actieve pagina)
+          lv_label_set_text(id(lbl_immich_place), place.c_str());
+          lv_label_set_text(id(lbl_immich_date), year.c_str());
+          lv_label_set_text(id(lbl_immich_album), clean_text(id(immich_album_txt).state, "random assets").c_str());
+          std::string immich_status = clean_text(id(immich_status_text).state, "");
+          bool show_immich_toast = id(immich_page_active) && !immich_status.empty() && immich_status != "Immich foto actief";
+          lv_label_set_text(id(lbl_immich_status), show_immich_toast ? immich_status.c_str() : "");
+          lv_obj_set_style_bg_opa(id(immich_toast), show_immich_toast ? LV_OPA_70 : LV_OPA_TRANSP, LV_PART_MAIN);
+          // Klok altijd bijwerken
+          if (t.is_valid()) {
+            char ibuf[6];
+            snprintf(ibuf, sizeof(ibuf), "%02d:%02d", t.hour, t.minute);
+            lv_label_set_text(id(lbl_immich_clock), ibuf);
+          }
+
+      # Licht swatches + sliders
+      - lvgl.obj.update:
+          id: swatch_woonkamer
+          bg_color: !lambda |-
+            return id(light_woonkamer_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_woonkamer
+          value: !lambda |-
+            float v = id(light_woonkamer_bri).state;
+            return isnan(v) ? 0 : (int)v;
+      - lvgl.obj.update:
+          id: swatch_keuken
+          bg_color: !lambda |-
+            return id(light_keuken_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_keuken
+          value: !lambda |-
+            float v = id(light_keuken_bri).state;
+            return isnan(v) ? 0 : (int)v;
+      - lvgl.obj.update:
+          id: swatch_eettafel
+          bg_color: !lambda |-
+            return id(light_eettafel_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_eettafel
+          value: !lambda |-
+            float v = id(light_eettafel_bri).state;
+            return isnan(v) ? 0 : (int)v;
+      - lvgl.obj.update:
+          id: swatch_hal
+          bg_color: !lambda |-
+            return id(light_hal_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_hal
+          value: !lambda |-
+            float v = id(light_hal_bri).state;
+            return isnan(v) ? 0 : (int)v;
+      - lvgl.obj.update:
+          id: swatch_veranda
+          bg_color: !lambda |-
+            return id(light_veranda_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_veranda
+          value: !lambda |-
+            float v = id(light_veranda_bri).state;
+            return isnan(v) ? 0 : (int)v;
+      - lvgl.obj.update:
+          id: swatch_kantoor
+          bg_color: !lambda |-
+            return id(light_kantoor_st).state == "on" ? lv_color_hex(0x2EE36A) : lv_color_hex(0x3a3a3a);
+      - lvgl.slider.update:
+          id: slider_kantoor
+          value: !lambda |-
+            float v = id(light_kantoor_bri).state;
+            return isnan(v) ? 0 : (int)v;
+
+  # Buienradar loop — 9 frames van nu t/m +120 min, 15 minuten per stap.
+  - interval: 15s
+    then:
+      - lambda: |-
+          id(radar_frame_index)++;
+          if (id(radar_frame_index) > 8) id(radar_frame_index) = 0;
+      - script.execute: radar_frame_load
+
+  # Auto-dim backlight — elke minuut
+  - interval: 60s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              auto t = id(ha_time).now();
+              return t.is_valid() && (t.hour >= 22 || t.hour < 7);
+          then:
+            - light.turn_on:
+                id: display_backlight
+                brightness: 20%
+          else:
+            - light.turn_on:
+                id: display_backlight
+                brightness: 90%
