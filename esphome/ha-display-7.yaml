@@ -941,6 +941,12 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_agenda
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
@@ -1017,6 +1023,12 @@ lvgl:
                               bg_color: 0x050505
                           - lvgl.obj.update:
                               id: nav_agenda
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
                               bg_color: 0x1a1a1a
                       widgets:
                         - label:
@@ -1095,6 +1107,12 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_agenda
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
@@ -1172,6 +1190,12 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_agenda
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
@@ -1248,6 +1272,12 @@ lvgl:
                               bg_color: 0x050505
                           - lvgl.obj.update:
                               id: nav_immich
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
                               bg_color: 0x1a1a1a
                       widgets:
                         - label:
@@ -1327,16 +1357,105 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_agenda
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_recepten
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
                             text_font: font_roboto_16
                             text_color: 0xA0A0A0
                             text: "I"
+            # Recepten — inactief
+            - obj:
+                x: 0
+                y: 516
+                width: 88
+                height: 56
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_recepten
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 48
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_recepten
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 48
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_recepten
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_recepten
+                              bg_color: 0xFF9020
+                          - lvgl.obj.update:
+                              id: nav_recepten
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "R"
             # Onderkant — versie label
             - label:
                 align: BOTTOM_MID
-                y: -40
+                y: -8
                 text_font: font_roboto_16
                 text_color: 0x666666
                 text: "P4"
