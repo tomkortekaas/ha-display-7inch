@@ -6052,6 +6052,296 @@ lvgl:
                         text_color: 0xFFFFFF
                         text: "X"
 
+    # ===========================================================
+    # PAGINA 9: AH RECEPTEN — FAVORIETENLIJST
+    # ===========================================================
+    - id: page_recepten
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 88
+            y: 44
+            width: 936
+            height: 556
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              - label:
+                  x: 24
+                  y: 12
+                  text_font: font_roboto_16
+                  text_color: 0x888888
+                  text: "MIJN FAVORIETEN"
+              - button:
+                  id: btn_recept_1
+                  x: 24
+                  y: 44
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_1_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_1_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_1_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_2
+                  x: 24
+                  y: 108
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_2_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_2_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_2_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_3
+                  x: 24
+                  y: 172
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_3_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_3_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_3_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_4
+                  x: 24
+                  y: 236
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_4_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_4_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_4_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_5
+                  x: 24
+                  y: 300
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_5_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_5_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_5_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_6
+                  x: 24
+                  y: 364
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_6_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_6_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_6_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_7
+                  x: 24
+                  y: 428
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_7_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_7_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_7_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+              - button:
+                  id: btn_recept_8
+                  x: 24
+                  y: 492
+                  width: 888
+                  height: 56
+                  radius: 8
+                  bg_color: 0x1A1A2E
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x222233
+                  on_click:
+                    then:
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_8_id).state.c_str();'
+                      - lvgl.widget.hide: img_recipe_detail
+                      - lvgl.widget.show: lbl_recipe_loading
+                      - lvgl.page.show: page_recipe_detail
+                      - script.execute: recipe_load_current
+                  widgets:
+                    - label:
+                        id: lbl_recept_8_title
+                        align: LEFT_MID
+                        x: 16
+                        text_font: font_roboto_16
+                        text_color: 0xE0E0E0
+                        text: "—"
+                    - label:
+                        id: lbl_recept_8_meta
+                        align: RIGHT_MID
+                        x: -16
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: ""
+
 script:
   - id: album_art_load
     mode: restart
