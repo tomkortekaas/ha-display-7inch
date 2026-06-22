@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 
 const AH_AUTH_URL = 'https://api.ah.nl/mobile-auth/v1/auth/token'
 const AH_API_URL = 'https://api.ah.nl'
-const AH_CLIENT_ID = 'appie-android'
-const AH_CLIENT_SECRET = 'vHue55rose6Mu9CH'
+const AH_CLIENT_ID = process.env.AH_CLIENT_ID ?? 'appie-android'
+const AH_CLIENT_SECRET = process.env.AH_CLIENT_SECRET ?? 'vHue55rose6Mu9CH'
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
 
@@ -72,6 +72,7 @@ export async function GET() {
     favoritesCache = { data: result, expires_at: Date.now() + 6 * 60 * 60 * 1000 }
     return NextResponse.json(result)
   } catch (e: any) {
+    console.error('[ah/favorites] Error:', e.message)
     return NextResponse.json({ favorites: [], error: e.message }, { status: 200 })
   }
 }
