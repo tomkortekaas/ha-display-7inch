@@ -35,6 +35,13 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
+  - id: review_info_visible
+    type: bool
+    initial_value: 'false'
+  - id: review_nav_countdown
+    type: int
+    restore_value: no
+    initial_value: '0'
   - id: doorbell_page_active
     type: bool
     initial_value: 'false'
@@ -50,6 +57,22 @@ globals:
   - id: radar_last_frame_label
     type: std::string
     initial_value: '"radar laden"'
+  - id: agenda_light_theme
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: ah_current_recipe_id
+    type: std::string
+    initial_value: '""'
+  - id: ah_current_step
+    type: int
+    initial_value: '0'
+  - id: ah_total_steps
+    type: int
+    initial_value: '1'
+  - id: ah_recipe_page_active
+    type: bool
+    initial_value: 'false'
 
 external_components:
   - source:
@@ -87,7 +110,7 @@ logger:
   level: DEBUG
 
 api:
-  reboot_timeout: 0s
+  reboot_timeout: 5min
   on_client_connected:
     - lambda: |-
         if (client_info.find("Home Assistant") == std::string::npos) return;
@@ -143,6 +166,11 @@ i2c:
     sda_pullup_enabled: false
     scl_pullup_enabled: false
 
+button:
+  - platform: restart
+    name: "Restart"
+    id: btn_restart
+
 output:
   - id: gpio_backlight_pwm
     platform: ledc
@@ -193,6 +221,34 @@ display:
 # ---------------------------------------------------------------
 font:
   - file: "gfonts://Montserrat@800"
+    id: font_agenda_9_bold
+    size: 9
+    bpp: 8
+  - file: "gfonts://Montserrat@600"
+    id: font_agenda_10
+    size: 10
+    bpp: 8
+  - file: "gfonts://Montserrat@700"
+    id: font_agenda_11_bold
+    size: 11
+    bpp: 8
+  - file: "gfonts://Montserrat@700"
+    id: font_agenda_12_bold
+    size: 12
+    bpp: 8
+  - file: "gfonts://Montserrat@700"
+    id: font_agenda_13_bold
+    size: 13
+    bpp: 8
+  - file: "gfonts://Montserrat@700"
+    id: font_agenda_14_bold
+    size: 14
+    bpp: 8
+  - file: "gfonts://Montserrat@800"
+    id: font_agenda_16_bold
+    size: 16
+    bpp: 8
+  - file: "gfonts://Montserrat@800"
     id: font_num_76
     size: 76
     bpp: 8
@@ -242,6 +298,9 @@ font:
       - "\U000F0597"   # mdi-weather-rainy
       - "\U000F0596"   # mdi-weather-pouring
       - "\U000F059D"   # mdi-weather-windy
+      - "\U000F054C"   # mdi-undo
+      - "\U000F0468"   # mdi-rotate-right
+      - "\U000F004D"   # mdi-arrow-left
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_48
     size: 48
@@ -249,11 +308,13 @@ font:
     glyphs:
       - "\U000F075E"   # mdi-music-note
       - "\U000F0335"   # mdi-lightbulb
+      - "\U000F01B4"   # mdi-delete
       - "\U000F0599"   # mdi-weather-sunny
       - "\U000F0595"   # mdi-weather-partly-cloudy
       - "\U000F0590"   # mdi-weather-cloudy
       - "\U000F0597"   # mdi-weather-rainy
       - "\U000F0596"   # mdi-weather-pouring
+      - "\U000F02D1"   # mdi-heart
 
 # ---------------------------------------------------------------
 # Tijd
@@ -261,6 +322,16 @@ font:
 time:
   - platform: homeassistant
     id: ha_time
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Amsterdam
+    on_time:
+      # Nachtelijke reboot om 03:00 — ruimt zombie API-verbindingen op
+      - seconds: 0
+        minutes: 0
+        hours: 3
+        then:
+          - button.press: btn_restart
 
 # ---------------------------------------------------------------
 # Sensors — Energie
@@ -285,6 +356,10 @@ sensor:
   - platform: homeassistant
     id: ha_kosten_maand
     entity_id: sensor.kosten_stroom_deze_maand
+    internal: true
+  - platform: homeassistant
+    id: ha_stroomprijs
+    entity_id: sensor.stroomprijs_huidige_prijs
     internal: true
   - platform: homeassistant
     id: ha_binnen_temp
@@ -482,6 +557,49 @@ text_sensor:
   - { platform: homeassistant, id: immich_album_txt, entity_id: sensor.immich_album, internal: true }
   - { platform: homeassistant, id: immich_status_text, entity_id: sensor.immich_status, internal: true }
   - platform: homeassistant
+    id: ha_immich_review_vandaag
+    entity_id: sensor.immich_review_vandaag_count
+    internal: true
+  - platform: homeassistant
+    id: ha_review_url
+    entity_id: sensor.immich_review_url
+    internal: true
+    on_value:
+      - lvgl.widget.hide: img_review_photo
+      - component.update: review_art
+  - platform: homeassistant
+    id: ha_review_voortgang
+    entity_id: sensor.immich_review_voortgang
+    internal: true
+  - platform: homeassistant
+    id: ha_review_resterend
+    entity_id: sensor.immich_review_resterend
+    internal: true
+  - platform: homeassistant
+    id: ha_review_datum
+    entity_id: sensor.immich_review_datum
+    internal: true
+  - platform: homeassistant
+    id: ha_review_locatie
+    entity_id: sensor.immich_review_locatie
+    internal: true
+  - platform: homeassistant
+    id: ha_review_camera
+    entity_id: sensor.immich_review_camera
+    internal: true
+  - platform: homeassistant
+    id: ha_review_bestand
+    entity_id: sensor.immich_review_bestand
+    internal: true
+  - platform: homeassistant
+    id: ha_review_personen
+    entity_id: sensor.immich_review_personen
+    internal: true
+  - platform: homeassistant
+    id: ha_review_status
+    entity_id: sensor.immich_review_status
+    internal: true
+  - platform: homeassistant
     id: immich_camera_picture
     entity_id: camera.immich_picture_immich_picture_slideshow_random_assets
     attribute: entity_picture
@@ -504,6 +622,95 @@ text_sensor:
   - platform: homeassistant
     id: doorbell_active
     entity_id: ${doorbell_active_entity}
+    internal: true
+  - { platform: homeassistant, id: agenda_d0_title, entity_id: sensor.familie_agenda_d0_title, internal: true }
+  - { platform: homeassistant, id: agenda_d0_date, entity_id: sensor.familie_agenda_d0_date, internal: true }
+  - { platform: homeassistant, id: agenda_d0_count, entity_id: sensor.familie_agenda_d0_count, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_1, entity_id: sensor.familie_agenda_d0_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_2, entity_id: sensor.familie_agenda_d0_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_3, entity_id: sensor.familie_agenda_d0_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_4, entity_id: sensor.familie_agenda_d0_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_5, entity_id: sensor.familie_agenda_d0_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_6, entity_id: sensor.familie_agenda_d0_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_7, entity_id: sensor.familie_agenda_d0_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d0_event_8, entity_id: sensor.familie_agenda_d0_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d0_more, entity_id: sensor.familie_agenda_d0_more, internal: true }
+  - { platform: homeassistant, id: agenda_d1_title, entity_id: sensor.familie_agenda_d1_title, internal: true }
+  - { platform: homeassistant, id: agenda_d1_date, entity_id: sensor.familie_agenda_d1_date, internal: true }
+  - { platform: homeassistant, id: agenda_d1_count, entity_id: sensor.familie_agenda_d1_count, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_1, entity_id: sensor.familie_agenda_d1_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_2, entity_id: sensor.familie_agenda_d1_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_3, entity_id: sensor.familie_agenda_d1_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_4, entity_id: sensor.familie_agenda_d1_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_5, entity_id: sensor.familie_agenda_d1_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_6, entity_id: sensor.familie_agenda_d1_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_7, entity_id: sensor.familie_agenda_d1_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d1_event_8, entity_id: sensor.familie_agenda_d1_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d1_more, entity_id: sensor.familie_agenda_d1_more, internal: true }
+  - { platform: homeassistant, id: agenda_d2_title, entity_id: sensor.familie_agenda_d2_title, internal: true }
+  - { platform: homeassistant, id: agenda_d2_date, entity_id: sensor.familie_agenda_d2_date, internal: true }
+  - { platform: homeassistant, id: agenda_d2_count, entity_id: sensor.familie_agenda_d2_count, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_1, entity_id: sensor.familie_agenda_d2_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_2, entity_id: sensor.familie_agenda_d2_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_3, entity_id: sensor.familie_agenda_d2_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_4, entity_id: sensor.familie_agenda_d2_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_5, entity_id: sensor.familie_agenda_d2_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_6, entity_id: sensor.familie_agenda_d2_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_7, entity_id: sensor.familie_agenda_d2_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d2_event_8, entity_id: sensor.familie_agenda_d2_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d2_more, entity_id: sensor.familie_agenda_d2_more, internal: true }
+  - { platform: homeassistant, id: agenda_d3_title, entity_id: sensor.familie_agenda_d3_title, internal: true }
+  - { platform: homeassistant, id: agenda_d3_date, entity_id: sensor.familie_agenda_d3_date, internal: true }
+  - { platform: homeassistant, id: agenda_d3_count, entity_id: sensor.familie_agenda_d3_count, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_1, entity_id: sensor.familie_agenda_d3_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_2, entity_id: sensor.familie_agenda_d3_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_3, entity_id: sensor.familie_agenda_d3_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_4, entity_id: sensor.familie_agenda_d3_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_5, entity_id: sensor.familie_agenda_d3_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_6, entity_id: sensor.familie_agenda_d3_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_7, entity_id: sensor.familie_agenda_d3_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d3_event_8, entity_id: sensor.familie_agenda_d3_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d3_more, entity_id: sensor.familie_agenda_d3_more, internal: true }
+  - { platform: homeassistant, id: agenda_d4_title, entity_id: sensor.familie_agenda_d4_title, internal: true }
+  - { platform: homeassistant, id: agenda_d4_date, entity_id: sensor.familie_agenda_d4_date, internal: true }
+  - { platform: homeassistant, id: agenda_d4_count, entity_id: sensor.familie_agenda_d4_count, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_1, entity_id: sensor.familie_agenda_d4_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_2, entity_id: sensor.familie_agenda_d4_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_3, entity_id: sensor.familie_agenda_d4_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_4, entity_id: sensor.familie_agenda_d4_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_5, entity_id: sensor.familie_agenda_d4_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_6, entity_id: sensor.familie_agenda_d4_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_7, entity_id: sensor.familie_agenda_d4_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d4_event_8, entity_id: sensor.familie_agenda_d4_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d4_more, entity_id: sensor.familie_agenda_d4_more, internal: true }
+  - { platform: homeassistant, id: agenda_d5_title, entity_id: sensor.familie_agenda_d5_title, internal: true }
+  - { platform: homeassistant, id: agenda_d5_date, entity_id: sensor.familie_agenda_d5_date, internal: true }
+  - { platform: homeassistant, id: agenda_d5_count, entity_id: sensor.familie_agenda_d5_count, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_1, entity_id: sensor.familie_agenda_d5_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_2, entity_id: sensor.familie_agenda_d5_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_3, entity_id: sensor.familie_agenda_d5_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_4, entity_id: sensor.familie_agenda_d5_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_5, entity_id: sensor.familie_agenda_d5_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_6, entity_id: sensor.familie_agenda_d5_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_7, entity_id: sensor.familie_agenda_d5_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d5_event_8, entity_id: sensor.familie_agenda_d5_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d5_more, entity_id: sensor.familie_agenda_d5_more, internal: true }
+  - { platform: homeassistant, id: agenda_d6_title, entity_id: sensor.familie_agenda_d6_title, internal: true }
+  - { platform: homeassistant, id: agenda_d6_date, entity_id: sensor.familie_agenda_d6_date, internal: true }
+  - { platform: homeassistant, id: agenda_d6_count, entity_id: sensor.familie_agenda_d6_count, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_1, entity_id: sensor.familie_agenda_d6_event_1, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_2, entity_id: sensor.familie_agenda_d6_event_2, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_3, entity_id: sensor.familie_agenda_d6_event_3, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_4, entity_id: sensor.familie_agenda_d6_event_4, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_5, entity_id: sensor.familie_agenda_d6_event_5, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_6, entity_id: sensor.familie_agenda_d6_event_6, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_7, entity_id: sensor.familie_agenda_d6_event_7, internal: true }
+  - { platform: homeassistant, id: agenda_d6_event_8, entity_id: sensor.familie_agenda_d6_event_8, internal: true }
+  - { platform: homeassistant, id: agenda_d6_more, entity_id: sensor.familie_agenda_d6_more, internal: true }
+  - platform: homeassistant
+    id: ha_ah_favorites
+    entity_id: sensor.ah_favorites
+    attribute: favorites_json
     internal: true
 
 artwork_image:
@@ -532,6 +739,24 @@ artwork_image:
       - script.execute: immich_photo_apply
     on_error:
       - script.execute: immich_photo_retry
+  - id: review_art
+    url: "http://homeassistant.local:8123/local/immich/review.jpg"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 1024x600
+    resize_mode: FIT
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - lvgl.widget.hide: lbl_review_leeg
+      - lvgl.widget.show: img_review_photo
+      - lvgl.image.update:
+          id: img_review_photo
+          src: review_art
+    on_error:
+      - lvgl.widget.show: lbl_review_leeg
+      - logger.log: "Review foto laad fout"
   - id: doorbell_art
     url: "http://homeassistant.local:8123/local/ha-display-doorbell.jpg"
     format: AUTO
@@ -559,6 +784,19 @@ artwork_image:
       - script.execute: radar_frame_apply
     on_error:
       - script.execute: radar_frame_retry
+  - id: recipe_art
+    url: "http://192.168.1.237:3001/api/ah/recipe/placeholder/image?step=0"
+    format: AUTO
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 1024x600
+    resize_mode: COVER
+    allow_insecure_local_urls: true
+    update_interval: never
+    on_download_finished:
+      - logger.log: "Recipe art geladen"
+    on_error:
+      - logger.log: "Recipe art laad fout"
 
 # ---------------------------------------------------------------
 # LVGL
@@ -697,6 +935,12 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_immich
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
@@ -767,6 +1011,12 @@ lvgl:
                               bg_color: 0x050505
                           - lvgl.obj.update:
                               id: nav_immich
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
                               bg_color: 0x1a1a1a
                       widgets:
                         - label:
@@ -839,6 +1089,12 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_immich
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
@@ -910,16 +1166,99 @@ lvgl:
                           - lvgl.obj.update:
                               id: nav_immich
                               bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
+                              bg_color: 0x1a1a1a
                       widgets:
                         - label:
                             align: CENTER
                             text_font: font_roboto_16
                             text_color: 0xA0A0A0
                             text: "W"
-            # Immich — inactief
+            # Agenda — inactief
             - obj:
                 x: 0
                 y: 376
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_agenda
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_agenda
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - lvgl.page.show: page_agenda
+                          - lambda: 'id(immich_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x34D0FF
+                          - lvgl.obj.update:
+                              id: nav_agenda
+                              bg_color: 0x202020
+                          - lvgl.obj.update:
+                              id: nav_strip_energie
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_energie
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_lichten
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_lichten
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_media
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_media
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_weather
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_immich
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_immich
+                              bg_color: 0x1a1a1a
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_roboto_16
+                            text_color: 0xA0A0A0
+                            text: "A"
+            # Immich — inactief
+            - obj:
+                x: 0
+                y: 452
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -952,9 +1291,6 @@ lvgl:
                           - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.hide: immich_controls
-                          - lvgl.widget.show: lbl_immich_clock
-                          - lvgl.widget.show: lbl_immich_date
-                          - lvgl.widget.show: lbl_immich_place
                           - lvgl.obj.update:
                               id: nav_strip_immich
                               bg_color: 0x2EE36A
@@ -984,6 +1320,12 @@ lvgl:
                               bg_color: 0x050505
                           - lvgl.obj.update:
                               id: nav_weather
+                              bg_color: 0x1a1a1a
+                          - lvgl.obj.update:
+                              id: nav_strip_agenda
+                              bg_color: 0x050505
+                          - lvgl.obj.update:
+                              id: nav_agenda
                               bg_color: 0x1a1a1a
                       widgets:
                         - label:
@@ -1334,7 +1676,7 @@ lvgl:
                               indicator:
                                 bg_color: 0xFFD84A
                                 bg_opa: COVER
-                    # Metric 2: Verbruik nu
+                    # Metric 2: Huidige stroomprijs
                     - obj:
                         width: 244
                         height: 100
@@ -1348,16 +1690,34 @@ lvgl:
                               y: 0
                               text_font: font_roboto_16
                               text_color: 0xA0A0A0
-                              text: "VERBRUIK NU"
-                          - label:
-                              id: lbl_vb_rechts
+                              text: "STROOMPRIJS"
+                          - obj:
+                              id: stroomprijs_value_row
                               x: 0
                               y: 22
-                              text_font: font_roboto_36
-                              text_color: 0x2EE36A
-                              text: "-- kW"
+                              width: 244
+                              height: 43
+                              bg_opa: TRANSP
+                              border_width: 0
+                              pad_all: 0
+                              layout:
+                                type: FLEX
+                                flex_flow: ROW
+                                flex_align_main: CENTER
+                                flex_align_cross: CENTER
+                              widgets:
+                                - label:
+                                    id: lbl_stroomprijs
+                                    text_font: font_roboto_36
+                                    text_color: 0xFFD84A
+                                    text: "--"
+                                - label:
+                                    id: lbl_stroomprijs_unit
+                                    text_font: font_roboto_16
+                                    text_color: 0xFFD84A
+                                    text: "/kWh"
                           - bar:
-                              id: bar_verbruik
+                              id: bar_stroomprijs
                               x: 0
                               y: 72
                               width: 244
@@ -1366,10 +1726,10 @@ lvgl:
                               min_value: 0
                               max_value: 100
                               value: 0
-                              bg_color: 0x151515
+                              bg_color: 0x211C0A
                               bg_opa: COVER
                               indicator:
-                                bg_color: 0x2EE36A
+                                bg_color: 0xFFD84A
                                 bg_opa: COVER
                     # Metric 3: Productie nu
                     - obj:
@@ -2648,7 +3008,2105 @@ lvgl:
                           bg_opa: COVER
 
     # ===========================================================
-    # PAGINA 5: IMMICH
+    # PAGINA 5: AGENDA
+    # ===========================================================
+    - id: page_agenda
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            id: agenda_week_root
+            x: 88
+            y: 56
+            width: 936
+            height: 544
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              - label:
+                  x: 0
+                  y: 0
+                  width: 300
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: "Weekagenda"
+              - label:
+                  x: 714
+                  y: 8
+                  width: 222
+                  text_align: RIGHT
+                  text_font: font_roboto_16
+                  text_color: 0xA0A0A0
+                  text: "08:00-20:00"
+              - obj:
+                  x: 58
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d0_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d0_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0x34D0FF, text: "--" }
+              - obj:
+                  x: 183
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d1_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d1_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0xFFD84A, text: "--" }
+              - obj:
+                  x: 308
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d2_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d2_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0x2EE36A, text: "--" }
+              - obj:
+                  x: 433
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d3_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d3_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0xFF6B6B, text: "--" }
+              - obj:
+                  x: 558
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d4_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d4_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0xB084FF, text: "--" }
+              - obj:
+                  x: 683
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d5_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d5_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0x35E6C4, text: "--" }
+              - obj:
+                  x: 808
+                  y: 42
+                  width: 118
+                  height: 42
+                  bg_color: 0x0F0F0F
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { id: lbl_agenda_d6_title, x: 8, y: 5, width: 68, text_font: font_roboto_20, text_color: 0xFFFFFF, long_mode: DOT, text: "--" }
+                    - label: { id: lbl_agenda_d6_date, x: 72, y: 8, width: 38, text_align: RIGHT, text_font: font_roboto_16, text_color: 0xFF9F43, text: "--" }
+              - obj:
+                  x: 0
+                  y: 88
+                  width: 936
+                  height: 430
+                  bg_color: 0x050505
+                  bg_opa: COVER
+                  radius: 8
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label: { x: 0, y: 2, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "08" }
+                    - obj: { x: 50, y: 10, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 36, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "09" }
+                    - obj: { x: 50, y: 44, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 70, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "10" }
+                    - obj: { x: 50, y: 78, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 104, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "11" }
+                    - obj: { x: 50, y: 112, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 138, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "12" }
+                    - obj: { x: 50, y: 146, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 172, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "13" }
+                    - obj: { x: 50, y: 180, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 206, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "14" }
+                    - obj: { x: 50, y: 214, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 240, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "15" }
+                    - obj: { x: 50, y: 248, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 274, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "16" }
+                    - obj: { x: 50, y: 282, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 308, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "17" }
+                    - obj: { x: 50, y: 316, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 342, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "18" }
+                    - obj: { x: 50, y: 350, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 376, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "19" }
+                    - obj: { x: 50, y: 384, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - label: { x: 0, y: 410, width: 42, text_align: RIGHT, text_font: font_roboto_12, text_color: 0x6F6F6F, text: "20" }
+                    - obj: { x: 50, y: 418, width: 868, height: 1, bg_color: 0x1E1E1E, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 58, y: 10, width: 118, height: 408, bg_color: 0x0B0B0B, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 58, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 183, y: 10, width: 118, height: 408, bg_color: 0x080808, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 183, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 308, y: 10, width: 118, height: 408, bg_color: 0x0B0B0B, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 308, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 433, y: 10, width: 118, height: 408, bg_color: 0x080808, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 433, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 558, y: 10, width: 118, height: 408, bg_color: 0x0B0B0B, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 558, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 683, y: 10, width: 118, height: 408, bg_color: 0x080808, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 683, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+                    - obj: { x: 808, y: 10, width: 118, height: 408, bg_color: 0x0B0B0B, bg_opa: 45%, border_width: 0 }
+                    - obj: { x: 808, y: 10, width: 1, height: 408, bg_color: 0x242424, bg_opa: COVER, border_width: 0 }
+              - obj:
+                  id: agenda_d0_block_1
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_2
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_3
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_4
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_5
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_6
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_7
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d0_block_8
+                  x: 60
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d0_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_1
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_2
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_3
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_4
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_5
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_6
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_7
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d1_block_8
+                  x: 185
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d1_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_1
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_2
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_3
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_4
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_5
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_6
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_7
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d2_block_8
+                  x: 310
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d2_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_1
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_2
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_3
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_4
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_5
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_6
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_7
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d3_block_8
+                  x: 435
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d3_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_1
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_2
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_3
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_4
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_5
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_6
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_7
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d4_block_8
+                  x: 560
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d4_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_1
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_2
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_3
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_4
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_5
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_6
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_7
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d5_block_8
+                  x: 685
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d5_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_1
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF9F43
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_1
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_2
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x7DD3FC
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_2
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_3
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x34D0FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_3
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_4
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFFD84A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_4
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_5
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x2EE36A
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_5
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_6
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xFF6B6B
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_6
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_7
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0xB084FF
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_7
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - obj:
+                  id: agenda_d6_block_8
+                  x: 810
+                  y: 98
+                  width: 114
+                  height: 34
+                  bg_color: 0x35E6C4
+                  bg_opa: 88%
+                  radius: 7
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_agenda_d6_block_8
+                        x: 5
+                        y: 4
+                        width: 104
+                        height: 26
+                        text_font: font_roboto_12
+                        text_color: 0x071014
+                        long_mode: DOT
+                        text: ""
+              - label: { id: lbl_agenda_d0_more, x: 60, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d1_more, x: 185, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d2_more, x: 310, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d3_more, x: 435, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d4_more, x: 560, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d5_more, x: 685, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+              - label: { id: lbl_agenda_d6_more, x: 810, y: 520, width: 114, text_align: CENTER, text_font: font_roboto_12, text_color: 0xA0A0A0, long_mode: DOT, text: "" }
+
+              # Focus + Sidebar — high-fidelity agenda-overlay.
+              # Agenda max-space layout: geen topbar, grotere tekst en 3 toekomstige afspraken.
+              # Deze laag dekt de bestaande weekgrid volledig af, zodat de
+              # omliggende pagina- en navigatiestructuur intact blijft.
+              - obj:
+                  id: agenda_focus_sidebar
+                  x: 0
+                  y: 0
+                  width: 936
+                  height: 544
+                  bg_color: 0x08080A
+                  bg_opa: COVER
+                  border_width: 0
+                  radius: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    # Topbar
+                    - obj:
+                        x: 0
+                        y: 51
+                        width: 936
+                        height: 1
+                        bg_color: 0x2A2B30
+                        bg_opa: 45%
+                        border_width: 0
+                        hidden: true
+                    - label:
+                        id: lbl_agenda_heading
+                        x: 20
+                        y: 10
+                        width: 230
+                        text_font: font_agenda_14_bold
+                        text_color: 0xFFFFFF
+                        text_opa: 70%
+                        text: "FAMILIE AGENDA"
+                    - label:
+                        id: lbl_agenda_range
+                        x: 245
+                        y: 19
+                        width: 420
+                        text_font: font_agenda_10
+                        text_color: 0x6B6E76
+                        long_mode: DOT
+                        text: "--"
+                        hidden: true
+                    - label:
+                        id: lbl_agenda_clock
+                        x: 820
+                        y: 17
+                        width: 70
+                        text_align: RIGHT
+                        text_font: font_agenda_13_bold
+                        text_color: 0x8A8D94
+                        text: "--:--"
+                        hidden: true
+                    - obj:
+                        x: 903
+                        y: 22
+                        width: 8
+                        height: 8
+                        radius: 4
+                        bg_color: 0x4ADE80
+                        bg_opa: COVER
+                        border_width: 0
+                        hidden: true
+
+                    # Panelverdeling
+                    - obj:
+                        id: agenda_panel_divider
+                        x: 499
+                        y: 0
+                        width: 1
+                        height: 544
+                        bg_color: 0x2A2B30
+                        bg_opa: 45%
+                        border_width: 0
+                    - label:
+                        id: lbl_agenda_today_heading
+                        x: 20
+                        y: 34
+                        width: 120
+                        text_font: font_roboto_20
+                        text_color: 0xFFFFFF
+                        text: "Vandaag"
+                    - button:
+                        id: agenda_theme_button
+                        x: 410
+                        y: 8
+                        width: 68
+                        height: 28
+                        radius: 14
+                        bg_color: 0x17181C
+                        bg_opa: COVER
+                        border_color: 0x3A3B40
+                        border_width: 1
+                        pad_all: 0
+                        on_click:
+                          - lambda: 'id(agenda_light_theme) = !id(agenda_light_theme);'
+                        widgets:
+                          - label:
+                              id: lbl_agenda_theme_button
+                              align: CENTER
+                              text_font: font_agenda_11_bold
+                              text_color: 0xFF3B30
+                              text: "LICHT"
+                    - label:
+                        id: lbl_agenda_today_date
+                        x: 139
+                        y: 40
+                        width: 310
+                        text_font: font_agenda_14_bold
+                        text_color: 0x6B6E76
+                        long_mode: DOT
+                        text: "--"
+
+                    # Vandaag — vijf vaste afspraak-slots
+                    - obj:
+                        id: agenda_today_slot_1
+                        x: 20
+                        y: 70
+                        width: 458
+                        height: 68
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - label: { id: lbl_agenda_today_time_1, x: 0, y: 25, width: 50, text_align: RIGHT, text_font: font_agenda_14_bold, text_color: 0x6B6E76, text: "" }
+                          - obj: { id: agenda_today_accent_1, x: 60, y: 8, width: 4, height: 52, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                          - obj:
+                              id: agenda_today_card_1
+                              x: 74
+                              y: 4
+                              width: 384
+                              height: 62
+                              radius: 12
+                              bg_color: 0x131418
+                              bg_opa: COVER
+                              border_color: 0x2A2B30
+                              border_width: 1
+                              pad_all: 0
+                              widgets:
+                                - label: { id: lbl_agenda_today_title_1, x: 14, y: 20, width: 356, text_font: font_agenda_16_bold, text_color: 0xFFFFFF, long_mode: DOT, text: "" }
+                    - obj:
+                        id: agenda_today_slot_2
+                        x: 20
+                        y: 172
+                        width: 458
+                        height: 68
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - label: { id: lbl_agenda_today_time_2, x: 0, y: 25, width: 50, text_align: RIGHT, text_font: font_agenda_14_bold, text_color: 0x6B6E76, text: "" }
+                          - obj: { id: agenda_today_accent_2, x: 60, y: 8, width: 4, height: 52, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                          - obj:
+                              id: agenda_today_card_2
+                              x: 74
+                              y: 4
+                              width: 384
+                              height: 62
+                              radius: 12
+                              bg_color: 0x131418
+                              bg_opa: COVER
+                              border_color: 0x2A2B30
+                              border_width: 1
+                              pad_all: 0
+                              widgets:
+                                - label: { id: lbl_agenda_today_title_2, x: 14, y: 20, width: 356, text_font: font_agenda_16_bold, text_color: 0xFFFFFF, long_mode: DOT, text: "" }
+                    - obj:
+                        id: agenda_today_slot_3
+                        x: 20
+                        y: 236
+                        width: 458
+                        height: 68
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - label: { id: lbl_agenda_today_time_3, x: 0, y: 25, width: 50, text_align: RIGHT, text_font: font_agenda_14_bold, text_color: 0x6B6E76, text: "" }
+                          - obj: { id: agenda_today_accent_3, x: 60, y: 8, width: 4, height: 52, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                          - obj:
+                              id: agenda_today_card_3
+                              x: 74
+                              y: 4
+                              width: 384
+                              height: 62
+                              radius: 12
+                              bg_color: 0x131418
+                              bg_opa: COVER
+                              border_color: 0x2A2B30
+                              border_width: 1
+                              pad_all: 0
+                              widgets:
+                                - label: { id: lbl_agenda_today_title_3, x: 14, y: 20, width: 356, text_font: font_agenda_16_bold, text_color: 0xFFFFFF, long_mode: DOT, text: "" }
+                    - obj:
+                        id: agenda_today_slot_4
+                        x: 20
+                        y: 300
+                        width: 458
+                        height: 68
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - label: { id: lbl_agenda_today_time_4, x: 0, y: 25, width: 50, text_align: RIGHT, text_font: font_agenda_14_bold, text_color: 0x6B6E76, text: "" }
+                          - obj: { id: agenda_today_accent_4, x: 60, y: 8, width: 4, height: 52, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                          - obj:
+                              id: agenda_today_card_4
+                              x: 74
+                              y: 4
+                              width: 384
+                              height: 62
+                              radius: 12
+                              bg_color: 0x131418
+                              bg_opa: COVER
+                              border_color: 0x2A2B30
+                              border_width: 1
+                              pad_all: 0
+                              widgets:
+                                - label: { id: lbl_agenda_today_title_4, x: 14, y: 20, width: 356, text_font: font_agenda_16_bold, text_color: 0xFFFFFF, long_mode: DOT, text: "" }
+                    - obj:
+                        id: agenda_today_slot_5
+                        x: 20
+                        y: 364
+                        width: 458
+                        height: 68
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - label: { id: lbl_agenda_today_time_5, x: 0, y: 25, width: 50, text_align: RIGHT, text_font: font_agenda_14_bold, text_color: 0x6B6E76, text: "" }
+                          - obj: { id: agenda_today_accent_5, x: 60, y: 8, width: 4, height: 52, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                          - obj:
+                              id: agenda_today_card_5
+                              x: 74
+                              y: 4
+                              width: 384
+                              height: 62
+                              radius: 12
+                              bg_color: 0x131418
+                              bg_opa: COVER
+                              border_color: 0x2A2B30
+                              border_width: 1
+                              pad_all: 0
+                              widgets:
+                                - label: { id: lbl_agenda_today_title_5, x: 14, y: 20, width: 356, text_font: font_agenda_16_bold, text_color: 0xFFFFFF, long_mode: DOT, text: "" }
+
+                    # Dynamische NU-indicator; de lambda zet de Y-positie.
+                    - obj:
+                        id: agenda_now_indicator
+                        x: 94
+                        y: 164
+                        width: 364
+                        height: 18
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        hidden: true
+                        widgets:
+                          - obj: { x: 0, y: 8, width: 127, height: 1, bg_color: 0x2A2B30, bg_opa: 65%, border_width: 0 }
+                          - label: { id: lbl_agenda_now, x: 126, y: 1, width: 112, text_align: CENTER, text_font: font_agenda_11_bold, text_color: 0x6B6E76, text: "NU · --:--" }
+                          - obj: { x: 237, y: 8, width: 127, height: 1, bg_color: 0x2A2B30, bg_opa: 65%, border_width: 0 }
+                    - label:
+                        id: lbl_agenda_today_empty
+                        x: 94
+                        y: 145
+                        width: 330
+                        text_font: font_roboto_16
+                        text_color: 0x4A4C52
+                        text: "Geen afspraken"
+                    - label:
+                        id: lbl_agenda_today_more
+                        x: 94
+                        y: 518
+                        width: 330
+                        text_font: font_agenda_12_bold
+                        text_color: 0x6B6E76
+                        text: ""
+
+                    # Komende dagen — vaste koppen met afzonderlijke verticale scrolllijsten.
+                    - obj: { id: agenda_future_d1_date_badge, x: 518, y: 8, width: 46, height: 36, radius: 8, bg_color: 0xFFFFFF, bg_opa: 4%, border_color: 0x2A2B30, border_width: 1 }
+                    - label: { id: lbl_agenda_future_d1_date, x: 520, y: 16, width: 42, text_align: CENTER, text_font: font_agenda_16_bold, text_color: 0xBFC2C8, text: "--" }
+                    - label: { id: lbl_agenda_future_d1_day, x: 575, y: 18, width: 75, text_font: font_agenda_14_bold, text_color: 0x7D8088, text: "--" }
+                    - label: { id: lbl_agenda_future_d1_count, x: 720, y: 20, width: 190, text_align: RIGHT, text_font: font_agenda_11_bold, text_color: 0x5E6067, text: "" }
+                    - obj:
+                        id: agenda_future_d1_scroll
+                        x: 520
+                        y: 48
+                        width: 390
+                        height: 128
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: true
+                        scroll_dir: VER
+                        scrollbar_mode: AUTO
+                        scroll_momentum: true
+                        scroll_elastic: true
+                        widgets:
+                          - obj: &agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_1
+                              x: 0
+                              y: 0
+                              width: 390
+                              height: 42
+                              bg_opa: 0%
+                              border_width: 0
+                              pad_all: 0
+                              hidden: true
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_1, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_1, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_1, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_2
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_2
+                              y: 42
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_2, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_2, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_2, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_3
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_3
+                              y: 84
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_3, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_3, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_3, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_4
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_4
+                              y: 126
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_4, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_4, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_4, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_5
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_5
+                              y: 168
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_5, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_5, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_5, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_6
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_6
+                              y: 210
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_6, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_6, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_6, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_7
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_7
+                              y: 252
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_7, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_7, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_7, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d1_slot_8
+                              <<: *agenda_future_d1_slot_1
+                              id: agenda_future_d1_slot_8
+                              y: 294
+                              widgets:
+                                - label: { id: lbl_agenda_future_d1_time_8, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d1_accent_8, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d1_title_8, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                    - label: { id: lbl_agenda_future_d1_empty, x: 592, y: 93, width: 250, text_font: font_agenda_14_bold, text_color: 0x42444A, text: "Geen afspraken" }
+                    - obj: { id: agenda_future_divider_1, x: 500, y: 180, width: 436, height: 1, bg_color: 0x2A2B30, bg_opa: 45%, border_width: 0 }
+
+                    - obj: { id: agenda_future_d2_date_badge, x: 518, y: 189, width: 46, height: 36, radius: 8, bg_color: 0xFFFFFF, bg_opa: 4%, border_color: 0x2A2B30, border_width: 1 }
+                    - label: { id: lbl_agenda_future_d2_date, x: 520, y: 197, width: 42, text_align: CENTER, text_font: font_agenda_16_bold, text_color: 0xBFC2C8, text: "--" }
+                    - label: { id: lbl_agenda_future_d2_day, x: 575, y: 199, width: 75, text_font: font_agenda_14_bold, text_color: 0x7D8088, text: "--" }
+                    - label: { id: lbl_agenda_future_d2_count, x: 720, y: 201, width: 190, text_align: RIGHT, text_font: font_agenda_11_bold, text_color: 0x5E6067, text: "" }
+                    - obj:
+                        id: agenda_future_d2_scroll
+                        x: 520
+                        y: 229
+                        width: 390
+                        height: 128
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: true
+                        scroll_dir: VER
+                        scrollbar_mode: AUTO
+                        scroll_momentum: true
+                        scroll_elastic: true
+                        widgets:
+                          - obj: &agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_1
+                              x: 0
+                              y: 0
+                              width: 390
+                              height: 42
+                              bg_opa: 0%
+                              border_width: 0
+                              pad_all: 0
+                              hidden: true
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_1, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_1, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_1, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_2
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_2
+                              y: 42
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_2, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_2, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_2, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_3
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_3
+                              y: 84
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_3, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_3, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_3, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_4
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_4
+                              y: 126
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_4, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_4, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_4, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_5
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_5
+                              y: 168
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_5, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_5, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_5, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_6
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_6
+                              y: 210
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_6, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_6, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_6, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_7
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_7
+                              y: 252
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_7, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_7, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_7, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d2_slot_8
+                              <<: *agenda_future_d2_slot_1
+                              id: agenda_future_d2_slot_8
+                              y: 294
+                              widgets:
+                                - label: { id: lbl_agenda_future_d2_time_8, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d2_accent_8, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d2_title_8, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                    - label: { id: lbl_agenda_future_d2_empty, x: 592, y: 274, width: 250, text_font: font_agenda_14_bold, text_color: 0x42444A, text: "Geen afspraken" }
+                    - obj: { id: agenda_future_divider_2, x: 500, y: 361, width: 436, height: 1, bg_color: 0x2A2B30, bg_opa: 45%, border_width: 0 }
+
+                    - obj: { id: agenda_future_d3_date_badge, x: 518, y: 370, width: 46, height: 36, radius: 8, bg_color: 0xFFFFFF, bg_opa: 4%, border_color: 0x2A2B30, border_width: 1 }
+                    - label: { id: lbl_agenda_future_d3_date, x: 520, y: 378, width: 42, text_align: CENTER, text_font: font_agenda_16_bold, text_color: 0xBFC2C8, text: "--" }
+                    - label: { id: lbl_agenda_future_d3_day, x: 575, y: 380, width: 75, text_font: font_agenda_14_bold, text_color: 0x7D8088, text: "--" }
+                    - label: { id: lbl_agenda_future_d3_count, x: 720, y: 382, width: 190, text_align: RIGHT, text_font: font_agenda_11_bold, text_color: 0x5E6067, text: "" }
+                    - obj:
+                        id: agenda_future_d3_scroll
+                        x: 520
+                        y: 410
+                        width: 390
+                        height: 129
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: true
+                        scroll_dir: VER
+                        scrollbar_mode: AUTO
+                        scroll_momentum: true
+                        scroll_elastic: true
+                        widgets:
+                          - obj: &agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_1
+                              x: 0
+                              y: 0
+                              width: 390
+                              height: 42
+                              bg_opa: 0%
+                              border_width: 0
+                              pad_all: 0
+                              hidden: true
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_1, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_1, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_1, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_2
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_2
+                              y: 42
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_2, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_2, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_2, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_3
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_3
+                              y: 84
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_3, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_3, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_3, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_4
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_4
+                              y: 126
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_4, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_4, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_4, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_5
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_5
+                              y: 168
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_5, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_5, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_5, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_6
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_6
+                              y: 210
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_6, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_6, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_6, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_7
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_7
+                              y: 252
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_7, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_7, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_7, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                          - obj: &agenda_future_d3_slot_8
+                              <<: *agenda_future_d3_slot_1
+                              id: agenda_future_d3_slot_8
+                              y: 294
+                              widgets:
+                                - label: { id: lbl_agenda_future_d3_time_8, x: 0, y: 13, width: 48, text_align: RIGHT, text_font: font_agenda_12_bold, text_color: 0x666970, text: "" }
+                                - obj: { id: agenda_future_d3_accent_8, x: 58, y: 2, width: 3, height: 38, radius: 2, bg_color: 0x96AAC3, bg_opa: COVER, border_width: 0 }
+                                - label: { id: lbl_agenda_future_d3_title_8, x: 72, y: 1, width: 306, height: 40, text_font: font_agenda_14_bold, text_color: 0xCFD1D5, long_mode: WRAP, text: "" }
+                    - label: { id: lbl_agenda_future_d3_empty, x: 592, y: 455, width: 250, text_font: font_agenda_14_bold, text_color: 0x42444A, text: "Geen afspraken" }
+
+    # ===========================================================
+    # PAGINA 6: IMMICH
     # ===========================================================
     - id: page_immich
       bg_color: 0x000000
@@ -2720,9 +5178,6 @@ lvgl:
                     - lambda: 'id(immich_overlay_countdown) = 30;'
                     - lvgl.widget.show: immich_controls
                     - lvgl.widget.show: nav_rail_container
-                    - lvgl.widget.hide: lbl_immich_clock
-                    - lvgl.widget.hide: lbl_immich_date
-                    - lvgl.widget.hide: lbl_immich_place
 
               # Klok — altijd zichtbaar linksboven
               - label:
@@ -2857,9 +5312,9 @@ lvgl:
                               text_font: font_icon_28
                               text_color: 0xFFFFFF
                               text: "\U000F04AD"
-                    # Rechtsboven — verwijder knop
+                    # Linksonder — undo knop
                     - button:
-                        x: 928
+                        x: 8
                         y: 68
                         width: 68
                         height: 68
@@ -2872,16 +5327,157 @@ lvgl:
                         on_click:
                           - lambda: 'id(immich_overlay_countdown) = 30;'
                           - homeassistant.action:
-                              action: shell_command.immich_photo_trash
-                        on_long_press:
-                          - homeassistant.action:
-                              action: shell_command.immich_photo_confirm_trash
+                              action: shell_command.immich_photo_undo
                         widgets:
                           - label:
                               align: CENTER
                               text_font: font_icon_28
-                              text_color: 0xFF5A5A
-                              text: "\U000F01B4"
+                              text_color: 0xFFFFFF
+                              text: "\U000F054C"  # mdi-undo
+                    # Linksonder — roteer knop
+                    - button:
+                        x: 8
+                        y: 148
+                        width: 68
+                        height: 68
+                        bg_color: 0x101010
+                        bg_opa: 45%
+                        border_width: 0
+                        radius: 20
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_rotate
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFFFFFF
+                              text: "\U000F0468"  # mdi-rotate-right
+                    # Onder midden — verwijder knop (1.5x groter)
+                    - button:
+                        x: 311
+                        y: 452
+                        width: 102
+                        height: 102
+                        bg_color: 0xCC2222
+                        bg_opa: 90%
+                        border_width: 0
+                        radius: 51
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - lvgl.widget.show: immich_delete_dialog
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_48
+                              text_color: 0xFFFFFF
+                              text: "\U000F01B4"  # mdi-delete
+                    # Onder midden — bewaar knop
+                    - button:
+                        x: 611
+                        y: 452
+                        width: 102
+                        height: 102
+                        bg_color: 0x1DB954
+                        bg_opa: 90%
+                        border_width: 0
+                        radius: 51
+                        pad_all: 0
+                        scrollable: false
+                        on_click:
+                          - lambda: 'id(immich_overlay_countdown) = 30;'
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_keep
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_48
+                              text_color: 0xFFFFFF
+                              text: "\U000F02D1"  # mdi-heart
+
+              # Bevestigingsdialoog — verwijderen foto
+              - obj:
+                  id: immich_delete_dialog
+                  align: CENTER
+                  width: 560
+                  height: 260
+                  radius: 24
+                  bg_color: 0x1A1A1A
+                  bg_opa: COVER
+                  border_width: 2
+                  border_color: 0xFF5A5A
+                  border_opa: COVER
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        align: TOP_MID
+                        y: 36
+                        text_font: font_icon_48
+                        text_color: 0xFF5A5A
+                        text: "\U000F01B4"
+                        text_align: CENTER
+                    - label:
+                        align: TOP_MID
+                        y: 90
+                        text_font: font_roboto_28
+                        text_color: 0xFFFFFF
+                        text: "Foto verwijderen?"
+                        text_align: CENTER
+                    - label:
+                        align: TOP_MID
+                        y: 130
+                        text_font: font_roboto_16
+                        text_color: 0x888888
+                        text: "Dit kan niet ongedaan worden gemaakt"
+                        text_align: CENTER
+                    - button:
+                        align: BOTTOM_LEFT
+                        x: 40
+                        y: -28
+                        width: 200
+                        height: 52
+                        radius: 14
+                        bg_color: 0x2A2A2A
+                        bg_opa: COVER
+                        border_width: 0
+                        on_click:
+                          - lvgl.widget.hide: immich_delete_dialog
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_20
+                              text_color: 0xAAAAAA
+                              text: "Annuleren"
+                    - button:
+                        align: BOTTOM_RIGHT
+                        x: -40
+                        y: -28
+                        width: 200
+                        height: 52
+                        radius: 14
+                        bg_color: 0xCC2222
+                        bg_opa: COVER
+                        border_width: 0
+                        on_click:
+                          - lvgl.widget.hide: immich_delete_dialog
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_confirm_trash
+                          - homeassistant.action:
+                              action: shell_command.immich_photo_next
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_20
+                              text_color: 0xFFFFFF
+                              text: "Verwijderen"
+
               - obj:
                   id: immich_toast
                   x: 254
@@ -2905,8 +5501,357 @@ lvgl:
                         long_mode: DOT
                         text: ""
 
+              # Badge rechtsboven — altijd zichtbaar op foto-pagina
+              - button:
+                  id: immich_review_badge
+                  x: 930
+                  y: 10
+                  width: 56
+                  height: 56
+                  radius: 28
+                  bg_color: 0x1DB954
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  on_click:
+                    - homeassistant.action:
+                        action: shell_command.immich_review_today
+                    - lvgl.page.show: page_review
+                    - lvgl.widget.hide: nav_rail_container
+                    - lvgl.widget.hide: top_status_bar
+                    - lambda: 'id(review_nav_countdown) = 30;'
+                  widgets:
+                    - label:
+                        id: lbl_review_badge
+                        align: CENTER
+                        text_font: font_roboto_16
+                        text_color: 0xFFFFFF
+                        text: "0"
+                        text_align: CENTER
+
     # ===========================================================
-    # PAGINA 6: DEURBEL
+    # PAGINA 6: REVIEW — foto's van vandaag beoordelen
+    # ===========================================================
+    - id: page_review
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 600
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              # Foto
+              - image:
+                  id: img_review_photo
+                  align: CENTER
+                  width: 1024
+                  height: 600
+                  src: review_art
+                  hidden: true
+              # Geen-foto melding — verdwijnt zodra foto geladen is
+              - label:
+                  id: lbl_review_leeg
+                  align: CENTER
+                  y: 20
+                  text_font: font_roboto_20
+                  text_color: 0x6B6E76
+                  text_align: CENTER
+                  text: "Geen foto's van vandaag"
+              # Top bar
+              - obj:
+                  x: 0
+                  y: 0
+                  width: 1024
+                  height: 52
+                  bg_color: 0x000000
+                  bg_opa: 70%
+                  border_width: 0
+                  pad_all: 0
+                  radius: 0
+                  scrollable: false
+                  widgets:
+                    # Terug naar immich pagina
+                    - button:
+                        x: 8
+                        y: 8
+                        width: 72
+                        height: 36
+                        bg_color: 0x222222
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 10
+                        pad_all: 0
+                        on_click:
+                          - lvgl.page.show: page_immich
+                          - lvgl.widget.show: nav_rail_container
+                          - lvgl.widget.show: top_status_bar
+                          - lambda: 'id(review_nav_countdown) = 0;'
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFFFFFF
+                              text: "\U000F004D"  # mdi-arrow-left
+                    # Voortgang label
+                    - label:
+                        id: lbl_review_voortgang
+                        x: 92
+                        y: 14
+                        text_font: font_roboto_20
+                        text_color: 0xFFFFFF
+                        text: "-- / --"
+                    # Roteer
+                    - button:
+                        x: 892
+                        y: 8
+                        width: 52
+                        height: 36
+                        bg_color: 0x222222
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 10
+                        pad_all: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: shell_command.immich_review_rotate
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_28
+                              text_color: 0xFFFFFF
+                              text: "\U000F0468"  # mdi-rotate-right
+                    # Info knop
+                    - button:
+                        x: 956
+                        y: 8
+                        width: 60
+                        height: 36
+                        bg_color: 0x222222
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 10
+                        pad_all: 0
+                        on_click:
+                          - lambda: |-
+                              id(review_info_visible) = !id(review_info_visible);
+                              if (id(review_info_visible)) {
+                                lv_obj_clear_flag(id(review_info_overlay), LV_OBJ_FLAG_HIDDEN);
+                              } else {
+                                lv_obj_add_flag(id(review_info_overlay), LV_OBJ_FLAG_HIDDEN);
+                              }
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_20
+                              text_color: 0xFFFFFF
+                              text: "ⓘ"
+              # Navigatie links
+              - button:
+                  x: 8
+                  y: 200
+                  width: 72
+                  height: 140
+                  bg_color: 0x101010
+                  bg_opa: 45%
+                  border_width: 0
+                  radius: 16
+                  pad_all: 0
+                  on_click:
+                    - homeassistant.action:
+                        action: shell_command.immich_review_prev
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_icon_28
+                        text_color: 0xFFFFFF
+                        text: "\U000F04AE"  # mdi-skip-previous
+              # Navigatie rechts
+              - button:
+                  x: 944
+                  y: 200
+                  width: 72
+                  height: 140
+                  bg_color: 0x101010
+                  bg_opa: 45%
+                  border_width: 0
+                  radius: 16
+                  pad_all: 0
+                  on_click:
+                    - homeassistant.action:
+                        action: shell_command.immich_review_next
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_font: font_icon_28
+                        text_color: 0xFFFFFF
+                        text: "\U000F04AD"  # mdi-skip-next
+              # Actieknoppen onderaan
+              - obj:
+                  x: 0
+                  y: 488
+                  width: 1024
+                  height: 112
+                  bg_color: 0x000000
+                  bg_opa: 70%
+                  border_width: 0
+                  pad_all: 0
+                  radius: 0
+                  scrollable: false
+                  widgets:
+                    # Verwijder (rood, groot)
+                    - button:
+                        x: 88
+                        y: 12
+                        width: 88
+                        height: 88
+                        bg_color: 0xCC2222
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 44
+                        pad_all: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: shell_command.immich_review_trash
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_48
+                              text_color: 0xFFFFFF
+                              text: "\U000F01B4"  # mdi-delete
+                    # Tom (blauw)
+                    - button:
+                        x: 204
+                        y: 20
+                        width: 72
+                        height: 72
+                        bg_color: 0x1565C0
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 36
+                        pad_all: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: shell_command.immich_review_tom
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Tom"
+                    # Chanel (paars)
+                    - button:
+                        x: 292
+                        y: 20
+                        width: 72
+                        height: 72
+                        bg_color: 0x7B1FA2
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 36
+                        pad_all: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: shell_command.immich_review_chanel
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "Chanel"
+                    # Bewaar (groen, groot)
+                    - button:
+                        x: 848
+                        y: 12
+                        width: 88
+                        height: 88
+                        bg_color: 0x1DB954
+                        bg_opa: COVER
+                        border_width: 0
+                        radius: 44
+                        pad_all: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: shell_command.immich_review_keep
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_icon_48
+                              text_color: 0xFFFFFF
+                              text: "\U000F02D1"  # mdi-heart
+              # Info overlay (verborgen)
+              - obj:
+                  id: review_info_overlay
+                  x: 100
+                  y: 60
+                  width: 824
+                  height: 420
+                  bg_color: 0x000000
+                  bg_opa: 88%
+                  border_color: 0x333333
+                  border_width: 1
+                  border_opa: COVER
+                  radius: 16
+                  pad_all: 24
+                  scrollable: false
+                  hidden: true
+                  widgets:
+                    - label:
+                        id: lbl_review_info_datum
+                        x: 0
+                        y: 0
+                        text_font: font_roboto_20
+                        text_color: 0xFFFFFF
+                        text: ""
+                        long_mode: WRAP
+                        width: 776
+                    - label:
+                        id: lbl_review_info_locatie
+                        x: 0
+                        y: 36
+                        text_font: font_roboto_16
+                        text_color: 0xB0B0B0
+                        text: ""
+                        long_mode: WRAP
+                        width: 776
+                    - label:
+                        id: lbl_review_info_camera
+                        x: 0
+                        y: 68
+                        text_font: font_roboto_16
+                        text_color: 0xB0B0B0
+                        text: ""
+                        long_mode: WRAP
+                        width: 776
+                    - label:
+                        id: lbl_review_info_bestand
+                        x: 0
+                        y: 100
+                        text_font: font_roboto_16
+                        text_color: 0x808080
+                        text: ""
+                        long_mode: WRAP
+                        width: 776
+                    - label:
+                        id: lbl_review_info_personen
+                        x: 0
+                        y: 136
+                        text_font: font_roboto_20
+                        text_color: 0x9C88FF
+                        text: ""
+                        long_mode: WRAP
+                        width: 776
+
+    # ===========================================================
+    # PAGINA 7: DEURBEL
     # ===========================================================
     - id: page_doorbell
       bg_color: 0x000000
@@ -3214,9 +6159,33 @@ interval:
                 then:
                   - lvgl.widget.hide: immich_controls
                   - lvgl.widget.hide: nav_rail_container
-                  - lvgl.widget.show: lbl_immich_clock
-                  - lvgl.widget.show: lbl_immich_date
-                  - lvgl.widget.show: lbl_immich_place
+      - if:
+          condition:
+            lambda: 'return id(review_nav_countdown) > 0;'
+          then:
+            - lambda: 'id(review_nav_countdown)--;'
+            - if:
+                condition:
+                  lambda: 'return id(review_nav_countdown) == 0;'
+                then:
+                  - lvgl.widget.show: nav_rail_container
+                  - lvgl.widget.show: top_status_bar
+
+  # Review badge + voortgang label — update elke 30s
+  - interval: 30s
+    then:
+      - lvgl.label.update:
+          id: lbl_review_badge
+          text: !lambda |-
+            auto s = id(ha_review_resterend).state;
+            if (s.empty()) return std::string("0");
+            int v = atoi(s.c_str());
+            return str_sprintf("%d", v < 0 ? 0 : v);
+      - lvgl.label.update:
+          id: lbl_review_voortgang
+          text: !lambda |-
+            auto s = id(ha_review_voortgang).state;
+            return s.empty() ? std::string("") : s;
 
   # Deurbelpagina — korte snapshot-loop zolang Home Assistant de helper actief houdt
   - interval: 1s
@@ -3264,6 +6233,574 @@ interval:
               t.day_of_month,
               months[(t.month - 1) % 12]);
             return std::string(buf);
+
+      # Agenda week blocks
+      - lambda: |-
+          auto clean_agenda = [](std::string s) -> std::string {
+            if (s.empty() || s == "unknown" || s == "unavailable" || s == "None") return std::string("");
+            return s;
+          };
+          auto set_text = [&](lv_obj_t *label, const std::string &value, const char *fallback) {
+            std::string out = clean_agenda(value);
+            if (out.empty()) out = fallback;
+            lv_label_set_text(label, out.c_str());
+          };
+          auto minutes_from = [](const std::string &s) -> int {
+            if (s.size() < 5 || s[2] != ':') return -1;
+            if (!isdigit(s[0]) || !isdigit(s[1]) || !isdigit(s[3]) || !isdigit(s[4])) return -1;
+            return ((s[0] - '0') * 10 + (s[1] - '0')) * 60 + ((s[3] - '0') * 10 + (s[4] - '0'));
+          };
+          auto update_block = [&](lv_obj_t *box, lv_obj_t *label, const std::string &raw, int day, int slot, int &last_bottom) {
+            std::string s = clean_agenda(raw);
+            if (s.empty()) { lv_obj_add_flag(box, LV_OBJ_FLAG_HIDDEN); return; }
+            int x = 60 + day * 125;
+            int y = 98;
+            int h = 32;
+            int mins = minutes_from(s);
+            if (s.rfind("hele dag", 0) == 0) {
+              y = 92 + slot * 4;
+              h = 28;
+            } else if (mins >= 0) {
+              if (mins < 480) mins = 480;
+              if (mins > 1200) mins = 1200;
+              y = 98 + ((mins - 480) * 408) / 720;
+              if (y < last_bottom + 2) y = last_bottom + 2;
+              if (y > 468) y = 468;
+            } else {
+              y = 98 + slot * 36;
+            }
+            last_bottom = y + h;
+            lv_obj_set_pos(box, x, y);
+            lv_obj_set_size(box, 114, h);
+            lv_label_set_text(label, s.c_str());
+            lv_obj_clear_flag(box, LV_OBJ_FLAG_HIDDEN);
+          };
+          set_text(id(lbl_agenda_d0_title), id(agenda_d0_title).state, "--");
+          set_text(id(lbl_agenda_d0_date), id(agenda_d0_date).state, "--");
+          int agenda_d0_bottom = 92;
+          update_block(id(agenda_d0_block_1), id(lbl_agenda_d0_block_1), id(agenda_d0_event_1).state, 0, 0, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_2), id(lbl_agenda_d0_block_2), id(agenda_d0_event_2).state, 0, 1, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_3), id(lbl_agenda_d0_block_3), id(agenda_d0_event_3).state, 0, 2, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_4), id(lbl_agenda_d0_block_4), id(agenda_d0_event_4).state, 0, 3, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_5), id(lbl_agenda_d0_block_5), id(agenda_d0_event_5).state, 0, 4, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_6), id(lbl_agenda_d0_block_6), id(agenda_d0_event_6).state, 0, 5, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_7), id(lbl_agenda_d0_block_7), id(agenda_d0_event_7).state, 0, 6, agenda_d0_bottom);
+          update_block(id(agenda_d0_block_8), id(lbl_agenda_d0_block_8), id(agenda_d0_event_8).state, 0, 7, agenda_d0_bottom);
+          set_text(id(lbl_agenda_d0_more), id(agenda_d0_more).state, "");
+
+          set_text(id(lbl_agenda_d1_title), id(agenda_d1_title).state, "--");
+          set_text(id(lbl_agenda_d1_date), id(agenda_d1_date).state, "--");
+          int agenda_d1_bottom = 92;
+          update_block(id(agenda_d1_block_1), id(lbl_agenda_d1_block_1), id(agenda_d1_event_1).state, 1, 0, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_2), id(lbl_agenda_d1_block_2), id(agenda_d1_event_2).state, 1, 1, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_3), id(lbl_agenda_d1_block_3), id(agenda_d1_event_3).state, 1, 2, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_4), id(lbl_agenda_d1_block_4), id(agenda_d1_event_4).state, 1, 3, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_5), id(lbl_agenda_d1_block_5), id(agenda_d1_event_5).state, 1, 4, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_6), id(lbl_agenda_d1_block_6), id(agenda_d1_event_6).state, 1, 5, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_7), id(lbl_agenda_d1_block_7), id(agenda_d1_event_7).state, 1, 6, agenda_d1_bottom);
+          update_block(id(agenda_d1_block_8), id(lbl_agenda_d1_block_8), id(agenda_d1_event_8).state, 1, 7, agenda_d1_bottom);
+          set_text(id(lbl_agenda_d1_more), id(agenda_d1_more).state, "");
+
+          set_text(id(lbl_agenda_d2_title), id(agenda_d2_title).state, "--");
+          set_text(id(lbl_agenda_d2_date), id(agenda_d2_date).state, "--");
+          int agenda_d2_bottom = 92;
+          update_block(id(agenda_d2_block_1), id(lbl_agenda_d2_block_1), id(agenda_d2_event_1).state, 2, 0, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_2), id(lbl_agenda_d2_block_2), id(agenda_d2_event_2).state, 2, 1, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_3), id(lbl_agenda_d2_block_3), id(agenda_d2_event_3).state, 2, 2, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_4), id(lbl_agenda_d2_block_4), id(agenda_d2_event_4).state, 2, 3, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_5), id(lbl_agenda_d2_block_5), id(agenda_d2_event_5).state, 2, 4, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_6), id(lbl_agenda_d2_block_6), id(agenda_d2_event_6).state, 2, 5, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_7), id(lbl_agenda_d2_block_7), id(agenda_d2_event_7).state, 2, 6, agenda_d2_bottom);
+          update_block(id(agenda_d2_block_8), id(lbl_agenda_d2_block_8), id(agenda_d2_event_8).state, 2, 7, agenda_d2_bottom);
+          set_text(id(lbl_agenda_d2_more), id(agenda_d2_more).state, "");
+
+          set_text(id(lbl_agenda_d3_title), id(agenda_d3_title).state, "--");
+          set_text(id(lbl_agenda_d3_date), id(agenda_d3_date).state, "--");
+          int agenda_d3_bottom = 92;
+          update_block(id(agenda_d3_block_1), id(lbl_agenda_d3_block_1), id(agenda_d3_event_1).state, 3, 0, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_2), id(lbl_agenda_d3_block_2), id(agenda_d3_event_2).state, 3, 1, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_3), id(lbl_agenda_d3_block_3), id(agenda_d3_event_3).state, 3, 2, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_4), id(lbl_agenda_d3_block_4), id(agenda_d3_event_4).state, 3, 3, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_5), id(lbl_agenda_d3_block_5), id(agenda_d3_event_5).state, 3, 4, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_6), id(lbl_agenda_d3_block_6), id(agenda_d3_event_6).state, 3, 5, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_7), id(lbl_agenda_d3_block_7), id(agenda_d3_event_7).state, 3, 6, agenda_d3_bottom);
+          update_block(id(agenda_d3_block_8), id(lbl_agenda_d3_block_8), id(agenda_d3_event_8).state, 3, 7, agenda_d3_bottom);
+          set_text(id(lbl_agenda_d3_more), id(agenda_d3_more).state, "");
+
+          set_text(id(lbl_agenda_d4_title), id(agenda_d4_title).state, "--");
+          set_text(id(lbl_agenda_d4_date), id(agenda_d4_date).state, "--");
+          int agenda_d4_bottom = 92;
+          update_block(id(agenda_d4_block_1), id(lbl_agenda_d4_block_1), id(agenda_d4_event_1).state, 4, 0, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_2), id(lbl_agenda_d4_block_2), id(agenda_d4_event_2).state, 4, 1, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_3), id(lbl_agenda_d4_block_3), id(agenda_d4_event_3).state, 4, 2, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_4), id(lbl_agenda_d4_block_4), id(agenda_d4_event_4).state, 4, 3, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_5), id(lbl_agenda_d4_block_5), id(agenda_d4_event_5).state, 4, 4, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_6), id(lbl_agenda_d4_block_6), id(agenda_d4_event_6).state, 4, 5, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_7), id(lbl_agenda_d4_block_7), id(agenda_d4_event_7).state, 4, 6, agenda_d4_bottom);
+          update_block(id(agenda_d4_block_8), id(lbl_agenda_d4_block_8), id(agenda_d4_event_8).state, 4, 7, agenda_d4_bottom);
+          set_text(id(lbl_agenda_d4_more), id(agenda_d4_more).state, "");
+
+          set_text(id(lbl_agenda_d5_title), id(agenda_d5_title).state, "--");
+          set_text(id(lbl_agenda_d5_date), id(agenda_d5_date).state, "--");
+          int agenda_d5_bottom = 92;
+          update_block(id(agenda_d5_block_1), id(lbl_agenda_d5_block_1), id(agenda_d5_event_1).state, 5, 0, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_2), id(lbl_agenda_d5_block_2), id(agenda_d5_event_2).state, 5, 1, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_3), id(lbl_agenda_d5_block_3), id(agenda_d5_event_3).state, 5, 2, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_4), id(lbl_agenda_d5_block_4), id(agenda_d5_event_4).state, 5, 3, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_5), id(lbl_agenda_d5_block_5), id(agenda_d5_event_5).state, 5, 4, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_6), id(lbl_agenda_d5_block_6), id(agenda_d5_event_6).state, 5, 5, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_7), id(lbl_agenda_d5_block_7), id(agenda_d5_event_7).state, 5, 6, agenda_d5_bottom);
+          update_block(id(agenda_d5_block_8), id(lbl_agenda_d5_block_8), id(agenda_d5_event_8).state, 5, 7, agenda_d5_bottom);
+          set_text(id(lbl_agenda_d5_more), id(agenda_d5_more).state, "");
+
+          set_text(id(lbl_agenda_d6_title), id(agenda_d6_title).state, "--");
+          set_text(id(lbl_agenda_d6_date), id(agenda_d6_date).state, "--");
+          int agenda_d6_bottom = 92;
+          update_block(id(agenda_d6_block_1), id(lbl_agenda_d6_block_1), id(agenda_d6_event_1).state, 6, 0, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_2), id(lbl_agenda_d6_block_2), id(agenda_d6_event_2).state, 6, 1, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_3), id(lbl_agenda_d6_block_3), id(agenda_d6_event_3).state, 6, 2, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_4), id(lbl_agenda_d6_block_4), id(agenda_d6_event_4).state, 6, 3, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_5), id(lbl_agenda_d6_block_5), id(agenda_d6_event_5).state, 6, 4, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_6), id(lbl_agenda_d6_block_6), id(agenda_d6_event_6).state, 6, 5, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_7), id(lbl_agenda_d6_block_7), id(agenda_d6_event_7).state, 6, 6, agenda_d6_bottom);
+          update_block(id(agenda_d6_block_8), id(lbl_agenda_d6_block_8), id(agenda_d6_event_8).state, 6, 7, agenda_d6_bottom);
+          set_text(id(lbl_agenda_d6_more), id(agenda_d6_more).state, "");
+
+      # Agenda Focus + Sidebar — vult de zichtbare overlay uit de bestaande HA-sensoren.
+      - lambda: |-
+          struct AgendaEvent {
+            std::string time;
+            std::string title;
+            std::string who;
+            int minutes;
+            lv_color_t color;
+            bool valid;
+            bool all_day;
+          };
+
+          auto clean = [](std::string s) -> std::string {
+            if (s.empty() || s == "unknown" || s == "unavailable" || s == "None") return "";
+            while (!s.empty() && isspace((unsigned char) s.front())) s.erase(s.begin());
+            while (!s.empty() && isspace((unsigned char) s.back())) s.pop_back();
+            return s;
+          };
+          auto upper = [](std::string s) -> std::string {
+            for (auto &c : s) c = toupper((unsigned char) c);
+            return s;
+          };
+          auto count_from = [&](const std::string &raw) -> int {
+            std::string s = clean(raw);
+            int value = 0;
+            bool found = false;
+            for (char c : s) {
+              if (isdigit((unsigned char) c)) {
+                found = true;
+                value = value * 10 + (c - '0');
+              } else if (found) {
+                break;
+              }
+            }
+            return found ? value : 0;
+          };
+          auto parse_date = [&](const std::string &raw, int &day, int &month) {
+            std::string s = clean(raw);
+            day = 0;
+            month = 0;
+            if (s.size() >= 5 && isdigit(s[0]) && isdigit(s[1]) && s[2] == '-' &&
+                isdigit(s[3]) && isdigit(s[4])) {
+              day = (s[0] - '0') * 10 + (s[1] - '0');
+              month = (s[3] - '0') * 10 + (s[4] - '0');
+            }
+          };
+          auto parse_event = [&](const std::string &raw) -> AgendaEvent {
+            AgendaEvent ev{"", "", "Familie", -1, lv_color_hex(0x96AAC3), false, false};
+            std::string s = clean(raw);
+            if (s.empty()) return ev;
+            ev.valid = true;
+            if (s.size() >= 5 && isdigit(s[0]) && isdigit(s[1]) && s[2] == ':' &&
+                isdigit(s[3]) && isdigit(s[4])) {
+              ev.time = s.substr(0, 5);
+              ev.minutes = ((s[0] - '0') * 10 + (s[1] - '0')) * 60 +
+                           ((s[3] - '0') * 10 + (s[4] - '0'));
+              ev.title = clean(s.substr(5));
+            } else if (s.rfind("hele dag", 0) == 0 || s.rfind("dag ", 0) == 0) {
+              ev.time = "dag";
+              ev.all_day = true;
+              ev.title = clean(s.substr(s.rfind("hele dag", 0) == 0 ? 8 : 3));
+            } else {
+              ev.time = "";
+              ev.title = s;
+            }
+            std::string hay = upper(ev.title);
+            if (hay.find("PAPA") != std::string::npos) {
+              ev.who = "Papa";
+              ev.color = lv_color_hex(0x5A96EB);
+            } else if (hay.find("MAMA") != std::string::npos) {
+              ev.who = "Mama";
+              ev.color = lv_color_hex(0xF5B45A);
+            } else if (hay.find("EMMA") != std::string::npos) {
+              ev.who = "Emma";
+              ev.color = lv_color_hex(0x9678EB);
+            } else if (hay.find("LOTTE") != std::string::npos) {
+              ev.who = "Lotte";
+              ev.color = lv_color_hex(0x4ADE80);
+            }
+            if (ev.title.empty()) ev.title = "Afspraak";
+            return ev;
+          };
+          auto style_event = [](lv_obj_t *slot, lv_obj_t *accent, lv_obj_t *card,
+                                lv_obj_t *chip, lv_obj_t *who_label,
+                                const AgendaEvent &ev, bool past) {
+            lv_obj_set_style_bg_color(accent, ev.color, LV_PART_MAIN);
+            if (card != nullptr) {
+              lv_obj_set_style_border_color(card, ev.color, LV_PART_MAIN);
+              lv_obj_set_style_border_opa(card, LV_OPA_20, LV_PART_MAIN);
+            }
+            if (chip != nullptr) {
+              lv_obj_set_style_bg_color(chip, ev.color, LV_PART_MAIN);
+              lv_obj_set_style_bg_opa(chip, LV_OPA_20, LV_PART_MAIN);
+            }
+            if (who_label != nullptr) {
+              lv_obj_set_style_text_color(who_label, ev.color, LV_PART_MAIN);
+            }
+            lv_obj_set_style_opa(slot, past ? LV_OPA_40 : LV_OPA_COVER, LV_PART_MAIN);
+          };
+
+          auto now = id(ha_time).now();
+          int now_minutes = now.is_valid() ? now.hour * 60 + now.minute : -1;
+          char clock_buf[8];
+          if (now.is_valid()) snprintf(clock_buf, sizeof(clock_buf), "%02d:%02d", now.hour, now.minute);
+          else snprintf(clock_buf, sizeof(clock_buf), "--:--");
+          lv_label_set_text(id(lbl_agenda_clock), clock_buf);
+          char now_buf[20];
+          snprintf(now_buf, sizeof(now_buf), "NU · %s", clock_buf);
+          lv_label_set_text(id(lbl_agenda_now), now_buf);
+
+          const char *months[] = {"", "JANUARI", "FEBRUARI", "MAART", "APRIL", "MEI", "JUNI",
+                                  "JULI", "AUGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DECEMBER"};
+          const char *weekdays[] = {"ZO","MA","DI","WO","DO","VR","ZA"};
+          int d0 = 0, m0 = 0, d1 = 0, m1 = 0, d2 = 0, m2 = 0, d3 = 0, m3 = 0;
+          parse_date(id(agenda_d0_date).state, d0, m0);
+          parse_date(id(agenda_d1_date).state, d1, m1);
+          parse_date(id(agenda_d2_date).state, d2, m2);
+          parse_date(id(agenda_d3_date).state, d3, m3);
+          std::string day0_name = now.is_valid() ? std::string(weekdays[now.day_of_week % 7]) : "VANDAAG";
+          std::string day3_name = upper(clean(id(agenda_d3_title).state));
+          char range_buf[96];
+          if (d0 > 0 && d3 > 0 && m0 > 0 && m3 > 0) {
+            if (m0 == m3) {
+              snprintf(range_buf, sizeof(range_buf), "%s %d – %s %d %s",
+                       day0_name.c_str(), d0, day3_name.c_str(), d3, months[m3]);
+            } else {
+              snprintf(range_buf, sizeof(range_buf), "%s %d %s – %s %d %s",
+                       day0_name.c_str(), d0, months[m0], day3_name.c_str(), d3, months[m3]);
+            }
+          } else {
+            snprintf(range_buf, sizeof(range_buf), "KOMENDE VIER DAGEN");
+          }
+          lv_label_set_text(id(lbl_agenda_range), range_buf);
+          char today_buf[48];
+          if (d0 > 0 && m0 > 0) snprintf(today_buf, sizeof(today_buf), "%s %d %s", day0_name.c_str(), d0, months[m0]);
+          else snprintf(today_buf, sizeof(today_buf), "VANDAAG");
+          lv_label_set_text(id(lbl_agenda_today_date), today_buf);
+
+          AgendaEvent today_events[5] = {
+            parse_event(id(agenda_d0_event_1).state),
+            parse_event(id(agenda_d0_event_2).state),
+            parse_event(id(agenda_d0_event_3).state),
+            parse_event(id(agenda_d0_event_4).state),
+            parse_event(id(agenda_d0_event_5).state)
+          };
+          lv_obj_t *today_slots[5] = {
+            id(agenda_today_slot_1), id(agenda_today_slot_2), id(agenda_today_slot_3),
+            id(agenda_today_slot_4), id(agenda_today_slot_5)
+          };
+          lv_obj_t *today_accents[5] = {
+            id(agenda_today_accent_1), id(agenda_today_accent_2), id(agenda_today_accent_3),
+            id(agenda_today_accent_4), id(agenda_today_accent_5)
+          };
+          lv_obj_t *today_cards[5] = {
+            id(agenda_today_card_1), id(agenda_today_card_2), id(agenda_today_card_3),
+            id(agenda_today_card_4), id(agenda_today_card_5)
+          };
+          lv_obj_t *today_time_labels[5] = {
+            id(lbl_agenda_today_time_1), id(lbl_agenda_today_time_2), id(lbl_agenda_today_time_3),
+            id(lbl_agenda_today_time_4), id(lbl_agenda_today_time_5)
+          };
+          lv_obj_t *today_title_labels[5] = {
+            id(lbl_agenda_today_title_1), id(lbl_agenda_today_title_2), id(lbl_agenda_today_title_3),
+            id(lbl_agenda_today_title_4), id(lbl_agenda_today_title_5)
+          };
+          int visible_today = 0;
+          int past_today = 0;
+          for (int i = 0; i < 5; i++) {
+            if (today_events[i].valid) {
+              visible_today++;
+              if (!today_events[i].all_day && today_events[i].minutes >= 0 &&
+                  now_minutes >= 0 && today_events[i].minutes <= now_minutes) past_today++;
+            }
+          }
+          bool show_now = past_today > 0 && past_today < visible_today;
+          for (int i = 0; i < 5; i++) {
+            if (!today_events[i].valid) {
+              lv_obj_add_flag(today_slots[i], LV_OBJ_FLAG_HIDDEN);
+              continue;
+            }
+            bool past = !today_events[i].all_day && today_events[i].minutes >= 0 &&
+                        now_minutes >= 0 && today_events[i].minutes <= now_minutes;
+            int y = 70 + i * 82 + ((show_now && i >= past_today) ? 18 : 0);
+            lv_obj_set_y(today_slots[i], y);
+            lv_label_set_text(today_time_labels[i], today_events[i].time.c_str());
+            lv_label_set_text(today_title_labels[i], today_events[i].title.c_str());
+            style_event(today_slots[i], today_accents[i], today_cards[i], nullptr,
+                        nullptr, today_events[i], past);
+            lv_obj_clear_flag(today_slots[i], LV_OBJ_FLAG_HIDDEN);
+          }
+          if (show_now) {
+            lv_obj_set_y(id(agenda_now_indicator), 70 + past_today * 82 - 3);
+            lv_obj_clear_flag(id(agenda_now_indicator), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(agenda_now_indicator), LV_OBJ_FLAG_HIDDEN);
+          }
+          if (visible_today == 0) lv_obj_clear_flag(id(lbl_agenda_today_empty), LV_OBJ_FLAG_HIDDEN);
+          else lv_obj_add_flag(id(lbl_agenda_today_empty), LV_OBJ_FLAG_HIDDEN);
+          int today_total = count_from(id(agenda_d0_count).state);
+          int today_more = std::max(0, today_total - 5);
+          char more_buf[24];
+          snprintf(more_buf, sizeof(more_buf), today_more > 0 ? "+%d meer" : "", today_more);
+          lv_label_set_text(id(lbl_agenda_today_more), more_buf);
+
+          auto update_future_day = [&](const std::string &title_raw, const std::string &date_raw,
+                                       const std::string &count_raw, const std::string event_raws[8],
+                                       lv_obj_t *date_label, lv_obj_t *day_label, lv_obj_t *count_label,
+                                       lv_obj_t *slots[8], lv_obj_t *accents[8], lv_obj_t *times[8],
+                                       lv_obj_t *titles[8], lv_obj_t *empty_label) {
+            int date_day = 0, date_month = 0;
+            parse_date(date_raw, date_day, date_month);
+            char date_buf[8];
+            snprintf(date_buf, sizeof(date_buf), date_day > 0 ? "%d" : "--", date_day);
+            lv_label_set_text(date_label, date_buf);
+            std::string day_name = upper(clean(title_raw));
+            lv_label_set_text(day_label, day_name.empty() ? "--" : day_name.c_str());
+            int total = count_from(count_raw);
+            char count_buf[32];
+            if (total == 1) snprintf(count_buf, sizeof(count_buf), "1 AFSPRAAK");
+            else if (total > 1) snprintf(count_buf, sizeof(count_buf), "%d AFSPRAKEN", total);
+            else count_buf[0] = '\0';
+            lv_label_set_text(count_label, count_buf);
+
+            AgendaEvent evs[8] = {
+              parse_event(event_raws[0]), parse_event(event_raws[1]),
+              parse_event(event_raws[2]), parse_event(event_raws[3]),
+              parse_event(event_raws[4]), parse_event(event_raws[5]),
+              parse_event(event_raws[6]), parse_event(event_raws[7])
+            };
+            int visible = 0;
+            for (int i = 0; i < 8; i++) {
+              if (!evs[i].valid) {
+                lv_obj_add_flag(slots[i], LV_OBJ_FLAG_HIDDEN);
+                continue;
+              }
+              lv_obj_set_y(slots[i], visible * 42);
+              lv_label_set_text(times[i], evs[i].time.c_str());
+              lv_label_set_text(titles[i], evs[i].title.c_str());
+              style_event(slots[i], accents[i], nullptr, nullptr, nullptr, evs[i], false);
+              lv_obj_clear_flag(slots[i], LV_OBJ_FLAG_HIDDEN);
+              visible++;
+            }
+            if (visible == 0) lv_obj_clear_flag(empty_label, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(empty_label, LV_OBJ_FLAG_HIDDEN);
+          };
+
+          std::string future_d1_events[8] = {
+            id(agenda_d1_event_1).state, id(agenda_d1_event_2).state,
+            id(agenda_d1_event_3).state, id(agenda_d1_event_4).state,
+            id(agenda_d1_event_5).state, id(agenda_d1_event_6).state,
+            id(agenda_d1_event_7).state, id(agenda_d1_event_8).state
+          };
+          lv_obj_t *future_d1_slots[8] = {
+            id(agenda_future_d1_slot_1), id(agenda_future_d1_slot_2),
+            id(agenda_future_d1_slot_3), id(agenda_future_d1_slot_4),
+            id(agenda_future_d1_slot_5), id(agenda_future_d1_slot_6),
+            id(agenda_future_d1_slot_7), id(agenda_future_d1_slot_8)
+          };
+          lv_obj_t *future_d1_accents[8] = {
+            id(agenda_future_d1_accent_1), id(agenda_future_d1_accent_2),
+            id(agenda_future_d1_accent_3), id(agenda_future_d1_accent_4),
+            id(agenda_future_d1_accent_5), id(agenda_future_d1_accent_6),
+            id(agenda_future_d1_accent_7), id(agenda_future_d1_accent_8)
+          };
+          lv_obj_t *future_d1_times[8] = {
+            id(lbl_agenda_future_d1_time_1), id(lbl_agenda_future_d1_time_2),
+            id(lbl_agenda_future_d1_time_3), id(lbl_agenda_future_d1_time_4),
+            id(lbl_agenda_future_d1_time_5), id(lbl_agenda_future_d1_time_6),
+            id(lbl_agenda_future_d1_time_7), id(lbl_agenda_future_d1_time_8)
+          };
+          lv_obj_t *future_d1_titles[8] = {
+            id(lbl_agenda_future_d1_title_1), id(lbl_agenda_future_d1_title_2),
+            id(lbl_agenda_future_d1_title_3), id(lbl_agenda_future_d1_title_4),
+            id(lbl_agenda_future_d1_title_5), id(lbl_agenda_future_d1_title_6),
+            id(lbl_agenda_future_d1_title_7), id(lbl_agenda_future_d1_title_8)
+          };
+
+          std::string future_d2_events[8] = {
+            id(agenda_d2_event_1).state, id(agenda_d2_event_2).state,
+            id(agenda_d2_event_3).state, id(agenda_d2_event_4).state,
+            id(agenda_d2_event_5).state, id(agenda_d2_event_6).state,
+            id(agenda_d2_event_7).state, id(agenda_d2_event_8).state
+          };
+          lv_obj_t *future_d2_slots[8] = {
+            id(agenda_future_d2_slot_1), id(agenda_future_d2_slot_2),
+            id(agenda_future_d2_slot_3), id(agenda_future_d2_slot_4),
+            id(agenda_future_d2_slot_5), id(agenda_future_d2_slot_6),
+            id(agenda_future_d2_slot_7), id(agenda_future_d2_slot_8)
+          };
+          lv_obj_t *future_d2_accents[8] = {
+            id(agenda_future_d2_accent_1), id(agenda_future_d2_accent_2),
+            id(agenda_future_d2_accent_3), id(agenda_future_d2_accent_4),
+            id(agenda_future_d2_accent_5), id(agenda_future_d2_accent_6),
+            id(agenda_future_d2_accent_7), id(agenda_future_d2_accent_8)
+          };
+          lv_obj_t *future_d2_times[8] = {
+            id(lbl_agenda_future_d2_time_1), id(lbl_agenda_future_d2_time_2),
+            id(lbl_agenda_future_d2_time_3), id(lbl_agenda_future_d2_time_4),
+            id(lbl_agenda_future_d2_time_5), id(lbl_agenda_future_d2_time_6),
+            id(lbl_agenda_future_d2_time_7), id(lbl_agenda_future_d2_time_8)
+          };
+          lv_obj_t *future_d2_titles[8] = {
+            id(lbl_agenda_future_d2_title_1), id(lbl_agenda_future_d2_title_2),
+            id(lbl_agenda_future_d2_title_3), id(lbl_agenda_future_d2_title_4),
+            id(lbl_agenda_future_d2_title_5), id(lbl_agenda_future_d2_title_6),
+            id(lbl_agenda_future_d2_title_7), id(lbl_agenda_future_d2_title_8)
+          };
+
+          std::string future_d3_events[8] = {
+            id(agenda_d3_event_1).state, id(agenda_d3_event_2).state,
+            id(agenda_d3_event_3).state, id(agenda_d3_event_4).state,
+            id(agenda_d3_event_5).state, id(agenda_d3_event_6).state,
+            id(agenda_d3_event_7).state, id(agenda_d3_event_8).state
+          };
+          lv_obj_t *future_d3_slots[8] = {
+            id(agenda_future_d3_slot_1), id(agenda_future_d3_slot_2),
+            id(agenda_future_d3_slot_3), id(agenda_future_d3_slot_4),
+            id(agenda_future_d3_slot_5), id(agenda_future_d3_slot_6),
+            id(agenda_future_d3_slot_7), id(agenda_future_d3_slot_8)
+          };
+          lv_obj_t *future_d3_accents[8] = {
+            id(agenda_future_d3_accent_1), id(agenda_future_d3_accent_2),
+            id(agenda_future_d3_accent_3), id(agenda_future_d3_accent_4),
+            id(agenda_future_d3_accent_5), id(agenda_future_d3_accent_6),
+            id(agenda_future_d3_accent_7), id(agenda_future_d3_accent_8)
+          };
+          lv_obj_t *future_d3_times[8] = {
+            id(lbl_agenda_future_d3_time_1), id(lbl_agenda_future_d3_time_2),
+            id(lbl_agenda_future_d3_time_3), id(lbl_agenda_future_d3_time_4),
+            id(lbl_agenda_future_d3_time_5), id(lbl_agenda_future_d3_time_6),
+            id(lbl_agenda_future_d3_time_7), id(lbl_agenda_future_d3_time_8)
+          };
+          lv_obj_t *future_d3_titles[8] = {
+            id(lbl_agenda_future_d3_title_1), id(lbl_agenda_future_d3_title_2),
+            id(lbl_agenda_future_d3_title_3), id(lbl_agenda_future_d3_title_4),
+            id(lbl_agenda_future_d3_title_5), id(lbl_agenda_future_d3_title_6),
+            id(lbl_agenda_future_d3_title_7), id(lbl_agenda_future_d3_title_8)
+          };
+
+          update_future_day(
+            id(agenda_d1_title).state, id(agenda_d1_date).state, id(agenda_d1_count).state,
+            future_d1_events, id(lbl_agenda_future_d1_date), id(lbl_agenda_future_d1_day),
+            id(lbl_agenda_future_d1_count), future_d1_slots, future_d1_accents,
+            future_d1_times, future_d1_titles, id(lbl_agenda_future_d1_empty));
+          update_future_day(
+            id(agenda_d2_title).state, id(agenda_d2_date).state, id(agenda_d2_count).state,
+            future_d2_events, id(lbl_agenda_future_d2_date), id(lbl_agenda_future_d2_day),
+            id(lbl_agenda_future_d2_count), future_d2_slots, future_d2_accents,
+            future_d2_times, future_d2_titles, id(lbl_agenda_future_d2_empty));
+          update_future_day(
+            id(agenda_d3_title).state, id(agenda_d3_date).state, id(agenda_d3_count).state,
+            future_d3_events, id(lbl_agenda_future_d3_date), id(lbl_agenda_future_d3_day),
+            id(lbl_agenda_future_d3_count), future_d3_slots, future_d3_accents,
+            future_d3_times, future_d3_titles, id(lbl_agenda_future_d3_empty));
+
+          // Agenda-thema: alleen het agenda-canvas wisselt; de omliggende interface blijft zwart.
+          bool light = id(agenda_light_theme);
+          lv_color_t surface = lv_color_hex(light ? 0xF5F5F7 : 0x08080A);
+          lv_color_t card = lv_color_hex(light ? 0xFFFFFF : 0x131418);
+          lv_color_t primary = lv_color_hex(light ? 0x1C1C1E : 0xFFFFFF);
+          lv_color_t secondary = lv_color_hex(light ? 0x6E6E73 : 0x6B6E76);
+          lv_color_t divider = lv_color_hex(light ? 0xD7D7DC : 0x2A2B30);
+          lv_color_t red = lv_color_hex(0xFF3B30);
+
+          lv_obj_set_style_bg_color(id(agenda_focus_sidebar), surface, LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(agenda_panel_divider), divider, LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(agenda_future_divider_1), divider, LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(agenda_future_divider_2), divider, LV_PART_MAIN);
+          lv_obj_set_style_bg_opa(id(agenda_panel_divider), light ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
+          lv_obj_set_style_bg_opa(id(agenda_future_divider_1), light ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
+          lv_obj_set_style_bg_opa(id(agenda_future_divider_2), light ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
+
+          lv_obj_set_style_text_color(id(lbl_agenda_heading), light ? red : primary, LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_today_heading), primary, LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_today_date), secondary, LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_now), secondary, LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_today_empty), secondary, LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_today_more), secondary, LV_PART_MAIN);
+
+          lv_obj_set_style_bg_color(id(agenda_theme_button), light ? lv_color_hex(0xFFFFFF) : lv_color_hex(0x17181C), LV_PART_MAIN);
+          lv_obj_set_style_border_color(id(agenda_theme_button), light ? divider : lv_color_hex(0x3A3B40), LV_PART_MAIN);
+          lv_obj_set_style_text_color(id(lbl_agenda_theme_button), red, LV_PART_MAIN);
+          lv_label_set_text(id(lbl_agenda_theme_button), light ? "DONKER" : "LICHT");
+
+          for (int i = 0; i < 5; i++) {
+            lv_obj_set_style_bg_color(today_cards[i], card, LV_PART_MAIN);
+            lv_obj_set_style_border_color(today_cards[i], divider, LV_PART_MAIN);
+            lv_obj_set_style_border_opa(today_cards[i], light ? LV_OPA_COVER : LV_OPA_50, LV_PART_MAIN);
+            lv_obj_set_style_text_color(today_time_labels[i], secondary, LV_PART_MAIN);
+            lv_obj_set_style_text_color(today_title_labels[i], primary, LV_PART_MAIN);
+          }
+
+          lv_obj_t *future_date_badges[3] = {
+            id(agenda_future_d1_date_badge), id(agenda_future_d2_date_badge),
+            id(agenda_future_d3_date_badge)
+          };
+          lv_obj_t *future_scrolls[3] = {
+            id(agenda_future_d1_scroll), id(agenda_future_d2_scroll), id(agenda_future_d3_scroll)
+          };
+          lv_obj_t *future_date_labels[3] = {
+            id(lbl_agenda_future_d1_date), id(lbl_agenda_future_d2_date),
+            id(lbl_agenda_future_d3_date)
+          };
+          lv_obj_t *future_day_labels[3] = {
+            id(lbl_agenda_future_d1_day), id(lbl_agenda_future_d2_day),
+            id(lbl_agenda_future_d3_day)
+          };
+          lv_obj_t *future_count_labels[3] = {
+            id(lbl_agenda_future_d1_count), id(lbl_agenda_future_d2_count),
+            id(lbl_agenda_future_d3_count)
+          };
+          lv_obj_t *future_empty_labels[3] = {
+            id(lbl_agenda_future_d1_empty), id(lbl_agenda_future_d2_empty),
+            id(lbl_agenda_future_d3_empty)
+          };
+          lv_obj_t **future_time_groups[3] = {
+            future_d1_times, future_d2_times, future_d3_times
+          };
+          lv_obj_t **future_title_groups[3] = {
+            future_d1_titles, future_d2_titles, future_d3_titles
+          };
+          for (int day = 0; day < 3; day++) {
+            lv_obj_set_style_bg_color(future_date_badges[day], light ? lv_color_hex(0xFFFFFF) : lv_color_hex(0xFFFFFF), LV_PART_MAIN);
+            lv_obj_set_style_bg_opa(future_date_badges[day], light ? LV_OPA_COVER : LV_OPA_10, LV_PART_MAIN);
+            lv_obj_set_style_border_color(future_date_badges[day], divider, LV_PART_MAIN);
+            lv_obj_set_style_text_color(future_date_labels[day], light ? red : lv_color_hex(0xBFC2C8), LV_PART_MAIN);
+            lv_obj_set_style_text_color(future_day_labels[day], light ? lv_color_hex(0x55555C) : lv_color_hex(0x7D8088), LV_PART_MAIN);
+            lv_obj_set_style_text_color(future_count_labels[day], secondary, LV_PART_MAIN);
+            lv_obj_set_style_text_color(future_empty_labels[day], secondary, LV_PART_MAIN);
+            lv_obj_set_style_bg_color(future_scrolls[day], light ? red : lv_color_hex(0x5E6067), LV_PART_SCROLLBAR);
+            for (int i = 0; i < 8; i++) {
+              lv_obj_set_style_text_color(future_time_groups[day][i], secondary, LV_PART_MAIN);
+              lv_obj_set_style_text_color(future_title_groups[day][i], light ? lv_color_hex(0x2C2C2E) : lv_color_hex(0xCFD1D5), LV_PART_MAIN);
+            }
+          }
 
       # Status bar — vermogen chip
       - lvgl.label.update:
@@ -3387,19 +6924,19 @@ interval:
             if (isnan(v)) return 0;
             return (int)std::min(std::max(v / 20.0f * 100.0f, 0.0f), 100.0f);
       - lvgl.label.update:
-          id: lbl_vb_rechts
+          id: lbl_stroomprijs
           text: !lambda |-
-            float v = id(ha_verbruik).state;
-            if (isnan(v)) return std::string("-- kW");
-            char buf[12];
-            snprintf(buf, sizeof(buf), "%.3f kW", v);
+            float v = id(ha_stroomprijs).state;
+            if (isnan(v)) return std::string("--");
+            char buf[14];
+            snprintf(buf, sizeof(buf), "\xe2\x82\xac %.3f", v);
             return std::string(buf);
       - lvgl.bar.update:
-          id: bar_verbruik
+          id: bar_stroomprijs
           value: !lambda |-
-            float v = id(ha_verbruik).state;
+            float v = id(ha_stroomprijs).state;
             if (isnan(v)) return 0;
-            return (int)std::min(v / 6.0f * 100.0f, 100.0f);
+            return (int)std::min(std::max(v / 0.50f * 100.0f, 0.0f), 100.0f);
       - lvgl.label.update:
           id: lbl_prod_rechts
           text: !lambda |-
@@ -3638,8 +7175,23 @@ interval:
             return s;
           };
           std::string taken_at = clean_text(id(immich_camera_taken_at).state, "");
-          // Plaatsnaam voor de overlay (altijd de echte plaatsnaam, geen filename)
-          std::string place = clean_text(id(immich_place).state, "");
+          // Plaatsnaam: "Stad, Provincie, Land" → "Stad, Land" (provincie weggooien)
+          std::string place_raw = clean_text(id(immich_place).state, "");
+          std::string place = place_raw;
+          {
+            // Tel komma's; bij 2 komma's → verwijder het middelste deel
+            std::vector<size_t> commas;
+            for (size_t ci = 0; ci < place_raw.size(); ci++)
+              if (place_raw[ci] == ',') commas.push_back(ci);
+            if (commas.size() >= 2) {
+              // stad = voor eerste komma, land = na laatste komma
+              std::string stad = place_raw.substr(0, commas[0]);
+              std::string land = place_raw.substr(commas.back() + 1);
+              // trim leading space van land
+              while (!land.empty() && land[0] == ' ') land = land.substr(1);
+              place = stad + ", " + land;
+            }
+          }
           // Jaar extraheren uit immich_date of taken_at
           std::string year = "";
           std::string header_date = clean_text(id(immich_date).state, "");
@@ -3665,7 +7217,7 @@ interval:
           lv_label_set_text(id(lbl_immich_date), year.c_str());
           lv_label_set_text(id(lbl_immich_album), clean_text(id(immich_album_txt).state, "random assets").c_str());
           std::string immich_status = clean_text(id(immich_status_text).state, "");
-          bool show_immich_toast = id(immich_page_active) && !immich_status.empty() && immich_status != "Immich foto actief";
+          bool show_immich_toast = id(immich_page_active) && !immich_status.empty() && immich_status != "Immich foto actief" && immich_status != "Prullenbak bevestiging verlopen";
           lv_label_set_text(id(lbl_immich_status), show_immich_toast ? immich_status.c_str() : "");
           lv_obj_set_style_bg_opa(id(immich_toast), show_immich_toast ? LV_OPA_70 : LV_OPA_TRANSP, LV_PART_MAIN);
           // Klok altijd bijwerken
