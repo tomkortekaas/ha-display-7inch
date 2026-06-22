@@ -69,7 +69,9 @@ globals:
     initial_value: '0'
   - id: ah_total_steps
     type: int
-    initial_value: '1'
+    # artwork_image exposes geen responseheaders; de API cyclust veilig
+    # door het werkelijke aantal stappen.
+    initial_value: '100'
   - id: ah_recipe_page_active
     type: bool
     initial_value: 'false'
