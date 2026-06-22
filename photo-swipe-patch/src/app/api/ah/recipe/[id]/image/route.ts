@@ -8,7 +8,7 @@ import { join } from 'path'
 const AH_AUTH_URL = 'https://api.ah.nl/mobile-auth/v1/auth/token'
 const AH_API_URL = 'https://api.ah.nl'
 const AH_CLIENT_ID = process.env.AH_CLIENT_ID ?? 'appie-android'
-const AH_CLIENT_SECRET = process.env.AH_CLIENT_SECRET ?? 'vHue55rose6Mu9CH'
+const AH_CLIENT_SECRET = process.env.AH_CLIENT_SECRET!
 
 let cachedToken: { access_token: string; expires_at: number } | null = null
 
@@ -76,7 +76,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   const stepParam = request.nextUrl.searchParams.get('step') ?? '0'
-  const step = parseInt(stepParam, 10)
+  const step = Math.max(0, parseInt(stepParam, 10) || 0)
 
   try {
     const raw = await fetchRecipe(params.id)
