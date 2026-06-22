@@ -794,8 +794,13 @@ artwork_image:
     allow_insecure_local_urls: true
     update_interval: never
     on_download_finished:
-      - logger.log: "Recipe art geladen"
+      - lvgl.widget.show: img_recipe_detail
+      - lvgl.image.update:
+          id: img_recipe_detail
+          src: recipe_art
+      - lvgl.widget.hide: lbl_recipe_loading
     on_error:
+      - lvgl.widget.show: lbl_recipe_loading
       - logger.log: "Recipe art laad fout"
 
 # ---------------------------------------------------------------
@@ -6342,6 +6347,107 @@ lvgl:
                         text_color: 0x888888
                         text: ""
 
+    # ===========================================================
+    # PAGINA 10: RECEPT DETAIL
+    # ===========================================================
+    - id: page_recipe_detail
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - image:
+            id: img_recipe_detail
+            x: 0
+            y: 0
+            width: 1024
+            height: 600
+            src: recipe_art
+            hidden: true
+        - label:
+            id: lbl_recipe_loading
+            align: CENTER
+            text_font: font_roboto_16
+            text_color: 0x888888
+            text: "Recept laden..."
+        - button:
+            id: btn_recipe_prev
+            x: 100
+            y: 540
+            width: 120
+            height: 44
+            radius: 8
+            bg_color: 0x1A1A2E
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x333344
+            on_click:
+              then:
+                - lambda: >
+                    if (id(ah_current_step) > 0) {
+                      id(ah_current_step) -= 1;
+                    }
+                - lvgl.widget.hide: img_recipe_detail
+                - lvgl.widget.show: lbl_recipe_loading
+                - script.execute: recipe_load_current
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: font_roboto_16
+                  text_color: 0xA0A0A0
+                  text: "< vorige"
+        - button:
+            id: btn_recipe_next
+            x: 804
+            y: 540
+            width: 120
+            height: 44
+            radius: 8
+            bg_color: 0x1A1A2E
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x00D4FF55
+            on_click:
+              then:
+                - lambda: >
+                    if (id(ah_current_step) < id(ah_total_steps) - 1) {
+                      id(ah_current_step) += 1;
+                    }
+                - lvgl.widget.hide: img_recipe_detail
+                - lvgl.widget.show: lbl_recipe_loading
+                - script.execute: recipe_load_current
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: font_roboto_16
+                  text_color: 0x00D4FF
+                  text: "volgende >"
+        - button:
+            id: btn_recipe_back
+            x: 420
+            y: 540
+            width: 184
+            height: 44
+            radius: 8
+            bg_color: 0x111120
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x333344
+            on_click:
+              then:
+                - lvgl.page.show: page_recepten
+                - lvgl.obj.update:
+                    id: nav_strip_recepten
+                    bg_color: 0xFF9020
+                - lvgl.obj.update:
+                    id: nav_recepten
+                    bg_color: 0x202020
+            widgets:
+              - label:
+                  align: CENTER
+                  text_font: font_roboto_16
+                  text_color: 0x666677
+                  text: "terug naar lijst"
+
 script:
   - id: album_art_load
     mode: restart
@@ -6549,6 +6655,18 @@ script:
             - lvgl.label.update:
                 id: lbl_radar_frame
                 text: "radar offline"
+
+  - id: recipe_load_current
+    then:
+      - artwork_image.set_url:
+          id: recipe_art
+          url: !lambda |
+            std::string url = "http://192.168.1.237:3001/api/ah/recipe/";
+            url += id(ah_current_recipe_id);
+            url += "/image?step=";
+            url += std::to_string(id(ah_current_step));
+            return url;
+      - component.update: recipe_art
 
 # ---------------------------------------------------------------
 # Interval updates — NOOIT on_value gebruiken voor LVGL
