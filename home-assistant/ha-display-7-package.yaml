@@ -1,0 +1,1324 @@
+# Home Assistant package voor HA Display 7.
+# Zet dit bestand bijvoorbeeld op:
+#   /config/packages/ha-display-7.yaml
+#
+# En laad packages in /config/configuration.yaml met:
+#
+# homeassistant:
+#   packages: !include_dir_named packages
+
+# Buienradar-kaart voor het ESPHome weerscherm
+# ------------------------------------------------------------
+# Het display verwacht 9 lokale JPG frames:
+#   /config/www/ha-display-radar/radar_0.jpg  -> nu
+#   /config/www/ha-display-radar/radar_1.jpg  -> +15 min
+#   ...
+#   /config/www/ha-display-radar/radar_8.jpg  -> +120 min
+#
+# Deze zijn via Home Assistant bereikbaar als:
+#   /local/ha-display-radar/radar_0.jpg ... radar_8.jpg
+#
+# De Buienradar integratie is aanwezig. De entity registry bevat
+# camera.buienradar, maar die staat standaard disabled_by=integration.
+# Schakel deze camera in via Settings > Devices & services > Entities
+# als je een actuele Buienradar still als bron of fallback wilt gebruiken.
+# De bewegende 2-uurs radar gebruikt de lokale framebestanden hierboven.
+
+rest:
+  - resource: !secret photo_swipe_today_url
+    scan_interval: 300
+    sensor:
+      - name: "Immich review vandaag count"
+        unique_id: immich_review_vandaag_count
+        value_template: "{{ value_json.count | int(0) }}"
+        unit_of_measurement: "foto's"
+        icon: "mdi:image-check"
+  - resource: "http://192.168.1.237:3001/api/ah/favorites"
+    scan_interval: 21600
+    sensor:
+      - name: "ah_favorites_raw"
+        value_template: "{{ value_json.favorites | length }} recepten"
+        json_attributes:
+          - favorites
+
+template:
+  # Familie-agenda voor het 7" display.
+  # Voeg in Home Assistant eerst de Remote Calendar integratie toe met deze ICS:
+  # https://calendar.google.com/calendar/ical/rrb72ssis661svh204h0c9ovlk%40group.calendar.google.com/public/basic.ics
+  # Verwachte entity_id na hernoemen: calendar.thuisagenda
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/15"
+    action:
+      - action: calendar.get_events
+        target:
+          entity_id: calendar.thuisagenda
+        data:
+          start_date_time: "{{ today_at('00:00').strftime('%Y-%m-%d %H:%M:%S') }}"
+          duration:
+            hours: 168
+        response_variable: familie_agenda
+    sensor:
+      - name: "Familie agenda d0 title"
+        unique_id: familie_agenda_d0_title
+        state: "Vandaag"
+      - name: "Familie agenda d0 date"
+        unique_id: familie_agenda_d0_date
+        state: "{{ (now() + timedelta(days=0)).strftime('%d-%m') }}"
+      - name: "Familie agenda d0 count"
+        unique_id: familie_agenda_d0_count
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d0 event 1"
+        unique_id: familie_agenda_d0_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d0 event 2"
+        unique_id: familie_agenda_d0_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d0 event 3"
+        unique_id: familie_agenda_d0_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d0 event 4"
+        unique_id: familie_agenda_d0_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d0 event 5"
+        unique_id: familie_agenda_d0_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d0 event 6"
+        unique_id: familie_agenda_d0_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d0 event 7"
+        unique_id: familie_agenda_d0_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d0 event 8"
+        unique_id: familie_agenda_d0_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d0 more"
+        unique_id: familie_agenda_d0_more
+        state: >
+          {% set day = (now().date() + timedelta(days=0)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d1 title"
+        unique_id: familie_agenda_d1_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=1)).weekday())] }}"
+      - name: "Familie agenda d1 date"
+        unique_id: familie_agenda_d1_date
+        state: "{{ (now() + timedelta(days=1)).strftime('%d-%m') }}"
+      - name: "Familie agenda d1 count"
+        unique_id: familie_agenda_d1_count
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d1 event 1"
+        unique_id: familie_agenda_d1_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d1 event 2"
+        unique_id: familie_agenda_d1_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d1 event 3"
+        unique_id: familie_agenda_d1_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d1 event 4"
+        unique_id: familie_agenda_d1_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d1 event 5"
+        unique_id: familie_agenda_d1_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d1 event 6"
+        unique_id: familie_agenda_d1_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d1 event 7"
+        unique_id: familie_agenda_d1_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d1 event 8"
+        unique_id: familie_agenda_d1_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d1 more"
+        unique_id: familie_agenda_d1_more
+        state: >
+          {% set day = (now().date() + timedelta(days=1)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d2 title"
+        unique_id: familie_agenda_d2_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=2)).weekday())] }}"
+      - name: "Familie agenda d2 date"
+        unique_id: familie_agenda_d2_date
+        state: "{{ (now() + timedelta(days=2)).strftime('%d-%m') }}"
+      - name: "Familie agenda d2 count"
+        unique_id: familie_agenda_d2_count
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d2 event 1"
+        unique_id: familie_agenda_d2_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d2 event 2"
+        unique_id: familie_agenda_d2_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d2 event 3"
+        unique_id: familie_agenda_d2_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d2 event 4"
+        unique_id: familie_agenda_d2_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d2 event 5"
+        unique_id: familie_agenda_d2_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d2 event 6"
+        unique_id: familie_agenda_d2_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d2 event 7"
+        unique_id: familie_agenda_d2_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d2 event 8"
+        unique_id: familie_agenda_d2_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d2 more"
+        unique_id: familie_agenda_d2_more
+        state: >
+          {% set day = (now().date() + timedelta(days=2)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d3 title"
+        unique_id: familie_agenda_d3_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=3)).weekday())] }}"
+      - name: "Familie agenda d3 date"
+        unique_id: familie_agenda_d3_date
+        state: "{{ (now() + timedelta(days=3)).strftime('%d-%m') }}"
+      - name: "Familie agenda d3 count"
+        unique_id: familie_agenda_d3_count
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d3 event 1"
+        unique_id: familie_agenda_d3_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d3 event 2"
+        unique_id: familie_agenda_d3_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d3 event 3"
+        unique_id: familie_agenda_d3_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d3 event 4"
+        unique_id: familie_agenda_d3_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d3 event 5"
+        unique_id: familie_agenda_d3_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d3 event 6"
+        unique_id: familie_agenda_d3_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d3 event 7"
+        unique_id: familie_agenda_d3_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d3 event 8"
+        unique_id: familie_agenda_d3_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d3 more"
+        unique_id: familie_agenda_d3_more
+        state: >
+          {% set day = (now().date() + timedelta(days=3)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d4 title"
+        unique_id: familie_agenda_d4_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=4)).weekday())] }}"
+      - name: "Familie agenda d4 date"
+        unique_id: familie_agenda_d4_date
+        state: "{{ (now() + timedelta(days=4)).strftime('%d-%m') }}"
+      - name: "Familie agenda d4 count"
+        unique_id: familie_agenda_d4_count
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d4 event 1"
+        unique_id: familie_agenda_d4_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d4 event 2"
+        unique_id: familie_agenda_d4_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d4 event 3"
+        unique_id: familie_agenda_d4_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d4 event 4"
+        unique_id: familie_agenda_d4_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d4 event 5"
+        unique_id: familie_agenda_d4_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d4 event 6"
+        unique_id: familie_agenda_d4_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d4 event 7"
+        unique_id: familie_agenda_d4_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d4 event 8"
+        unique_id: familie_agenda_d4_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d4 more"
+        unique_id: familie_agenda_d4_more
+        state: >
+          {% set day = (now().date() + timedelta(days=4)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d5 title"
+        unique_id: familie_agenda_d5_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=5)).weekday())] }}"
+      - name: "Familie agenda d5 date"
+        unique_id: familie_agenda_d5_date
+        state: "{{ (now() + timedelta(days=5)).strftime('%d-%m') }}"
+      - name: "Familie agenda d5 count"
+        unique_id: familie_agenda_d5_count
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d5 event 1"
+        unique_id: familie_agenda_d5_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d5 event 2"
+        unique_id: familie_agenda_d5_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d5 event 3"
+        unique_id: familie_agenda_d5_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d5 event 4"
+        unique_id: familie_agenda_d5_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d5 event 5"
+        unique_id: familie_agenda_d5_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d5 event 6"
+        unique_id: familie_agenda_d5_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d5 event 7"
+        unique_id: familie_agenda_d5_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d5 event 8"
+        unique_id: familie_agenda_d5_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d5 more"
+        unique_id: familie_agenda_d5_more
+        state: >
+          {% set day = (now().date() + timedelta(days=5)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+      - name: "Familie agenda d6 title"
+        unique_id: familie_agenda_d6_title
+        state: "{{ ['ma','di','wo','do','vr','za','zo'][((now() + timedelta(days=6)).weekday())] }}"
+      - name: "Familie agenda d6 date"
+        unique_id: familie_agenda_d6_date
+        state: "{{ (now() + timedelta(days=6)).strftime('%d-%m') }}"
+      - name: "Familie agenda d6 count"
+        unique_id: familie_agenda_d6_count
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {% if ns.count == 0 %}geen afspraken{% elif ns.count == 1 %}1 afspraak{% else %}{{ ns.count }} afspraken{% endif %}
+      - name: "Familie agenda d6 event 1"
+        unique_id: familie_agenda_d6_event_1
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[0] if ns.rows|length > 0 else '' }}
+      - name: "Familie agenda d6 event 2"
+        unique_id: familie_agenda_d6_event_2
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[1] if ns.rows|length > 1 else '' }}
+      - name: "Familie agenda d6 event 3"
+        unique_id: familie_agenda_d6_event_3
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[2] if ns.rows|length > 2 else '' }}
+      - name: "Familie agenda d6 event 4"
+        unique_id: familie_agenda_d6_event_4
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[3] if ns.rows|length > 3 else '' }}
+      - name: "Familie agenda d6 event 5"
+        unique_id: familie_agenda_d6_event_5
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[4] if ns.rows|length > 4 else '' }}
+      - name: "Familie agenda d6 event 6"
+        unique_id: familie_agenda_d6_event_6
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[5] if ns.rows|length > 5 else '' }}
+      - name: "Familie agenda d6 event 7"
+        unique_id: familie_agenda_d6_event_7
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[6] if ns.rows|length > 6 else '' }}
+      - name: "Familie agenda d6 event 8"
+        unique_id: familie_agenda_d6_event_8
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(rows=[]) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}
+              {% set when = 'hele dag' if e.start|length == 10 else as_datetime(e.start).strftime('%H:%M') %}
+              {% set ns.rows = ns.rows + [when ~ ' ' ~ e.summary] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.rows[7] if ns.rows|length > 7 else '' }}
+      - name: "Familie agenda d6 more"
+        unique_id: familie_agenda_d6_more
+        state: >
+          {% set day = (now().date() + timedelta(days=6)).isoformat() %}
+          {% set events = familie_agenda.get('calendar.thuisagenda', {}).get('events', []) %}
+          {% set ns = namespace(count=0) %}
+          {% for e in events %}
+            {% if e.start[:10] == day %}{% set ns.count = ns.count + 1 %}{% endif %}
+          {% endfor %}
+          {{ '+' ~ (ns.count - 8) ~ ' meer' if ns.count > 8 else '' }}
+
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: daily
+        response_variable: fc
+    sensor:
+      - name: "Weerscherm d0 hi"
+        unique_id: weerscherm_d0_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].temperature }}"
+      - name: "Weerscherm d0 lo"
+        unique_id: weerscherm_d0_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].templow }}"
+      - name: "Weerscherm d0 cond"
+        unique_id: weerscherm_d0_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].condition }}"
+      - name: "Weerscherm d0 wind"
+        unique_id: weerscherm_d0_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].wind_speed }}"
+      - name: "Weerscherm d1 hi"
+        unique_id: weerscherm_d1_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].temperature }}"
+      - name: "Weerscherm d1 lo"
+        unique_id: weerscherm_d1_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].templow }}"
+      - name: "Weerscherm d1 cond"
+        unique_id: weerscherm_d1_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].condition }}"
+      - name: "Weerscherm d1 wind"
+        unique_id: weerscherm_d1_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].wind_speed }}"
+      - name: "Weerscherm d2 hi"
+        unique_id: weerscherm_d2_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].temperature }}"
+      - name: "Weerscherm d2 lo"
+        unique_id: weerscherm_d2_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].templow }}"
+      - name: "Weerscherm d2 cond"
+        unique_id: weerscherm_d2_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].condition }}"
+      - name: "Weerscherm d2 wind"
+        unique_id: weerscherm_d2_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].wind_speed }}"
+      - name: "Weerscherm d3 hi"
+        unique_id: weerscherm_d3_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].temperature }}"
+      - name: "Weerscherm d3 lo"
+        unique_id: weerscherm_d3_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].templow }}"
+      - name: "Weerscherm d3 cond"
+        unique_id: weerscherm_d3_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].condition }}"
+      - name: "Weerscherm d3 wind"
+        unique_id: weerscherm_d3_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].wind_speed }}"
+      - name: "Weerscherm d4 hi"
+        unique_id: weerscherm_d4_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].temperature }}"
+      - name: "Weerscherm d4 lo"
+        unique_id: weerscherm_d4_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].templow }}"
+      - name: "Weerscherm d4 cond"
+        unique_id: weerscherm_d4_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].condition }}"
+      - name: "Weerscherm d4 wind"
+        unique_id: weerscherm_d4_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].wind_speed }}"
+
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: hourly
+        response_variable: fc24
+    sensor:
+      - name: "Weerscherm regen 24u punten"
+        unique_id: weerscherm_regen_24u_punten
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set ns = namespace(pts=[]) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% if h.precipitation_probability is defined and h.precipitation_probability is not none %}
+              {% set pct = h.precipitation_probability | int(0) %}
+            {% else %}
+              {% set mm = h.precipitation | default(0) | float(0) %}
+              {% set pct = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% endif %}
+            {% set pct = [pct, cond_floor] | max %}
+            {% set ns.pts = ns.pts + [ [[pct, 0] | max, 100] | min ] %}
+          {% endfor %}
+          {{ (ns.pts + [0]*24)[:24] | join(',') }}
+
+      - name: "Weerscherm regen 24u caption"
+        unique_id: weerscherm_regen_24u_caption
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set mx = namespace(v=0) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% if h.precipitation_probability is defined and h.precipitation_probability is not none %}
+              {% set v = h.precipitation_probability | int(0) %}
+            {% else %}
+              {% set mm = h.precipitation | default(0) | float(0) %}
+              {% set v = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% endif %}
+            {% set v = [v, cond_floor] | max %}
+            {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+          {% endfor %}
+          {% if mx.v == 0 %}droog komende 24u
+          {% elif mx.v < 35 %}kleine buienkans
+          {% elif mx.v < 70 %}buien mogelijk
+          {% else %}natte uren verwacht{% endif %}
+
+  - sensor:
+      - name: "Weerscherm regen punten"
+        unique_id: weerscherm_regen_punten
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% if raw %}
+            {% set tokens = raw.split(' ') %}
+            {% set ns = namespace(pts=[]) %}
+            {% for i in range(0, 24, 2) %}
+              {% if i < tokens|length %}
+                {% set v = tokens[i].split('|')[0]|int(0) %}
+                {% set pct = [ (v / 2.55)|round(0)|int, 100] | min %}
+                {% set ns.pts = ns.pts + [pct] %}
+              {% endif %}
+            {% endfor %}
+            {{ (ns.pts + [0]*12)[:12] | join(',') }}
+          {% else %}0,0,0,0,0,0,0,0,0,0,0,0{% endif %}
+
+      - name: "Weerscherm regen caption"
+        unique_id: weerscherm_regen_caption
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% set mx = namespace(v=0) %}
+          {% if raw %}
+            {% for t in raw.split(' ') %}
+              {% set v = t.split('|')[0]|int(0) %}
+              {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if mx.v == 0 %}droog komende 2u
+          {% elif mx.v < 77 %}lichte regen mogelijk
+          {% elif mx.v < 154 %}matige regen verwacht
+          {% else %}zware regen verwacht{% endif %}
+
+      - name: "Weerscherm zon op"
+        unique_id: weerscherm_zon_op
+        state: "{{ as_timestamp(states('sensor.sun_next_rising')) | timestamp_custom('%H:%M', true) }}"
+      - name: "Weerscherm zon onder"
+        unique_id: weerscherm_zon_onder
+        state: "{{ as_timestamp(states('sensor.sun_next_setting')) | timestamp_custom('%H:%M', true) }}"
+      - name: "Weerscherm daglicht pct"
+        unique_id: weerscherm_daglicht_pct
+        unit_of_measurement: "%"
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set n = as_timestamp(now()) %}
+          {% if is_state('sun.sun','above_horizon') %}
+            {% set rise_today = r - 86400 %}
+            {% set pct = ((n - rise_today) / (s - rise_today) * 100) | round(0) | int %}
+            {{ [[pct, 0] | max, 100] | min }}
+          {% elif n < s %}0{% else %}100{% endif %}
+      - name: "Weerscherm daglicht caption"
+        unique_id: weerscherm_daglicht_caption
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set rise_today = r - 86400 %}
+          {% set dur = (s - rise_today) if s > rise_today else (s - r + 86400) %}
+          {% set h = (dur // 3600) | int %}
+          {% set m = ((dur % 3600) // 60) | int %}
+          {{ h }}u {{ '%02d' % m }}m daglicht
+
+  # AH Recepten — per-slot template sensoren (8 recepten × title + id + meta)
+  - sensor:
+      - name: "ah_recept_1_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[0].id | default('') }}"
+      - name: "ah_recept_1_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[0].title | default('') }}"
+      - name: "ah_recept_1_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[0].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[0].servings | default(0) }} p"
+      - name: "ah_recept_2_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[1].id | default('') }}"
+      - name: "ah_recept_2_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[1].title | default('') }}"
+      - name: "ah_recept_2_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[1].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[1].servings | default(0) }} p"
+      - name: "ah_recept_3_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[2].id | default('') }}"
+      - name: "ah_recept_3_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[2].title | default('') }}"
+      - name: "ah_recept_3_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[2].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[2].servings | default(0) }} p"
+      - name: "ah_recept_4_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[3].id | default('') }}"
+      - name: "ah_recept_4_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[3].title | default('') }}"
+      - name: "ah_recept_4_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[3].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[3].servings | default(0) }} p"
+      - name: "ah_recept_5_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[4].id | default('') }}"
+      - name: "ah_recept_5_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[4].title | default('') }}"
+      - name: "ah_recept_5_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[4].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[4].servings | default(0) }} p"
+      - name: "ah_recept_6_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[5].id | default('') }}"
+      - name: "ah_recept_6_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[5].title | default('') }}"
+      - name: "ah_recept_6_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[5].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[5].servings | default(0) }} p"
+      - name: "ah_recept_7_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[6].id | default('') }}"
+      - name: "ah_recept_7_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[6].title | default('') }}"
+      - name: "ah_recept_7_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[6].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[6].servings | default(0) }} p"
+      - name: "ah_recept_8_id"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[7].id | default('') }}"
+      - name: "ah_recept_8_title"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[7].title | default('') }}"
+      - name: "ah_recept_8_meta"
+        state: "{{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[7].duration | default(0) }} min · {{ (state_attr('sensor.ah_favorites_raw', 'favorites') or [])[7].servings | default(0) }} p"
+
+shell_command:
+  immich_rotate_7inch: "python3 /config/www/idotmatrix/immich_rotate_7inch.py"
+  immich_photo_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py next"
+  immich_photo_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py prev"
+  immich_photo_zoom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py zoom"
+  immich_photo_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py trash"
+  immich_photo_confirm_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py confirm-trash"
+  immich_photo_keep: "python3 /config/www/idotmatrix/immich_rotate_7inch.py keep"
+  immich_photo_skip: "python3 /config/www/idotmatrix/immich_rotate_7inch.py skip"
+  immich_photo_undo: "python3 /config/www/idotmatrix/immich_rotate_7inch.py undo"
+  immich_photo_rotate: "python3 /config/www/idotmatrix/immich_rotate_7inch.py rotate"
+  immich_review_today: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-today"
+  immich_review_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-next"
+  immich_review_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-prev"
+  immich_review_keep: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-keep"
+  immich_review_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-trash"
+  immich_review_tom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-tom"
+  immich_review_chanel: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-chanel"
+  immich_review_rotate: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-rotate"
+  immich_review_count: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-count"
+
+input_boolean:
+  ha_display_deurbel_actief:
+    name: "HA Display 7 deurbel actief"
+    icon: mdi:doorbell-video
+    initial: false
+
+automation:
+  # Reolink Voordeur entities uit Home Assistant:
+  # - trigger: binary_sensor.voordeur_bezoeker
+  # - snapshotbron: camera.voordeur_vloeiend
+  - alias: "HA Display 7 - Deurbel tonen"
+    id: ha_display_7_deurbel_tonen
+    mode: restart
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.voordeur_bezoeker
+        to: "on"
+    action:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+      - repeat:
+          count: 50
+          sequence:
+            - condition: state
+              entity_id: input_boolean.ha_display_deurbel_actief
+              state: "on"
+            - action: camera.snapshot
+              target:
+                entity_id: camera.voordeur_vloeiend
+              data:
+                filename: /config/www/ha-display-doorbell.jpg
+            - delay: "00:00:01"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+
+  - alias: "HA Display 7 - Review badge count"
+    id: ha_display_7_review_badge
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/5"
+    action:
+      - action: shell_command.immich_review_count
+
+  - alias: "HA Display 7 - Immich foto roteren"
+    id: ha_display_7_immich_foto_roteren
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+    action:
+      - action: shell_command.immich_rotate_7inch

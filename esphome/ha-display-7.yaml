@@ -713,6 +713,168 @@ text_sensor:
     attribute: favorites_json
     internal: true
 
+  # AH Recepten — per-slot sensoren (8 recepten × title + id + meta)
+  - platform: homeassistant
+    id: ha_recept_1_title
+    entity_id: sensor.ah_recept_1_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_1_title
+          text: !lambda 'return id(ha_recept_1_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_1_id
+    entity_id: sensor.ah_recept_1_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_1_meta
+    entity_id: sensor.ah_recept_1_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_1_meta
+          text: !lambda 'return id(ha_recept_1_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_2_title
+    entity_id: sensor.ah_recept_2_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_2_title
+          text: !lambda 'return id(ha_recept_2_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_2_id
+    entity_id: sensor.ah_recept_2_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_2_meta
+    entity_id: sensor.ah_recept_2_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_2_meta
+          text: !lambda 'return id(ha_recept_2_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_3_title
+    entity_id: sensor.ah_recept_3_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_3_title
+          text: !lambda 'return id(ha_recept_3_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_3_id
+    entity_id: sensor.ah_recept_3_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_3_meta
+    entity_id: sensor.ah_recept_3_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_3_meta
+          text: !lambda 'return id(ha_recept_3_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_4_title
+    entity_id: sensor.ah_recept_4_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_4_title
+          text: !lambda 'return id(ha_recept_4_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_4_id
+    entity_id: sensor.ah_recept_4_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_4_meta
+    entity_id: sensor.ah_recept_4_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_4_meta
+          text: !lambda 'return id(ha_recept_4_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_5_title
+    entity_id: sensor.ah_recept_5_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_5_title
+          text: !lambda 'return id(ha_recept_5_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_5_id
+    entity_id: sensor.ah_recept_5_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_5_meta
+    entity_id: sensor.ah_recept_5_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_5_meta
+          text: !lambda 'return id(ha_recept_5_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_6_title
+    entity_id: sensor.ah_recept_6_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_6_title
+          text: !lambda 'return id(ha_recept_6_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_6_id
+    entity_id: sensor.ah_recept_6_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_6_meta
+    entity_id: sensor.ah_recept_6_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_6_meta
+          text: !lambda 'return id(ha_recept_6_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_7_title
+    entity_id: sensor.ah_recept_7_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_7_title
+          text: !lambda 'return id(ha_recept_7_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_7_id
+    entity_id: sensor.ah_recept_7_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_7_meta
+    entity_id: sensor.ah_recept_7_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_7_meta
+          text: !lambda 'return id(ha_recept_7_meta).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_8_title
+    entity_id: sensor.ah_recept_8_title
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_8_title
+          text: !lambda 'return id(ha_recept_8_title).state.c_str();'
+  - platform: homeassistant
+    id: ha_recept_8_id
+    entity_id: sensor.ah_recept_8_id
+    internal: true
+  - platform: homeassistant
+    id: ha_recept_8_meta
+    entity_id: sensor.ah_recept_8_meta
+    internal: true
+    on_value:
+      - lvgl.label.update:
+          id: lbl_recept_8_meta
+          text: !lambda 'return id(ha_recept_8_meta).state.c_str();'
+
 artwork_image:
   - id: album_art
     url: "http://homeassistant.local:8123/api/media_player_proxy/${spotify_entity}"
