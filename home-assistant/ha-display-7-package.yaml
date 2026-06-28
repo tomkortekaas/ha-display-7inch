@@ -33,7 +33,7 @@ rest:
         value_template: "{{ value_json.count | int(0) }}"
         unit_of_measurement: "foto's"
         icon: "mdi:image-check"
-  - resource: "http://192.168.1.237:3001/api/ah/recipes?list=cart"
+  - resource: "http://192.168.1.237:3002/api/ah/recipes?list=cart"
     scan_interval: 21600
     sensor:
       - name: "ah_cart_raw"
@@ -43,7 +43,7 @@ rest:
           - list
           - source
           - error
-  - resource: "http://192.168.1.237:3001/api/ah/favorites"
+  - resource: "http://192.168.1.237:3002/api/ah/favorites"
     scan_interval: 21600
     sensor:
       - name: "ah_favorites_raw"

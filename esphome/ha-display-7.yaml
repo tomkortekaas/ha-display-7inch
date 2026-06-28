@@ -2072,7 +2072,7 @@ artwork_image:
     on_error:
       - logger.log: "Recipe thumbnail 24 laad fout"
   - id: recipe_header_art
-    url: "http://192.168.1.237:3001/api/ah/recipe/placeholder/image?mode=header"
+    url: "http://192.168.1.237:3002/api/ah/recipe/placeholder/image?mode=header"
     format: AUTO
     type: RGB565
     byte_order: LITTLE_ENDIAN
@@ -2089,7 +2089,7 @@ artwork_image:
       - lvgl.widget.show: lbl_recipe_loading
       - logger.log: "Recipe header laad fout"
   - id: recipe_ingredients_art
-    url: "http://192.168.1.237:3001/api/ah/recipe/placeholder/image?mode=ingredients"
+    url: "http://192.168.1.237:3002/api/ah/recipe/placeholder/image?mode=ingredients"
     format: AUTO
     type: RGB565
     byte_order: LITTLE_ENDIAN
@@ -2106,7 +2106,7 @@ artwork_image:
       - lvgl.widget.show: lbl_recipe_loading
       - logger.log: "Recipe ingredients laad fout"
   - id: recipe_steps_art
-    url: "http://192.168.1.237:3001/api/ah/recipe/placeholder/image?mode=steps"
+    url: "http://192.168.1.237:3002/api/ah/recipe/placeholder/image?mode=steps"
     format: AUTO
     type: RGB565
     byte_order: LITTLE_ENDIAN
@@ -9465,21 +9465,21 @@ script:
       - artwork_image.set_url:
           id: recipe_header_art
           url: !lambda |
-            std::string url = "http://192.168.1.237:3001/api/ah/recipe/";
+            std::string url = "http://192.168.1.237:3002/api/ah/recipe/";
             url += id(ah_current_recipe_id);
             url += "/image?mode=header";
             return url;
       - artwork_image.set_url:
           id: recipe_ingredients_art
           url: !lambda |
-            std::string url = "http://192.168.1.237:3001/api/ah/recipe/";
+            std::string url = "http://192.168.1.237:3002/api/ah/recipe/";
             url += id(ah_current_recipe_id);
             url += "/image?mode=ingredients";
             return url;
       - artwork_image.set_url:
           id: recipe_steps_art
           url: !lambda |
-            std::string url = "http://192.168.1.237:3001/api/ah/recipe/";
+            std::string url = "http://192.168.1.237:3002/api/ah/recipe/";
             url += id(ah_current_recipe_id);
             url += "/image?mode=steps";
             return url;
