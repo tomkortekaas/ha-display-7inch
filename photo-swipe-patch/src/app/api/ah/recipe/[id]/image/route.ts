@@ -1,229 +1,448 @@
-// photo-swipe-patch/src/app/api/ah/recipe/[id]/image/route.ts
+import { readFile } from 'node:fs/promises'
+import { join } from 'node:path'
+
+import { Resvg } from '@resvg/resvg-js'
 import { NextRequest, NextResponse } from 'next/server'
 import satori from 'satori'
-import { Resvg } from '@resvg-js/resvg-js'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 
-const AH_AUTH_URL = 'https://api.ah.nl/mobile-auth/v1/auth/token'
-const AH_API_URL = 'https://api.ah.nl'
-const AH_CLIENT_ID = process.env.AH_CLIENT_ID ?? 'appie-android'
-const AH_CLIENT_SECRET = process.env.AH_CLIENT_SECRET!
+import { AhClient, fetchRecipeDetail, wrapRecipeStep } from '@/lib/ah'
+import { cacheRecipeDetail, getCachedRecipeDetail } from '@/lib/ah-cache'
 
-let cachedToken: { access_token: string; expires_at: number } | null = null
+export const dynamic = 'force-dynamic'
 
-async function getToken(): Promise<string> {
-  if (cachedToken && Date.now() < cachedToken.expires_at) return cachedToken.access_token
-  const res = await fetch(AH_AUTH_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'password',
-      username: process.env.AH_USERNAME!,
-      password: process.env.AH_PASSWORD!,
-      client_id: AH_CLIENT_ID,
-      client_secret: AH_CLIENT_SECRET,
-    }),
-  })
-  if (!res.ok) throw new Error(`AH login mislukt (${res.status})`)
-  const data = await res.json()
-  cachedToken = { access_token: data.access_token, expires_at: Date.now() + (data.expires_in - 60) * 1000 }
-  return cachedToken.access_token
-}
+const client = new AhClient({
+  initialRefreshToken: process.env.AH_REFRESH_TOKEN ?? '',
+  tokenFile:
+    process.env.AH_TOKEN_PATH ??
+    join(process.env.DATA_DIR ?? '/tmp', 'ah-token.json'),
+})
 
-async function fetchRecipe(id: string) {
-  const token = await getToken()
-  const res = await fetch(`${AH_API_URL}/mobile-services/v1/recipes/${id}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
-  if (!res.ok) throw new Error(`Recept niet gevonden (${res.status})`)
-  return res.json()
-}
+let fontPromise: Promise<Buffer> | undefined
 
-function normalizeRecipe(raw: any) {
-  const ingredients: string[] = (raw.ingredients ?? []).map(
-    (i: any) => `${i.quantity ?? ''} ${i.unit ?? ''} ${i.name ?? i.description ?? ''}`.trim().replace(/\s+/g, ' ')
-  )
-  const steps: string[] = (raw.preparationSteps ?? raw.steps ?? raw.instructions ?? []).map(
-    (s: any) => (typeof s === 'string' ? s : s.description ?? s.text ?? s.step ?? '')
-  ).filter(Boolean)
-  return {
-    title: raw.title ?? raw.name ?? 'Recept',
-    duration: raw.cookTime ?? raw.totalTime ?? 0,
-    servings: raw.servings ?? raw.portions ?? 4,
-    ingredients,
-    steps,
-  }
-}
-
-// Module-level font cache — works in single-instance server; cold on every serverless cold start
-let fontData: Buffer | null = null
-function getFont(): Buffer {
-  if (fontData) return fontData
-  const candidates = [
+function getFont() {
+  fontPromise ??= readFile(
     join(process.cwd(), 'public', 'fonts', 'Roboto-Regular.ttf'),
-    '/usr/share/fonts/truetype/roboto/Roboto-Regular.ttf',
-    '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',
-  ]
-  for (const p of candidates) {
-    try { fontData = readFileSync(p); return fontData } catch {}
-  }
-  throw new Error('Geen font gevonden. Kopieer Roboto-Regular.ttf naar public/fonts/')
+  )
+  return fontPromise
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { id: string } }
+function escapeXml(message: string) {
+  return message
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+function errorPng(message: string, width = 1024, height = 600) {
+  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+    <rect width="${width}" height="${height}" fill="#0D0D1A"/>
+    <text x="${width / 2}" y="${height / 2 - 16}" font-family="sans-serif" font-size="22" fill="#FF6680" text-anchor="middle">Recept laden mislukt</text>
+    <text x="${width / 2}" y="${height / 2 + 24}" font-family="sans-serif" font-size="15" fill="#A0A0A0" text-anchor="middle">${escapeXml(message)}</text>
+  </svg>`
+  return new Resvg(svg).render().asPng()
+}
+
+function textBlock(
+  children: unknown,
+  style: Record<string, unknown> = {},
 ) {
-  const stepParam = request.nextUrl.searchParams.get('step') ?? '0'
-  const step = Math.max(0, parseInt(stepParam, 10) || 0)
+  return {
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        ...style,
+      },
+      children,
+    },
+  }
+}
 
-  try {
-    const raw = await fetchRecipe(params.id)
-    const recipe = normalizeRecipe(raw)
-    const totalSteps = recipe.steps.length
-    const currentStep = Math.max(0, Math.min(step, totalSteps - 1))
-    const stepText = recipe.steps[currentStep] ?? 'Geen stappen gevonden.'
-
-    const WIDTH = 1024
-    const HEIGHT = 600
-    const ACCENT = '#00D4FF'
-    const BG = '#0D0D1A'
-    const BG2 = '#1A1A2E'
-    const TEXT = '#E0E0E0'
-    const MUTED = '#888888'
-    const DIVIDER = '#222233'
-
-    const element = {
-      type: 'div',
-      props: {
-        style: {
-          width: WIDTH, height: HEIGHT,
-          background: BG, display: 'flex', flexDirection: 'column',
-          fontFamily: 'Roboto', color: TEXT,
-        },
-        children: [
-          // Header
-          {
-            type: 'div',
-            props: {
-              style: {
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '14px 24px', borderBottom: `1px solid ${DIVIDER}`,
-                background: '#111120',
-              },
-              children: [
-                { type: 'span', props: { style: { fontSize: 22, fontWeight: 700, color: ACCENT }, children: recipe.title } },
-                { type: 'span', props: { style: { fontSize: 14, color: MUTED }, children: `⏱ ${recipe.duration} min · 👥 ${recipe.servings} pers` } },
-              ],
-            },
+function recipeHeader(recipe: Awaited<ReturnType<typeof fetchRecipeDetail>>) {
+  return textBlock(
+    [
+      {
+        type: 'div',
+        props: {
+          style: {
+            width: 820,
+            fontSize: 31,
+            fontWeight: 700,
+            color: '#FF9020',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           },
-          // Body: split kolommen
-          {
-            type: 'div',
-            props: {
-              style: { display: 'flex', flex: 1 },
-              children: [
-                // Ingrediënten (links, ~1/3)
+          children: recipe.title,
+        },
+      },
+      {
+        type: 'div',
+        props: {
+          style: { marginTop: 8, fontSize: 17, color: '#A0A0AA' },
+          children: `${recipe.duration} min  ·  ${recipe.servings} personen`,
+        },
+      },
+    ],
+    {
+      width: 1024,
+      height: 116,
+      padding: '24px 36px',
+      background: '#111120',
+      borderBottom: '1px solid #29293D',
+      color: '#E8E8EC',
+      fontFamily: 'Roboto',
+    },
+  )
+}
+
+function ingredientsPanel(recipe: Awaited<ReturnType<typeof fetchRecipeDetail>>) {
+  return textBlock(
+    [
+      {
+        type: 'div',
+        props: {
+          style: {
+            marginBottom: 18,
+            fontSize: 13,
+            letterSpacing: 2,
+            color: '#9292A0',
+          },
+          children: 'INGREDIENTEN',
+        },
+      },
+      ...recipe.ingredients.map((ingredient) => ({
+        type: 'div',
+        props: {
+          style: {
+            display: 'flex',
+            flexDirection: 'row',
+            marginBottom: 12,
+            fontSize: 17,
+            lineHeight: 1.38,
+            color: '#F1F1F4',
+          },
+          children: [
+            {
+              type: 'span',
+              props: {
+                style: { marginRight: 10, color: '#FF9020' },
+                children: '-',
+              },
+            },
+            { type: 'span', props: { children: ingredient } },
+          ],
+        },
+      })),
+    ],
+    {
+      width: 360,
+      height: 1600,
+      padding: '24px 24px',
+      background: '#0D0D1A',
+      color: '#E8E8EC',
+      fontFamily: 'Roboto',
+    },
+  )
+}
+
+function stepsPanel(recipe: Awaited<ReturnType<typeof fetchRecipeDetail>>) {
+  return textBlock(
+    [
+      {
+        type: 'div',
+        props: {
+          style: {
+            marginBottom: 18,
+            fontSize: 13,
+            letterSpacing: 2,
+            color: '#9292A0',
+          },
+          children: 'BEREIDING',
+        },
+      },
+      ...recipe.steps.map((text, index) => ({
+        type: 'div',
+        props: {
+          style: {
+            display: 'flex',
+            flexDirection: 'row',
+            alignItems: 'flex-start',
+            marginBottom: 20,
+            paddingBottom: 20,
+            borderBottom: '1px solid #29293D',
+          },
+          children: [
+            {
+              type: 'div',
+              props: {
+                style: {
+                  width: 42,
+                  height: 42,
+                  borderRadius: 21,
+                  marginRight: 16,
+                  flexShrink: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: '#FF902022',
+                  color: '#FF9020',
+                  fontSize: 17,
+                  fontWeight: 700,
+                },
+                children: String(index + 1),
+              },
+            },
+            {
+              type: 'div',
+              props: {
+                style: {
+                  flex: 1,
+                  fontSize: 20,
+                  lineHeight: 1.48,
+                  color: '#F1F1F4',
+                },
+                children: text,
+              },
+            },
+          ],
+        },
+      })),
+    ],
+    {
+      width: 664,
+      height: 2200,
+      padding: '24px 30px',
+      background: '#0D0D1A',
+      color: '#E8E8EC',
+      fontFamily: 'Roboto',
+    },
+  )
+}
+
+function allPanel(recipe: Awaited<ReturnType<typeof fetchRecipeDetail>>) {
+  return textBlock(
+    [
+      recipeHeader(recipe),
+      {
+        type: 'div',
+        props: {
+          style: {
+            display: 'flex',
+            flexDirection: 'row',
+            width: 1024,
+            height: 1684,
+          },
+          children: [ingredientsPanel(recipe), stepsPanel(recipe)],
+        },
+      },
+    ],
+    {
+      width: 1024,
+      height: 1800,
+      background: '#0D0D1A',
+      color: '#E8E8EC',
+      fontFamily: 'Roboto',
+    },
+  )
+}
+
+function stepPanel(
+  recipe: Awaited<ReturnType<typeof fetchRecipeDetail>>,
+  requestedStep: number,
+) {
+  const step = wrapRecipeStep(requestedStep, Math.max(1, recipe.steps.length))
+  const stepText = recipe.steps[step] ?? 'Geen bereidingsstappen gevonden.'
+
+  return textBlock(
+    [
+      recipeHeader(recipe),
+      {
+        type: 'div',
+        props: {
+          style: {
+            display: 'flex',
+            flexDirection: 'row',
+            width: 1024,
+            height: 408,
+          },
+          children: [
+            {
+              ...ingredientsPanel({
+                ...recipe,
+                ingredients: recipe.ingredients.slice(0, 12),
+              }),
+              props: {
+                ...ingredientsPanel({
+                  ...recipe,
+                  ingredients: recipe.ingredients.slice(0, 12),
+                }).props,
+                style: {
+                  ...ingredientsPanel(recipe).props.style,
+                  height: 408,
+                },
+              },
+            },
+            textBlock(
+              [
                 {
                   type: 'div',
                   props: {
                     style: {
-                      width: 320, padding: '16px 20px',
-                      borderRight: `1px solid ${DIVIDER}`,
-                      display: 'flex', flexDirection: 'column',
+                      marginBottom: 14,
+                      fontSize: 14,
+                      color: '#FF9020',
                     },
-                    children: [
-                      { type: 'span', props: { style: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 12 }, children: 'INGREDIENTEN' } },
-                      ...recipe.ingredients.slice(0, 14).map((ing: string) => ({
-                        type: 'div',
-                        props: {
-                          style: { display: 'flex', alignItems: 'flex-start', marginBottom: 7 },
-                          children: [
-                            { type: 'span', props: { style: { color: ACCENT, marginRight: 8, fontSize: 12 }, children: '•' } },
-                            { type: 'span', props: { style: { fontSize: 13, color: TEXT, lineHeight: 1.4 }, children: ing } },
-                          ],
-                        },
-                      })),
-                    ],
+                    children: `STAP ${step + 1} VAN ${Math.max(1, recipe.steps.length)}`,
                   },
                 },
-                // Bereiding (rechts, ~2/3)
                 {
                   type: 'div',
                   props: {
-                    style: { flex: 1, padding: '16px 24px', display: 'flex', flexDirection: 'column' },
-                    children: [
-                      { type: 'span', props: { style: { fontSize: 11, color: MUTED, letterSpacing: 2, marginBottom: 12 }, children: 'BEREIDING' } },
-                      {
-                        type: 'div',
-                        props: {
-                          style: {
-                            background: '#00D4FF12', borderLeft: `3px solid ${ACCENT}`,
-                            padding: '14px 18px', borderRadius: '0 6px 6px 0', flex: 1,
-                          },
-                          children: [
-                            { type: 'span', props: { style: { fontSize: 11, color: ACCENT, display: 'block', marginBottom: 10 }, children: `STAP ${currentStep + 1} / ${totalSteps}` } },
-                            { type: 'span', props: { style: { fontSize: 16, lineHeight: 1.6, color: TEXT }, children: stepText } },
-                          ],
-                        },
-                      },
-                      // Stap dots
-                      {
-                        type: 'div',
-                        props: {
-                          style: { display: 'flex', justifyContent: 'center', gap: 6, marginTop: 16 },
-                          children: recipe.steps.slice(0, 12).map((_: string, i: number) => ({
-                            type: 'div',
-                            props: {
-                              style: {
-                                width: 8, height: 8, borderRadius: 4,
-                                background: i === currentStep ? ACCENT : BG2,
-                              },
-                            },
-                          })),
-                        },
-                      },
-                    ],
+                    style: {
+                      fontSize: 22,
+                      lineHeight: 1.55,
+                      color: '#F1F1F4',
+                    },
+                    children: stepText,
                   },
                 },
               ],
-            },
-          },
-        ],
+              {
+                width: 664,
+                height: 408,
+                padding: '28px 32px',
+                background: '#171727',
+                borderLeft: '4px solid #FF9020',
+              },
+            ),
+          ],
+        },
       },
+      {
+        type: 'div',
+        props: {
+          style: {
+            width: 1024,
+            height: 76,
+            background: '#090912',
+            borderTop: '1px solid #202033',
+          },
+        },
+      },
+    ],
+    {
+      width: 1024,
+      height: 600,
+      background: '#0D0D1A',
+      color: '#E8E8EC',
+      fontFamily: 'Roboto',
+    },
+  )
+}
+
+async function renderPng(
+  element: unknown,
+  width: number,
+  height: number,
+  font: Buffer,
+) {
+  const svg = await satori(element as any, {
+    width,
+    height,
+    fonts: [
+      {
+        name: 'Roboto',
+        data: font,
+        weight: 400,
+        style: 'normal',
+      },
+    ],
+  })
+  return new Resvg(svg, {
+    fitTo: { mode: 'width', value: width },
+  })
+    .render()
+    .asPng()
+}
+
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string }> },
+) {
+  let width = 1024
+  let height = 600
+
+  try {
+    const { id } = await context.params
+    const recipeId = Number.parseInt(id, 10)
+    if (!Number.isFinite(recipeId)) {
+      throw new Error('Ongeldig receptnummer')
     }
 
-    const font = getFont()
-    const svg = await satori(element as any, {
-      width: WIDTH,
-      height: HEIGHT,
-      fonts: [{ name: 'Roboto', data: font, weight: 400, style: 'normal' }],
-    })
+    const mode = request.nextUrl.searchParams.get('mode') ?? 'step'
+    const refresh = request.nextUrl.searchParams.get('refresh') === '1'
+    const cachedRecipe = getCachedRecipeDetail(String(recipeId))
+    let recipe = refresh ? null : cachedRecipe
 
-    const resvg = new Resvg(svg, { fitTo: { mode: 'width', value: WIDTH } })
-    const png = resvg.render().asPng()
+    if (!recipe) {
+      try {
+        recipe = await fetchRecipeDetail(client, recipeId)
+        cacheRecipeDetail(recipe)
+      } catch (error) {
+        if (!cachedRecipe) throw error
+        recipe = cachedRecipe
+      }
+    }
 
-    return new NextResponse(png, {
+    const requestedStep = Number.parseInt(
+      request.nextUrl.searchParams.get('step') ?? '0',
+      10,
+    )
+    const font = await getFont()
+
+    let element: unknown
+    if (mode === 'header') {
+      width = 1024
+      height = 116
+      element = recipeHeader(recipe)
+    } else if (mode === 'ingredients') {
+      width = 360
+      height = 1600
+      element = ingredientsPanel(recipe)
+    } else if (mode === 'steps') {
+      width = 664
+      height = 2200
+      element = stepsPanel(recipe)
+    } else if (mode === 'all') {
+      width = 1024
+      height = 1800
+      element = allPanel(recipe)
+    } else {
+      width = 1024
+      height = 600
+      element = stepPanel(recipe, requestedStep)
+    }
+
+    const png = await renderPng(element, width, height, font)
+
+    return new NextResponse(new Uint8Array(png), {
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'no-store',
-        'X-Total-Steps': String(totalSteps),
+        'X-Total-Steps': String(recipe.steps.length),
       },
     })
-  } catch (e: any) {
-    console.error('[ah/recipe/image] Error:', e.message)
-    // Fout-PNG: effen donker scherm met foutmelding
-    const errorSvg = `<svg width="1024" height="600" xmlns="http://www.w3.org/2000/svg">
-      <rect width="1024" height="600" fill="#0D0D1A"/>
-      <text x="512" y="300" font-family="sans-serif" font-size="20" fill="#FF4466" text-anchor="middle">Recept laden mislukt</text>
-    </svg>`
-    try {
-      const resvg = new Resvg(errorSvg)
-      const png = resvg.render().asPng()
-      return new NextResponse(png, { headers: { 'Content-Type': 'image/png' } })
-    } catch {
-      return new NextResponse('error', { status: 500 })
-    }
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : 'Onbekende AH-fout'
+    console.error('[ah/recipe/image]', message)
+    return new NextResponse(new Uint8Array(errorPng(message, width, height)), {
+      headers: {
+        'Content-Type': 'image/png',
+        'Cache-Control': 'no-store',
+      },
+    })
   }
 }

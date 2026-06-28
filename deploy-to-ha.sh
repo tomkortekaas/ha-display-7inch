@@ -16,6 +16,9 @@ echo "→ HA bestanden naar ${HA_USER}@${HA_HOST} ..."
 scp "${REPO_DIR}/home-assistant/immich_rotate_7inch.py" \
     "${HA_USER}@${HA_HOST}:/config/www/idotmatrix/immich_rotate_7inch.py"
 
+scp "${REPO_DIR}/home-assistant/buienradar_radar_7inch.py" \
+    "${HA_USER}@${HA_HOST}:/config/www/idotmatrix/buienradar_radar_7inch.py"
+
 scp "${REPO_DIR}/home-assistant/ha-display-7-package.yaml" \
     "${HA_USER}@${HA_HOST}:/config/packages/ha_display_7.yaml"
 
