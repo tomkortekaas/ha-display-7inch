@@ -107,6 +107,17 @@ export function cacheRecipeDetail(recipe: AhRecipeDetail) {
   )
 }
 
+export function getRecipeIdsMissingDetail(ids: string[]): string[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  const rows = db
+    .prepare(
+      `SELECT id FROM ah_recipes WHERE id IN (${placeholders}) AND detail_json = ''`,
+    )
+    .all(...ids) as { id: string }[]
+  return rows.map((row) => row.id)
+}
+
 export function getCachedRecipeDetail(id: string) {
   const row = db
     .prepare('SELECT * FROM ah_recipes WHERE id = ?')

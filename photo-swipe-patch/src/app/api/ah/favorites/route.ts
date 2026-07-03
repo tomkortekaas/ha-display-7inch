@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import { AhClient, fetchFavoriteRecipes } from '@/lib/ah'
 import { cacheRecipeList, getCachedRecipeList } from '@/lib/ah-cache'
+import { warmRecipeDetails } from '@/lib/ah-warm'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
         console.error('[ah/favorites/background-refresh]', message)
       })
 
+    void warmRecipeDetails(
+      client,
+      cached.map((recipe) => recipe.id),
+    )
+
     return NextResponse.json(
       { favorites: cached, source: 'cache' },
       { headers: { 'Cache-Control': 'no-store' } },
@@ -36,6 +42,12 @@ export async function GET(request: NextRequest) {
   try {
     const favorites = await fetchFavoriteRecipes(client)
     cacheRecipeList('favorites', favorites)
+
+    void warmRecipeDetails(
+      client,
+      favorites.map((recipe) => recipe.id),
+    )
+
     return NextResponse.json(
       { favorites, source: 'live' },
       { headers: { 'Cache-Control': 'no-store' } },

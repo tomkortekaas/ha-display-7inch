@@ -35,26 +35,44 @@ ssh "${SWIPE_USER}@${SWIPE_HOST}" "mkdir -p \$(dirname ${SWIPE_ROUTE_PATH})"
 scp "${REPO_DIR}/photo-swipe-patch/src/app/api/display-session/today/route.ts" \
     "${SWIPE_USER}@${SWIPE_HOST}:${SWIPE_ROUTE_PATH}"
 
-# Herstart Next.js (pas aan aan jouw setup: pm2, systemd, docker, etc.)
-ssh "${SWIPE_USER}@${SWIPE_HOST}" \
-    "cd /opt/photo-swipe && npm run build 2>&1 | tail -5 && pm2 restart photo-swipe 2>/dev/null || true"
+echo "✓ Photo-swipe route gekopieerd"
 
-echo "✓ Photo-swipe route bijgewerkt"
-
-# ── AH Recepten routes ───────────────────────────────────────────────────────
-echo "→ AH recepten routes naar ${SWIPE_USER}@${SWIPE_HOST} ..."
+# ── AH Recepten routes + lib ─────────────────────────────────────────────────
+echo "→ AH recepten routes + lib naar ${SWIPE_USER}@${SWIPE_HOST} ..."
 
 ssh "${SWIPE_USER}@${SWIPE_HOST}" \
     "mkdir -p /opt/photo-swipe/src/app/api/ah/favorites \
-              /opt/photo-swipe/src/app/api/ah/recipe/\[id\]/image"
+              /opt/photo-swipe/src/app/api/ah/recipes \
+              /opt/photo-swipe/src/app/api/ah/recipe/\[id\]/image \
+              /opt/photo-swipe/src/lib"
 
 scp "${REPO_DIR}/photo-swipe-patch/src/app/api/ah/favorites/route.ts" \
     "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/app/api/ah/favorites/route.ts"
 
+scp "${REPO_DIR}/photo-swipe-patch/src/app/api/ah/recipes/route.ts" \
+    "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/app/api/ah/recipes/route.ts"
+
 scp "${REPO_DIR}/photo-swipe-patch/src/app/api/ah/recipe/[id]/image/route.ts" \
     "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/app/api/ah/recipe/[id]/image/route.ts"
 
-echo "✓ AH recepten routes gekopieerd"
+scp "${REPO_DIR}/photo-swipe-patch/src/lib/ah.ts" \
+    "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/lib/ah.ts"
+
+scp "${REPO_DIR}/photo-swipe-patch/src/lib/ah-cache.ts" \
+    "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/lib/ah-cache.ts"
+
+scp "${REPO_DIR}/photo-swipe-patch/src/lib/ah-warm.ts" \
+    "${SWIPE_USER}@${SWIPE_HOST}:/opt/photo-swipe/src/lib/ah-warm.ts"
+
+echo "✓ AH recepten routes + lib gekopieerd"
+
+# ── Photo-swipe herbouwen en herstarten (één keer, na alle bestanden) ───────
+echo "→ Photo-swipe herbouwen en herstarten ..."
+
+ssh "${SWIPE_USER}@${SWIPE_HOST}" \
+    "cd /opt/photo-swipe && npm run build 2>&1 | tail -5 && pm2 restart photo-swipe 2>/dev/null || true"
+
+echo "✓ Photo-swipe herbouwd en herstart"
 
 # ── HA herladen ──────────────────────────────────────────────────────────────
 echo ""

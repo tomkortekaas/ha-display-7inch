@@ -8,6 +8,21 @@ import satori from 'satori'
 import { AhClient, fetchRecipeDetail, wrapRecipeStep } from '@/lib/ah'
 import { cacheRecipeDetail, getCachedRecipeDetail } from '@/lib/ah-cache'
 
+function dimensionsForMode(mode: string): { width: number; height: number } {
+  switch (mode) {
+    case 'header':
+      return { width: 1024, height: 116 }
+    case 'ingredients':
+      return { width: 360, height: 1600 }
+    case 'steps':
+      return { width: 664, height: 2200 }
+    case 'all':
+      return { width: 1024, height: 1800 }
+    default:
+      return { width: 1024, height: 600 }
+  }
+}
+
 export const dynamic = 'force-dynamic'
 
 const client = new AhClient({
@@ -26,20 +41,38 @@ function getFont() {
   return fontPromise
 }
 
-function escapeXml(message: string) {
-  return message
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-}
-
-function errorPng(message: string, width = 1024, height = 600) {
-  const svg = `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-    <rect width="${width}" height="${height}" fill="#0D0D1A"/>
-    <text x="${width / 2}" y="${height / 2 - 16}" font-family="sans-serif" font-size="22" fill="#FF6680" text-anchor="middle">Recept laden mislukt</text>
-    <text x="${width / 2}" y="${height / 2 + 24}" font-family="sans-serif" font-size="15" fill="#A0A0A0" text-anchor="middle">${escapeXml(message)}</text>
-  </svg>`
-  return new Resvg(svg).render().asPng()
+function errorElement(message: string, width: number, height: number) {
+  return {
+    type: 'div',
+    props: {
+      style: {
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width,
+        height,
+        background: '#0D0D1A',
+        fontFamily: 'Roboto',
+      },
+      children: [
+        {
+          type: 'div',
+          props: {
+            style: { fontSize: 22, color: '#FF6680' },
+            children: 'Recept laden mislukt',
+          },
+        },
+        {
+          type: 'div',
+          props: {
+            style: { marginTop: 12, fontSize: 15, color: '#A0A0A0' },
+            children: message,
+          },
+        },
+      ],
+    },
+  }
 }
 
 function textBlock(
@@ -371,8 +404,8 @@ export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
 ) {
-  let width = 1024
-  let height = 600
+  const mode = request.nextUrl.searchParams.get('mode') ?? 'step'
+  const { width, height } = dimensionsForMode(mode)
 
   try {
     const { id } = await context.params
@@ -381,7 +414,6 @@ export async function GET(
       throw new Error('Ongeldig receptnummer')
     }
 
-    const mode = request.nextUrl.searchParams.get('mode') ?? 'step'
     const refresh = request.nextUrl.searchParams.get('refresh') === '1'
     const cachedRecipe = getCachedRecipeDetail(String(recipeId))
     let recipe = refresh ? null : cachedRecipe
@@ -404,24 +436,14 @@ export async function GET(
 
     let element: unknown
     if (mode === 'header') {
-      width = 1024
-      height = 116
       element = recipeHeader(recipe)
     } else if (mode === 'ingredients') {
-      width = 360
-      height = 1600
       element = ingredientsPanel(recipe)
     } else if (mode === 'steps') {
-      width = 664
-      height = 2200
       element = stepsPanel(recipe)
     } else if (mode === 'all') {
-      width = 1024
-      height = 1800
       element = allPanel(recipe)
     } else {
-      width = 1024
-      height = 600
       element = stepPanel(recipe, requestedStep)
     }
 
@@ -438,7 +460,14 @@ export async function GET(
     const message =
       error instanceof Error ? error.message : 'Onbekende AH-fout'
     console.error('[ah/recipe/image]', message)
-    return new NextResponse(new Uint8Array(errorPng(message, width, height)), {
+    const font = await getFont()
+    const png = await renderPng(
+      errorElement(message, width, height),
+      width,
+      height,
+      font,
+    )
+    return new NextResponse(new Uint8Array(png), {
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'no-store',

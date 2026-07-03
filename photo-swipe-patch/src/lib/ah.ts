@@ -307,7 +307,7 @@ export function wrapRecipeStep(step: number, length: number) {
   return ((Math.trunc(step) % length) + length) % length
 }
 
-type GraphQLClient = {
+export type GraphQLClient = {
   graphql: (
     query: string,
     variables?: Record<string, unknown>,
