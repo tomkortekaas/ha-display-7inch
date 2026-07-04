@@ -3604,14 +3604,14 @@ lvgl:
                         y: 12
                         text_font: font_roboto_12
                         text_color: 0xA0A0A0
-                        text: "OMV TEMP"
+                        text: "HYUNDAI"
                     - label:
-                        id: lbl_energy_inverter_temp
+                        id: lbl_energy_hyundai_battery
                         x: 16
                         y: 34
                         width: 108
                         text_font: font_roboto_20
-                        text_color: 0xFF3B30
+                        text_color: 0x2F9BFF
                         long_mode: DOT
                         text: "--"
               - obj:
@@ -3630,14 +3630,14 @@ lvgl:
                         y: 12
                         text_font: font_roboto_12
                         text_color: 0xA0A0A0
-                        text: "IONIQ 5"
+                        text: "OMV TEMP"
                     - label:
-                        id: lbl_energy_hyundai_battery
+                        id: lbl_energy_inverter_temp
                         x: 16
                         y: 34
                         width: 108
                         text_font: font_roboto_20
-                        text_color: 0x2F9BFF
+                        text_color: 0xFF3B30
                         long_mode: DOT
                         text: "--"
               # Onzichtbare tik-detector — net als Immich:
