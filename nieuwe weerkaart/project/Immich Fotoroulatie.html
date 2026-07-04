@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Immich Fotoroulatie — Ontwerpen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --immich: oklch(0.74 0.13 222);   /* zelfde koele cyaan als afzuigkap */
+    --amber: oklch(0.80 0.13 75);
+    --muted: oklch(0.62 0.012 250);
+    --bg: #08080a;
+    --surface: #131418;
+    --line: rgba(255,255,255,0.07);
+  }
+  body { margin: 0; }
+
+  .imm {
+    width: 480px; height: 480px;
+    background: var(--bg);
+    color: #fff;
+    font-family: "Montserrat", sans-serif;
+    position: relative;
+    overflow: hidden;
+    box-sizing: border-box;
+    user-select: none;
+  }
+  .imm-brand { font-size: 13px; font-weight: 700; letter-spacing: 3px; opacity: .9; }
+
+  /* ---- foto-stack + crossfade ---- */
+  .ph-stack { position: absolute; inset: 0; overflow: hidden; }
+  .ph-layer {
+    position: absolute; inset: 0;
+    background-size: cover; background-position: center;
+    opacity: 0; transform: scale(1.02);
+    transition: opacity 1s ease;
+  }
+  .ph-layer.on { opacity: 1; }
+  .ph-layer.kb.on { animation: kenburns 5s ease-out forwards; }
+  @keyframes kenburns { from { transform: scale(1.02); } to { transform: scale(1.12); } }
+  .ph-grain {
+    position: absolute; inset: 0; opacity: .15;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.06) 0 2px, transparent 2px 7px);
+  }
+  .ph-tag {
+    position: absolute; left: 10px; bottom: 8px;
+    font-family: "JetBrains Mono", monospace; font-size: 9.5px; letter-spacing: .5px;
+    color: rgba(255,255,255,.55); background: rgba(0,0,0,.32);
+    padding: 2px 7px; border-radius: 5px; backdrop-filter: blur(2px);
+  }
+
+  /* ---- voortgang ---- */
+  @keyframes fillbar { from { width: 0%; } to { width: 100%; } }
+  .seg-prog { display: flex; gap: 6px; margin-top: 16px; }
+  .seg-track { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.2); overflow: hidden; }
+  .seg-bar { display: block; height: 100%; width: 0%; border-radius: 2px; }
+  .dots { display: flex; gap: 7px; justify-content: center; align-items: center; }
+  .dots span { height: 7px; border-radius: 4px; transition: width .4s, background .4s; }
+
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.74 0.13 150); box-shadow: 0 0 8px oklch(0.74 0.13 150 / .8); display: inline-block; }
+
+  /* =================== A — FULL-BLEED =================== */
+  .fb-scrim-top { position: absolute; top: 0; left: 0; right: 0; height: 130px; background: linear-gradient(rgba(0,0,0,.55), transparent); }
+  .fb-scrim-bot { position: absolute; bottom: 0; left: 0; right: 0; height: 220px; background: linear-gradient(transparent, rgba(0,0,0,.78)); }
+  .fb-top { position: absolute; top: 26px; left: 28px; right: 28px; display: flex; justify-content: space-between; align-items: center; }
+  .imm-clock { font-size: 15px; font-weight: 600; letter-spacing: 1px; }
+  .fb-bot { position: absolute; bottom: 30px; left: 28px; right: 28px; }
+  .fb-place { font-size: 30px; font-weight: 800; letter-spacing: -.5px; text-shadow: 0 2px 16px rgba(0,0,0,.5); }
+  .fb-date { font-size: 14px; font-weight: 500; color: rgba(255,255,255,.78); margin-top: 4px; letter-spacing: .3px; }
+
+  /* =================== B — GALERIJ =================== */
+  .gal { display: flex; flex-direction: column; padding: 24px 26px 22px; }
+  .gal-top { display: flex; justify-content: space-between; align-items: center; }
+  .gal-status { display: flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .5px; }
+  .gal-card { position: relative; margin-top: 18px; height: 300px; border-radius: 22px; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.6); border: 1px solid var(--line); }
+  .gal-meta { margin-top: 18px; }
+  .gal-place { font-size: 24px; font-weight: 800; letter-spacing: -.5px; }
+  .gal-sub { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+  .gal-date { font-size: 14px; font-weight: 500; color: var(--muted); }
+  .gal-chip { font-size: 11.5px; font-weight: 600; letter-spacing: .5px; color: var(--immich); background: color-mix(in oklch, var(--immich) 16%, transparent); border: 1px solid color-mix(in oklch, var(--immich) 35%, transparent); padding: 4px 11px; border-radius: 999px; }
+  .gal .dots { margin-top: auto; }
+
+  /* =================== C — EDITORIAL =================== */
+  .ed { display: flex; flex-direction: column; }
+  .ed-photo { position: relative; height: 282px; }
+  .ed-photo-line { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
+  .ed-photo-line span { display: block; height: 100%; width: 0%; background: var(--immich); }
+  .ed-panel { flex: 1; display: flex; padding: 22px 26px; gap: 16px; }
+  .ed-left { flex: 1; display: flex; flex-direction: column; }
+  .ed-day { font-size: 46px; font-weight: 800; line-height: .9; letter-spacing: -2px; }
+  .ed-monthyear { font-size: 15px; font-weight: 600; color: var(--muted); margin-top: 4px; letter-spacing: .3px; }
+  .ed-place { font-size: 17px; font-weight: 700; margin-top: auto; }
+  .ed-album { font-size: 12.5px; font-weight: 600; letter-spacing: 1px; color: var(--immich); margin-top: 4px; }
+  .ed-right { width: 120px; display: flex; flex-direction: column; align-items: flex-end; }
+  .ed-next-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+  .ed-next-thumb { width: 110px; height: 74px; border-radius: 12px; background-size: cover; background-position: center; margin-top: 8px; border: 1px solid var(--line); }
+  .ed-count { margin-top: auto; font-size: 26px; font-weight: 800; letter-spacing: -1px; }
+  .ed-count span { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="photos.jsx"></script>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="immich" title="Immich Fotoroulatie — 480×480" subtitle="Zelfde stijl als afzuigkap · auto-rotatie met crossfade · foto's zijn placeholders">
+          <DCArtboard id="fullbleed" label="A · Full-bleed ambient" width={480} height={480}><ImmichFullbleed /></DCArtboard>
+          <DCArtboard id="gallery" label="B · Galerij-kaart" width={480} height={480}><ImmichGallery /></DCArtboard>
+          <DCArtboard id="editorial" label="C · Editorial infopaneel" width={480} height={480}><ImmichEditorial /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

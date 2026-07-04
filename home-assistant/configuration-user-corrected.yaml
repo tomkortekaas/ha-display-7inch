@@ -1,0 +1,737 @@
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+
+import_statistics:
+
+template:
+  - sensor:
+      - name: "Neerslag Gecorrigeerd"
+        unique_id: neerslag_gecorrigeerd
+        state_class: total_increasing
+        device_class: precipitation
+        unit_of_measurement: mm
+        state: |
+          {% set current = states('sensor.weerstation_precipitation') | float(-1) %}
+          {% set previous = states('sensor.neerslag_gecorrigeerd') | float(0) %}
+          {% if current < 0 %}
+            {{ previous }}
+          {% elif current < previous - 1 %}
+            {{ previous }}
+          {% else %}
+            {{ current }}
+          {% endif %}
+
+  - trigger:
+      - trigger: time_pattern
+        seconds: "/1"
+    sensor:
+      - name: "Spotify Huidige Positie"
+        unique_id: spotify_current_position
+        unit_of_measurement: 's'
+        state: >
+          {% set pos = state_attr('media_player.spotify_tomkortekaas', 'media_position') | float(0) %}
+          {% set updated = state_attr('media_player.spotify_tomkortekaas', 'media_position_updated_at') | as_datetime %}
+          {% set dur = state_attr('media_player.spotify_tomkortekaas', 'media_duration') | float(0) %}
+          {% if updated and is_state('media_player.spotify_tomkortekaas', 'playing') %}
+            {{ [pos + (now() - updated).total_seconds(), dur] | min | round(1) }}
+          {% else %}
+            {{ pos }}
+          {% endif %}
+
+  - sensor:
+      - name: "Spotify Fact Artist"
+        unique_id: spotify_fact_artist
+        state: "{{ state_attr('sensor.spotify_fact_raw_cmd','artist') | default(state_attr('media_player.spotify_tomkortekaas','media_artist'), true) }}"
+      - name: "Spotify Fact Subtitle"
+        unique_id: spotify_fact_subtitle
+        state: "{{ state_attr('sensor.spotify_fact_raw_cmd','subtitle') | default(state_attr('media_player.spotify_tomkortekaas','media_title'), true) }}"
+      - name: "Spotify Fact Text"
+        unique_id: spotify_fact_text
+        state: "{{ states('sensor.spotify_fact_raw_cmd') }}"
+
+  # ---------------------------------------------------------------------------
+  #  5-DAAGSE FORECAST  (weather.forecast_thuis / Met.no, elke 30 min + bij opstarten)
+  # ---------------------------------------------------------------------------
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: daily
+        response_variable: fc
+    sensor:
+      - name: "Weerscherm d0 hi"
+        unique_id: weerscherm_d0_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].temperature }}"
+      - name: "Weerscherm d0 lo"
+        unique_id: weerscherm_d0_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].templow }}"
+      - name: "Weerscherm d0 cond"
+        unique_id: weerscherm_d0_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].condition }}"
+      - name: "Weerscherm d0 wind"
+        unique_id: weerscherm_d0_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].wind_speed }}"
+      - name: "Weerscherm d1 hi"
+        unique_id: weerscherm_d1_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].temperature }}"
+      - name: "Weerscherm d1 lo"
+        unique_id: weerscherm_d1_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].templow }}"
+      - name: "Weerscherm d1 cond"
+        unique_id: weerscherm_d1_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].condition }}"
+      - name: "Weerscherm d1 wind"
+        unique_id: weerscherm_d1_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].wind_speed }}"
+      - name: "Weerscherm d2 hi"
+        unique_id: weerscherm_d2_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].temperature }}"
+      - name: "Weerscherm d2 lo"
+        unique_id: weerscherm_d2_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].templow }}"
+      - name: "Weerscherm d2 cond"
+        unique_id: weerscherm_d2_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].condition }}"
+      - name: "Weerscherm d2 wind"
+        unique_id: weerscherm_d2_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].wind_speed }}"
+      - name: "Weerscherm d3 hi"
+        unique_id: weerscherm_d3_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].temperature }}"
+      - name: "Weerscherm d3 lo"
+        unique_id: weerscherm_d3_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].templow }}"
+      - name: "Weerscherm d3 cond"
+        unique_id: weerscherm_d3_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].condition }}"
+      - name: "Weerscherm d3 wind"
+        unique_id: weerscherm_d3_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].wind_speed }}"
+      - name: "Weerscherm d4 hi"
+        unique_id: weerscherm_d4_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].temperature }}"
+      - name: "Weerscherm d4 lo"
+        unique_id: weerscherm_d4_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].templow }}"
+      - name: "Weerscherm d4 cond"
+        unique_id: weerscherm_d4_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].condition }}"
+      - name: "Weerscherm d4 wind"
+        unique_id: weerscherm_d4_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].wind_speed }}"
+
+  # ---------------------------------------------------------------------------
+  #  REGEN 24 UUR  (weather.forecast_thuis hourly via Met.no) -> 24 punten + bijschrift
+  #  Buienradar ondersteunt GEEN hourly forecast → gebruik forecast_thuis (Met.no).
+  # ---------------------------------------------------------------------------
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: hourly
+        response_variable: fc24
+    sensor:
+      - name: "Weerscherm regen 24u punten"
+        unique_id: weerscherm_regen_24u_punten
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set ns = namespace(pts=[]) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% if h.precipitation_probability is defined and h.precipitation_probability is not none %}
+              {% set pct = h.precipitation_probability | int(0) %}
+            {% else %}
+              {% set mm = h.precipitation | default(0) | float(0) %}
+              {% set pct = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% endif %}
+            {% set pct = [pct, cond_floor] | max %}
+            {% set ns.pts = ns.pts + [ [[pct, 0] | max, 100] | min ] %}
+          {% endfor %}
+          {{ (ns.pts + [0]*24)[:24] | join(',') }}
+
+      - name: "Weerscherm regen 24u caption"
+        unique_id: weerscherm_regen_24u_caption
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set mx = namespace(v=0) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% if h.precipitation_probability is defined and h.precipitation_probability is not none %}
+              {% set v = h.precipitation_probability | int(0) %}
+            {% else %}
+              {% set mm = h.precipitation | default(0) | float(0) %}
+              {% set v = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% endif %}
+            {% set v = [v, cond_floor] | max %}
+            {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+          {% endfor %}
+          {% if mx.v == 0 %}droog komende 24u
+          {% elif mx.v < 35 %}kleine buienkans
+          {% elif mx.v < 70 %}buien mogelijk
+          {% else %}natte uren verwacht{% endif %}
+
+  #  REGEN (Buienradar) -> 12 grafiekpunten (0-100) + bijschrift
+  # ---------------------------------------------------------------------------
+  - sensor:
+      - name: "Weerscherm regen punten"
+        unique_id: weerscherm_regen_punten
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% if raw %}
+            {% set tokens = raw.split(' ') %}
+            {% set ns = namespace(pts=[]) %}
+            {% for i in range(0, 24, 2) %}
+              {% if i < tokens|length %}
+                {% set v = tokens[i].split('|')[0]|int(0) %}
+                {% set pct = [ (v / 2.55)|round(0)|int, 100] | min %}
+                {% set ns.pts = ns.pts + [pct] %}
+              {% endif %}
+            {% endfor %}
+            {{ (ns.pts + [0]*12)[:12] | join(',') }}
+          {% else %}0,0,0,0,0,0,0,0,0,0,0,0{% endif %}
+      - name: "Weerscherm regen caption"
+        unique_id: weerscherm_regen_caption
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% set mx = namespace(v=0) %}
+          {% if raw %}
+            {% for t in raw.split(' ') %}
+              {% set v = t.split('|')[0]|int(0) %}
+              {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if mx.v == 0 %}droog komende 2u
+          {% elif mx.v < 77 %}lichte regen mogelijk
+          {% elif mx.v < 154 %}matige regen verwacht
+          {% else %}zware regen verwacht{% endif %}
+
+  # ---------------------------------------------------------------------------
+  #  ZON -> "HH:MM" (lokale tijd) + daglicht% + bijschrift
+  # ---------------------------------------------------------------------------
+  - sensor:
+      - name: "Weerscherm zon op"
+        unique_id: weerscherm_zon_op
+        state: >
+          {{ as_timestamp(states('sensor.sun_next_rising'))
+             | timestamp_custom('%H:%M', true) }}
+      - name: "Weerscherm zon onder"
+        unique_id: weerscherm_zon_onder
+        state: >
+          {{ as_timestamp(states('sensor.sun_next_setting'))
+             | timestamp_custom('%H:%M', true) }}
+      - name: "Weerscherm daglicht pct"
+        unique_id: weerscherm_daglicht_pct
+        unit_of_measurement: "%"
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set n = as_timestamp(now()) %}
+          {% if is_state('sun.sun','above_horizon') %}
+            {% set rise_today = r - 86400 %}
+            {% set pct = ((n - rise_today) / (s - rise_today) * 100) | round(0) | int %}
+            {{ [[pct, 0] | max, 100] | min }}
+          {% elif n < s %}0{% else %}100{% endif %}
+      - name: "Weerscherm daglicht caption"
+        unique_id: weerscherm_daglicht_caption
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set rise_today = r - 86400 %}
+          {% set dur = (s - rise_today) if s > rise_today else (s - r + 86400) %}
+          {% set h = (dur // 3600) | int %}
+          {% set m = ((dur % 3600) // 60) | int %}
+          {{ h }}u {{ '%02d' % m }}m daglicht
+
+  # ---------------------------------------------------------------------------
+  #  SPOTIFY RECENT: tracks/artiesten/tijd
+  # ---------------------------------------------------------------------------
+  - trigger:
+      - trigger: time_pattern
+        minutes: "/1"
+      - trigger: state
+        entity_id: sensor.spotify_recent_raw_cmd
+    sensor:
+      - name: "Spotify Recent Artist 1"
+        unique_id: spotify_recent_artist_1
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[0]['track']['artists'][0]['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 0 else '' }}"
+        attributes:
+          artist_uri: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[0]['track']['artists'][0]['uri']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 0 else '' }}"
+      - name: "Spotify Recent Track 1"
+        unique_id: spotify_recent_track_1
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[0]['track']['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 0 else '' }}"
+      - name: "Spotify Recent Time 1"
+        unique_id: spotify_recent_time_1
+        state: >
+          {% set it = state_attr('sensor.spotify_recent_raw_cmd','items') or [] %}
+          {% if it|count > 0 %}
+            {% set s = (now() - as_datetime(it[0]['played_at'])).total_seconds() %}
+            {% if s < 60 %}net nu{% elif s < 3600 %}{{ (s/60)|int }} min geleden{% elif s < 86400 %}{{ (s/3600)|int }} uur geleden{% else %}{{ (s/86400)|int }} d geleden{% endif %}
+          {% endif %}
+      - name: "Spotify Recent Artist 2"
+        unique_id: spotify_recent_artist_2
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[1]['track']['artists'][0]['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 1 else '' }}"
+        attributes:
+          artist_uri: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[1]['track']['artists'][0]['uri']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 1 else '' }}"
+      - name: "Spotify Recent Track 2"
+        unique_id: spotify_recent_track_2
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[1]['track']['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 1 else '' }}"
+      - name: "Spotify Recent Time 2"
+        unique_id: spotify_recent_time_2
+        state: >
+          {% set it = state_attr('sensor.spotify_recent_raw_cmd','items') or [] %}
+          {% if it|count > 1 %}
+            {% set s = (now() - as_datetime(it[1]['played_at'])).total_seconds() %}
+            {% if s < 60 %}net nu{% elif s < 3600 %}{{ (s/60)|int }} min geleden{% elif s < 86400 %}{{ (s/3600)|int }} uur geleden{% else %}{{ (s/86400)|int }} d geleden{% endif %}
+          {% endif %}
+      - name: "Spotify Recent Artist 3"
+        unique_id: spotify_recent_artist_3
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[2]['track']['artists'][0]['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 2 else '' }}"
+        attributes:
+          artist_uri: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[2]['track']['artists'][0]['uri']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 2 else '' }}"
+      - name: "Spotify Recent Track 3"
+        unique_id: spotify_recent_track_3
+        state: "{{ ((state_attr('sensor.spotify_recent_raw_cmd','items') or [])[2]['track']['name']) if (state_attr('sensor.spotify_recent_raw_cmd','items') or [])|count > 2 else '' }}"
+      - name: "Spotify Recent Time 3"
+        unique_id: spotify_recent_time_3
+        state: >
+          {% set it = state_attr('sensor.spotify_recent_raw_cmd','items') or [] %}
+          {% if it|count > 2 %}
+            {% set s = (now() - as_datetime(it[2]['played_at'])).total_seconds() %}
+            {% if s < 60 %}net nu{% elif s < 3600 %}{{ (s/60)|int }} min geleden{% elif s < 86400 %}{{ (s/3600)|int }} uur geleden{% else %}{{ (s/86400)|int }} d geleden{% endif %}
+          {% endif %}
+
+  # ---------------------------------------------------------------------------
+  #  SPOTIFY PLAYLISTS: naam + eigenaar
+  # ---------------------------------------------------------------------------
+  - sensor:
+      - name: "Spotify Recent Playlist 1"
+        unique_id: spotify_recent_playlist_1
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[0].name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 0 else '' }}"
+        attributes:
+          uri: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[0].uri) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 0 else '' }}"
+      - name: "Spotify Recent Playlist Sub 1"
+        unique_id: spotify_recent_playlist_sub_1
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[0].owner.display_name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 0 else '' }}"
+      - name: "Spotify Recent Playlist 2"
+        unique_id: spotify_recent_playlist_2
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[1].name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 1 else '' }}"
+        attributes:
+          uri: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[1].uri) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 1 else '' }}"
+      - name: "Spotify Recent Playlist Sub 2"
+        unique_id: spotify_recent_playlist_sub_2
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[1].owner.display_name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 1 else '' }}"
+      - name: "Spotify Recent Playlist 3"
+        unique_id: spotify_recent_playlist_3
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[2].name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 2 else '' }}"
+        attributes:
+          uri: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[2].uri) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 2 else '' }}"
+      - name: "Spotify Recent Playlist Sub 3"
+        unique_id: spotify_recent_playlist_sub_3
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[2].owner.display_name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 2 else '' }}"
+      - name: "Spotify Recent Playlist 4"
+        unique_id: spotify_recent_playlist_4
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[3].name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 3 else '' }}"
+        attributes:
+          uri: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[3].uri) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 3 else '' }}"
+      - name: "Spotify Recent Playlist Sub 4"
+        unique_id: spotify_recent_playlist_sub_4
+        state: "{{ ((state_attr('sensor.spotify_playlists_raw_cmd','items') or [])[3].owner.display_name) if (state_attr('sensor.spotify_playlists_raw_cmd','items') or [])|count > 3 else '' }}"
+
+  # ---------------------------------------------------------------------------
+  #  SPOTIFY SONGTEKST: huidig/vorig/volgend (elke 5s)
+  # ---------------------------------------------------------------------------
+  - trigger:
+      - platform: time_pattern
+        seconds: "/1"
+      - platform: state
+        entity_id: sensor.spotify_lyrics_raw
+    sensor:
+      - name: "Spotify Lyrics Current Line"
+        unique_id: spotify_lyrics_current_line
+        state: >
+          {% set lrc = state_attr('sensor.spotify_lyrics_raw','syncedLyrics') %}
+          {% set mp = 'media_player.spotify_tomkortekaas' %}
+          {% set p = state_attr(mp,'media_position') | float(0) %}
+          {% set u = state_attr(mp,'media_position_updated_at') %}
+          {% if u and is_state(mp,'playing') %}
+            {% set pos = p + (now() - as_datetime(u)).total_seconds() + 1.0 %}
+          {% else %}{% set pos = p %}{% endif %}
+          {% if lrc %}
+            {% set ns = namespace(lines=[]) %}
+            {% for line in lrc.split('\n') %}
+              {% if '[' in line and ']' in line %}
+                {% set tag = line.split('[')[1].split(']')[0] %}
+                {% set txt = line.split(']',1)[1] | trim %}
+                {% set parts = tag.split(':') %}
+                {% if parts|count == 2 %}
+                  {% set t = (parts[0]|int(0))*60 + (parts[1]|float(0)) %}
+                  {% set ns.lines = ns.lines + [{'t': t, 'txt': txt}] %}
+                {% endif %}
+              {% endif %}
+            {% endfor %}
+            {% set sel = namespace(i=-1) %}
+            {% for ln in ns.lines %}
+              {% if ln.t <= pos %}{% set sel.i = loop.index0 %}{% endif %}
+            {% endfor %}
+            {% if sel.i < 0 and ns.lines|count > 0 %}{% set sel.i = 0 %}{% endif %}
+            {{ ns.lines[sel.i].txt if sel.i >= 0 else '' }}
+          {% endif %}
+        attributes:
+          prev: >
+            {% set lrc = state_attr('sensor.spotify_lyrics_raw','syncedLyrics') %}
+            {% set mp = 'media_player.spotify_tomkortekaas' %}
+            {% set p = state_attr(mp,'media_position') | float(0) %}
+            {% set u = state_attr(mp,'media_position_updated_at') %}
+            {% if u and is_state(mp,'playing') %}
+              {% set pos = p + (now() - as_datetime(u)).total_seconds() + 1.0 %}
+            {% else %}{% set pos = p %}{% endif %}
+            {% if lrc %}
+              {% set ns = namespace(lines=[]) %}
+              {% for line in lrc.split('\n') %}
+                {% if '[' in line and ']' in line %}
+                  {% set tag = line.split('[')[1].split(']')[0] %}
+                  {% set txt = line.split(']',1)[1] | trim %}
+                  {% set parts = tag.split(':') %}
+                  {% if parts|count == 2 %}
+                    {% set t = (parts[0]|int(0))*60 + (parts[1]|float(0)) %}
+                    {% set ns.lines = ns.lines + [{'t': t, 'txt': txt}] %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {% set sel = namespace(i=-1) %}
+              {% for ln in ns.lines %}
+                {% if ln.t <= pos %}{% set sel.i = loop.index0 %}{% endif %}
+              {% endfor %}
+              {{ ns.lines[sel.i-1].txt if sel.i > 0 else '' }}
+            {% endif %}
+          next: >
+            {% set lrc = state_attr('sensor.spotify_lyrics_raw','syncedLyrics') %}
+            {% set mp = 'media_player.spotify_tomkortekaas' %}
+            {% set p = state_attr(mp,'media_position') | float(0) %}
+            {% set u = state_attr(mp,'media_position_updated_at') %}
+            {% if u and is_state(mp,'playing') %}
+              {% set pos = p + (now() - as_datetime(u)).total_seconds() + 1.0 %}
+            {% else %}{% set pos = p %}{% endif %}
+            {% if lrc %}
+              {% set ns = namespace(lines=[]) %}
+              {% for line in lrc.split('\n') %}
+                {% if '[' in line and ']' in line %}
+                  {% set tag = line.split('[')[1].split(']')[0] %}
+                  {% set txt = line.split(']',1)[1] | trim %}
+                  {% set parts = tag.split(':') %}
+                  {% if parts|count == 2 %}
+                    {% set t = (parts[0]|int(0))*60 + (parts[1]|float(0)) %}
+                    {% set ns.lines = ns.lines + [{'t': t, 'txt': txt}] %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {% set sel = namespace(i=-1) %}
+              {% for ln in ns.lines %}
+                {% if ln.t <= pos %}{% set sel.i = loop.index0 %}{% endif %}
+              {% endfor %}
+              {% if sel.i < 0 %}{% set sel.i = 0 %}{% endif %}
+              {{ ns.lines[sel.i+1].txt if (sel.i+1) < ns.lines|count else '' }}
+            {% endif %}
+          prev2: >
+            {% set lrc = state_attr('sensor.spotify_lyrics_raw','syncedLyrics') %}
+            {% set mp = 'media_player.spotify_tomkortekaas' %}
+            {% set p = state_attr(mp,'media_position') | float(0) %}
+            {% set u = state_attr(mp,'media_position_updated_at') %}
+            {% if u and is_state(mp,'playing') %}
+              {% set pos = p + (now() - as_datetime(u)).total_seconds() + 1.0 %}
+            {% else %}{% set pos = p %}{% endif %}
+            {% if lrc %}
+              {% set ns = namespace(lines=[]) %}
+              {% for line in lrc.split('\n') %}
+                {% if '[' in line and ']' in line %}
+                  {% set tag = line.split('[')[1].split(']')[0] %}
+                  {% set txt = line.split(']',1)[1] | trim %}
+                  {% set parts = tag.split(':') %}
+                  {% if parts|count == 2 %}
+                    {% set t = (parts[0]|int(0))*60 + (parts[1]|float(0)) %}
+                    {% set ns.lines = ns.lines + [{'t': t, 'txt': txt}] %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {% set sel = namespace(i=-1) %}
+              {% for ln in ns.lines %}
+                {% if ln.t <= pos %}{% set sel.i = loop.index0 %}{% endif %}
+              {% endfor %}
+              {{ ns.lines[sel.i-2].txt if sel.i > 1 else '' }}
+            {% endif %}
+          next2: >
+            {% set lrc = state_attr('sensor.spotify_lyrics_raw','syncedLyrics') %}
+            {% set mp = 'media_player.spotify_tomkortekaas' %}
+            {% set p = state_attr(mp,'media_position') | float(0) %}
+            {% set u = state_attr(mp,'media_position_updated_at') %}
+            {% if u and is_state(mp,'playing') %}
+              {% set pos = p + (now() - as_datetime(u)).total_seconds() + 1.0 %}
+            {% else %}{% set pos = p %}{% endif %}
+            {% if lrc %}
+              {% set ns = namespace(lines=[]) %}
+              {% for line in lrc.split('\n') %}
+                {% if '[' in line and ']' in line %}
+                  {% set tag = line.split('[')[1].split(']')[0] %}
+                  {% set txt = line.split(']',1)[1] | trim %}
+                  {% set parts = tag.split(':') %}
+                  {% if parts|count == 2 %}
+                    {% set t = (parts[0]|int(0))*60 + (parts[1]|float(0)) %}
+                    {% set ns.lines = ns.lines + [{'t': t, 'txt': txt}] %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {% set sel = namespace(i=-1) %}
+              {% for ln in ns.lines %}
+                {% if ln.t <= pos %}{% set sel.i = loop.index0 %}{% endif %}
+              {% endfor %}
+              {% if sel.i < 0 %}{% set sel.i = 0 %}{% endif %}
+              {{ ns.lines[sel.i+2].txt if (sel.i+2) < ns.lines|count else '' }}
+            {% endif %}
+
+      - name: "Spotify Lyrics Previous Line"
+        unique_id: spotify_lyrics_previous_line
+        state: "{{ state_attr('sensor.spotify_lyrics_current_line','prev') | default('') }}"
+      - name: "Spotify Lyrics Previous Line 2"
+        unique_id: spotify_lyrics_previous_line_2
+        state: "{{ state_attr('sensor.spotify_lyrics_current_line','prev2') | default('') }}"
+      - name: "Spotify Lyrics Next Line"
+        unique_id: spotify_lyrics_next_line
+        state: "{{ state_attr('sensor.spotify_lyrics_current_line','next') | default('') }}"
+      - name: "Spotify Lyrics Next Line 2"
+        unique_id: spotify_lyrics_next_line_2
+        state: "{{ state_attr('sensor.spotify_lyrics_current_line','next2') | default('') }}"
+
+
+automation: !include automations.yaml
+automation ha_display_7:
+  # Reolink Voordeur entities uit Home Assistant:
+  # - trigger: binary_sensor.voordeur_bezoeker
+  # - snapshotbron: camera.voordeur_vloeiend
+  - alias: "HA Display 7 - Deurbel tonen"
+    id: ha_display_7_deurbel_tonen
+    mode: restart
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.voordeur_bezoeker
+        to: "on"
+    action:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+      - repeat:
+          count: 50
+          sequence:
+            - condition: state
+              entity_id: input_boolean.ha_display_deurbel_actief
+              state: "on"
+            - action: camera.snapshot
+              target:
+                entity_id: camera.voordeur_vloeiend
+              data:
+                filename: /config/www/ha-display-doorbell.jpg
+            - delay: "00:00:01"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+
+  - alias: "HA Display 7 - Immich foto roteren"
+    id: ha_display_7_immich_foto_roteren
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+    action:
+      - action: shell_command.immich_rotate_7inch
+
+  - alias: "HA Display 7 - Buienradar frames verversen"
+    id: ha_display_7_buienradar_frames_verversen
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/10"
+    action:
+      - action: shell_command.buienradar_update_7inch
+
+script: !include scripts.yaml
+scene: !include scenes.yaml
+
+input_select:
+  idotmatrix_scherm:
+    options:
+      - placeholder
+
+input_boolean:
+  idotmatrix_actief:
+    initial: false
+  ha_display_deurbel_actief:
+    name: "HA Display 7 deurbel actief"
+    icon: mdi:doorbell-video
+    initial: false
+
+timer:
+  idotmatrix_uitdoven:
+    duration: "00:05:00"
+
+shell_command:
+  immich_rotate_7inch: "python3 /config/www/idotmatrix/immich_rotate_7inch.py"
+  immich_photo_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py next"
+  immich_photo_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py prev"
+  immich_photo_zoom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py zoom"
+  immich_photo_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py trash"
+  immich_photo_confirm_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py confirm-trash"
+  buienradar_update_7inch: "python3 /config/www/idotmatrix/buienradar_radar_7inch.py"
+  idotmatrix_temp: >-
+    python3 /config/scripts/generate_idotmatrix.py temp
+    '{{ states("sensor.weerstation_temperature") | float(0) | round(1) }}'
+  idotmatrix_wind: >-
+    python3 /config/scripts/generate_idotmatrix.py wind
+    '{{ states("sensor.windsnelheid_gecorrigeerd") | float(0) | round(0) | int }}'
+  idotmatrix_uv: >-
+    python3 /config/scripts/generate_idotmatrix.py uv
+    '{{ states("sensor.weerstation_uv_index") | int(0) }}'
+  idotmatrix_regen: >-
+    python3 /config/scripts/generate_idotmatrix.py regen ''
+    '{% set d=state_attr("sensor.neerslag_buienradar_regen_data","data") %}{% if d %}{% set ns=namespace(i=-1) %}{% for item in d.split(" ") %}{% if ns.i==-1 and item.split("|")[0]|int>0 %}{% set ns.i=loop.index0 %}{% endif %}{% endfor %}{% if ns.i>=0 %}{{ ns.i*5 }}{% else %}0{% endif %}{% else %}0{% endif %}'
+  idotmatrix_geen_regen: >-
+    python3 /config/scripts/generate_idotmatrix.py geen_regen
+  idotmatrix_fetch_drawing: "curl -s '{{ url }}' -o '/config/www/idotmatrix/{{ filename }}'"
+  idotmatrix_fetch_spotify_albumart: "python3 /config/www/idotmatrix/fetch_spotify_albumart.py"
+  write_spotify_recent: "echo 'aW1wb3J0IGpzb24sIHN1YnByb2Nlc3MKCmRlZiBjdXJsKGFyZ3MpOgogICAgciA9IHN1YnByb2Nlc3MucnVuKFsnY3VybCcsICctcyddICsgYXJncywgY2FwdHVyZV9vdXRwdXQ9VHJ1ZSwgdGV4dD1UcnVlKQogICAgcmV0dXJuIHIuc3Rkb3V0Cgp0b2tlbl9qc29uID0gY3VybChbJy1YJywgJ1BPU1QnLCAnaHR0cHM6Ly9hY2NvdW50cy5zcG90aWZ5LmNvbS9hcGkvdG9rZW4nLAogICAgJy1kJywgJ2dyYW50X3R5cGU9cmVmcmVzaF90b2tlbiZyZWZyZXNoX3Rva2VuPUFRQmRleWV6TGU3UmRIQ1pYVllrdnh5ODMtRXZod1dETVhSX3pnS2Y5Q1I1RnNBRXd5TzFGUHB1TWRMUXZ1MkVRU09YSU55S1BieXhOd1R1bk04VEYyVHlOSUlZMUMwMXBnTHJTY2gxdEY3YkV4Ykg5NlNoM2I0cDN5dlVldk9rRXE0JmNsaWVudF9pZD1jMjdjNGY5NDU3Zjg0NjY3OWNlN2I2MDFmNjE4YTllNCZjbGllbnRfc2VjcmV0PTQxMzQ2YTRkMjUzMTQyMmQ5ZmYzZjBiOTQzODNkY2RhJ10pCnRva2VuID0ganNvbi5sb2Fkcyh0b2tlbl9qc29uKVsnYWNjZXNzX3Rva2VuJ10KcHJpbnQoY3VybChbJy1IJywgJ0F1dGhvcml6YXRpb246IEJlYXJlciAnICsgdG9rZW4sCiAgICAnaHR0cHM6Ly9hcGkuc3BvdGlmeS5jb20vdjEvbWUvcGxheWVyL3JlY2VudGx5LXBsYXllZD9saW1pdD0xMCddKSkK' | base64 -d > /config/www/idotmatrix/spotify_recent.py"
+  write_spotify_playlists: "echo 'aW1wb3J0IGpzb24sIHN1YnByb2Nlc3MKCmRlZiBjdXJsKGFyZ3MpOgogICAgciA9IHN1YnByb2Nlc3MucnVuKFsnY3VybCcsICctcyddICsgYXJncywgY2FwdHVyZV9vdXRwdXQ9VHJ1ZSwgdGV4dD1UcnVlKQogICAgcmV0dXJuIHIuc3Rkb3V0Cgp0b2tlbl9qc29uID0gY3VybChbJy1YJywgJ1BPU1QnLCAnaHR0cHM6Ly9hY2NvdW50cy5zcG90aWZ5LmNvbS9hcGkvdG9rZW4nLAogICAgJy1kJywgJ2dyYW50X3R5cGU9cmVmcmVzaF90b2tlbiZyZWZyZXNoX3Rva2VuPUFRQmRleWV6TGU3UmRIQ1pYVllrdnh5ODMtRXZod1dETVhSX3pnS2Y5Q1I1RnNBRXd5TzFGUHB1TWRMUXZ1MkVRU09YSU55S1BieXhOd1R1bk04VEYyVHlOSUlZMUMwMXBnTHJTY2gxdEY3YkV4Ykg5NlNoM2I0cDN5dlVldk9rRXE0JmNsaWVudF9pZD1jMjdjNGY5NDU3Zjg0NjY3OWNlN2I2MDFmNjE4YTllNCZjbGllbnRfc2VjcmV0PTQxMzQ2YTRkMjUzMTQyMmQ5ZmYzZjBiOTQzODNkY2RhJ10pCnRva2VuID0ganNvbi5sb2Fkcyh0b2tlbl9qc29uKVsnYWNjZXNzX3Rva2VuJ10KcHJpbnQoY3VybChbJy1IJywgJ0F1dGhvcml6YXRpb246IEJlYXJlciAnICsgdG9rZW4sCiAgICAnaHR0cHM6Ly9hcGkuc3BvdGlmeS5jb20vdjEvbWUvcGxheWxpc3RzP2xpbWl0PTQnXSkpCg==' | base64 -d > /config/www/idotmatrix/spotify_playlists.py"
+
+rest:
+  - resource: "https://api.weather.com/v2/pws/observations/current?stationId=IBEVER77&format=json&units=m&apiKey=cf3bba6f1dd8445fbbba6f1dd8e45faa"
+    scan_interval: 150
+    sensor:
+      - name: "Wunderground Beverwijk Windsnelheid"
+        unique_id: wunderground_ibever77_wind_speed
+        unit_of_measurement: "km/h"
+        device_class: wind_speed
+        state_class: measurement
+        value_template: "{{ value_json.observations[0].metric.windSpeed | float(0) | round(1) if value_json.observations is defined else 0 }}"
+        icon: mdi:weather-windy
+
+      - name: "Wunderground Beverwijk Windvlaag"
+        unique_id: wunderground_ibever77_wind_gust
+        unit_of_measurement: "km/h"
+        device_class: wind_speed
+        state_class: measurement
+        value_template: "{{ value_json.observations[0].metric.windGust | float(0) | round(1) if value_json.observations is defined else 0 }}"
+        icon: mdi:weather-windy
+
+      - name: "Wunderground Beverwijk Windrichting"
+        unique_id: wunderground_ibever77_wind_dir
+        unit_of_measurement: "°"
+        state_class: measurement
+        value_template: "{{ value_json.observations[0].winddir | int(0) if value_json.observations is defined else 0 }}"
+        icon: mdi:compass
+
+
+command_line:
+  # Songtekst via LRCLIB (gratis, geen login)
+  - sensor:
+      name: "Spotify Lyrics Raw"
+      unique_id: spotify_lyrics_raw
+      scan_interval: 6
+      command: >-
+        /usr/local/bin/python3 /config/www/idotmatrix/spotify_lyrics.py
+        --artist "{{ state_attr('media_player.spotify_tomkortekaas','media_artist') | default('',true) | replace('"','') }}"
+        --title "{{ state_attr('media_player.spotify_tomkortekaas','media_title') | default('',true) | replace('"','') }}"
+      value_template: >
+        {{ 'synced' if (value_json.syncedLyrics is defined and value_json.syncedLyrics)
+           else ('plain' if (value_json.plainLyrics is defined and value_json.plainLyrics) else 'none') }}
+      json_attributes:
+        - syncedLyrics
+        - plainLyrics
+
+  # Recent afgespeeld via Spotify Web API (script-bestand, elke 5 min)
+  - sensor:
+      name: "Spotify Recent Raw Cmd"
+      unique_id: spotify_recent_raw_cmd
+      scan_interval: 60
+      command: "/usr/local/bin/python3 /config/www/idotmatrix/spotify_recent.py"
+      command_timeout: 45
+      value_template: >
+        {% set items = value_json.get('items', []) %}
+        {{ items[0].track.name if items | count > 0 else 'geen data' }}
+      json_attributes:
+        - items
+
+  # Eigen playlists via Spotify Web API (script-bestand, elke 30 min)
+  - sensor:
+      name: "Spotify Playlists Raw Cmd"
+      unique_id: spotify_playlists_raw_cmd
+      scan_interval: 300
+      command: "/usr/local/bin/python3 /config/www/idotmatrix/spotify_playlists.py"
+      command_timeout: 45
+      value_template: >
+        {{ value_json.get('items', []) | count }}
+      json_attributes:
+        - items
+
+  - sensor:
+      name: "Spotify Fact Raw Cmd"
+      unique_id: spotify_fact_raw_cmd
+      scan_interval: 45
+      command: >-
+        /usr/local/bin/python3 /config/www/idotmatrix/spotify_fact.py
+        --artist "{{ state_attr('media_player.spotify_tomkortekaas','media_artist') | default('',true) | replace('"','') }}"
+        --title "{{ state_attr('media_player.spotify_tomkortekaas','media_title') | default('',true) | replace('"','') }}"
+        --rotate-index "{{ (now().timestamp() / 45) | int }}"
+      value_template: "{{ value_json.text if value_json.text is defined else 'geen feitje' }}"
+      json_attributes:
+        - artist
+        - subtitle
+        - text
+        - facts
+        - source
+
+spotcast:
+  sp_dc: !secret sp_dc
+  sp_key: !secret sp_key
+  country: NL

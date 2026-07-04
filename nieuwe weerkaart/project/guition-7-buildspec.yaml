@@ -1,0 +1,2064 @@
+# =============================================================================
+#  GUITION 7" — 800×480  ·  ESPHome + LVGL  ·  Zes-pagina build-spec
+# -----------------------------------------------------------------------------
+#  DOEL VAN DIT BESTAND
+#  Dit is een volledige build-spec voor Claude. Geef dit bestand mee als
+#  instructie om de definitieve ESPHome YAML te genereren.
+#
+#  GESELECTEERDE SCHERMEN (uit Spotify Guition 7inch v3.html):
+#    Pag 1 · Spotify Player      — split: album-art + bloom links, controls rechts
+#    Pag 2 · Spotify Songtekst   — persistente sidebar links, scrollende lyrics rechts
+#    Pag 3 · Spotify Wist je dat — persistente sidebar links, artiest + facts rechts
+#    Pag 4 · Immich Variant A    — full-bleed foto 800×480, scrim boven/onder
+#    Pag 5 · Weer                — topbar, hero-strip, uurstrip (8 col), 5-daagse
+#    Pag 6 · Lampen Variant B    — 5 verticale segment-kolommen + CT-strip + scènes
+#
+#  HERGEBRUIKTE ENTITEITEN + LOGICA (volledige compatibiliteit):
+#    • spotify.yaml          → entity_id's sp_*, album_art, refresh_spotify
+#    • weerscherm.yaml       → entity_id's ha_*/d*_*, refresh_weather, forecast-helpers
+#    • immich_fotolijst.yaml → entity_id's immich_*, immich_img, photo_widget
+#    • afzuigkap.yaml        → font-stijl (Montserrat), kleurpalet, segment-patroon
+#
+#  DISPLAY-DIMENSIES: 800 × 480 px (was 480 × 480 op de 4")
+#  NAVIGATIE:  6-stippen indicator in iedere topbar + tikzones links/rechts
+#  SWIPEVOLGORDE: Player → Songtekst → Wist je dat → Immich → Weer → Lampen
+# =============================================================================
+
+
+# =============================================================================
+#  1.  ESP32 + BOARD
+# =============================================================================
+esphome:
+  name: guition-7
+  friendly_name: "Guition 7 inch Scherm"
+  on_boot:
+    - delay: 2s
+    - script.execute: refresh_clock
+    - script.execute: refresh_spotify
+    - script.execute: refresh_weather
+    - script.execute: refresh_lights
+
+esp32:
+  board: esp32-s3-devkitc-1   # >>> TODO: aanpassen naar jouw Guition 7" board
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+api:
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      # klok elke minuut
+      - seconds: 0
+        minutes: /1
+        then: [ script.execute: refresh_clock ]
+      # lyrics sync elke seconde
+      - seconds: /1
+        then: [ script.execute: refresh_lyrics ]
+      # facts roulatie elke 7 seconden
+      - seconds: 0,7,14,21,28,35,42,49,56
+        then:
+          - lambda: 'id(fact_idx) = (id(fact_idx) + 1) % 4;'
+          - script.execute: refresh_facts
+
+
+# =============================================================================
+#  2.  FONTS
+#  Alle benodigde groottes voor 6 schermen op 800×480.
+#  Montserrat-gewichten zelfde als afzuigkap.yaml/spotify.yaml.
+# =============================================================================
+font:
+  # ── Montserrat (tekst) ──────────────────────────────────────────────────
+  - file: "gfonts://Montserrat@800"
+    id: font_number         # 72px  – grote temperatuur hero, segment-%-overlay
+    size: 72
+  - file: "gfonts://Montserrat@800"
+    id: font_title          # 38px  – songtitel, Immich locatienaam
+    size: 38
+  - file: "gfonts://Montserrat@800"
+    id: font_heading        # 26px  – artiestnaam, stats-getallen (facts-pagina)
+    size: 26
+  - file: "gfonts://Montserrat@700"
+    id: font_subheading     # 17px  – forecast-dagnamen, conditie-tekst
+    size: 17
+  - file: "gfonts://Montserrat@700"
+    id: font_brand          # 13px  – topbar-brandlabels (SPOTIFY / THUIS / IMMICH / VERLICHTING)
+    size: 13
+  - file: "gfonts://Montserrat@700"
+    id: font_lyr            # 21px  – lyrics-regels
+    size: 21
+  - file: "gfonts://Montserrat@600"
+    id: font_label          # 12px  – lamplabels, chip-tekst, bijschriften
+    size: 12
+  - file: "gfonts://Montserrat@600"
+    id: font_clock          # 13px  – klok in topbar
+    size: 13
+  - file: "gfonts://Montserrat@500"
+    id: font_meta           # 11px  – gedempt/secundair (artiest, datum, vol-getal)
+    size: 11
+
+  # ── Material Design Icons ────────────────────────────────────────────────
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_sp_ctl         # 26px  – transport: play/pause/prev/next/shuffle/repeat
+    size: 26
+    glyphs:
+      - "\U000F040A"   # mdi:play
+      - "\U000F03E4"   # mdi:pause
+      - "\U000F04AD"   # mdi:skip-next
+      - "\U000F04AE"   # mdi:skip-previous
+      - "\U000F049D"   # mdi:shuffle-variant
+      - "\U000F0456"   # mdi:repeat
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_sp_mini        # 18px  – heart, volume-icoon, speaker-pill
+    size: 18
+    glyphs:
+      - "\U000F02D1"   # mdi:heart
+      - "\U000F02D5"   # mdi:heart-outline
+      - "\U000F057E"   # mdi:volume-high
+      - "\U000F04C3"   # mdi:speaker
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_wx_big         # 64px  – hero-weericoon
+    size: 64
+    glyphs: &wx_glyphs
+      - "\U000F0599"   # weather-sunny
+      - "\U000F0594"   # weather-night
+      - "\U000F0595"   # weather-partly-cloudy
+      - "\U000F0590"   # weather-cloudy
+      - "\U000F0597"   # weather-rainy
+      - "\U000F0596"   # weather-pouring
+      - "\U000F0593"   # weather-lightning
+      - "\U000F0598"   # weather-snowy
+      - "\U000F0591"   # weather-fog
+      - "\U000F059D"   # weather-windy
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_wx_small       # 22px  – forecast-rij-iconen + uurstrip
+    size: 22
+    glyphs: *wx_glyphs
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_bulb           # 26px  – lamp-icoon boven elk segment-kolom
+    size: 26
+    glyphs:
+      - "\U000F0335"   # mdi:lightbulb  (lamp aan)
+      - "\U000F0336"   # mdi:lightbulb-outline  (lamp uit)
+
+
+# =============================================================================
+#  3.  GLOBALS
+# =============================================================================
+globals:
+  # Spotify
+  - { id: lyr_active, type: int,   restore_value: no, initial_value: "0"  }  # actieve lyrics-regel (0..12)
+  - { id: fact_idx,   type: int,   restore_value: no, initial_value: "0"  }  # actief feit (0..3)
+  - { id: sp_liked,   type: bool,  restore_value: yes, initial_value: "false" }
+  # Weer
+  - { id: wk_tmin,   type: float, restore_value: no, initial_value: "0"  }
+  - { id: wk_tmax,   type: float, restore_value: no, initial_value: "20" }
+  # Lampen – helderheid gesynchroniseerd met HA (0..8 segmenten)
+  - { id: lamp0_seg, type: int,   restore_value: no, initial_value: "0"  }  # Woonkamer
+  - { id: lamp1_seg, type: int,   restore_value: no, initial_value: "0"  }  # Slaapkamer
+  - { id: lamp2_seg, type: int,   restore_value: no, initial_value: "0"  }  # Keuken
+  - { id: lamp3_seg, type: int,   restore_value: no, initial_value: "0"  }  # Hal
+  - { id: lamp4_seg, type: int,   restore_value: no, initial_value: "0"  }  # Badkamer
+  # Lampen – tijdelijke tap-variabelen voor apply_lamp script
+  - { id: tap_lamp,  type: int,   restore_value: no, initial_value: "0"  }
+  - { id: tap_seg,   type: int,   restore_value: no, initial_value: "0"  }
+  # Lampen – huidige CT (in Kelvin, 2500..6500)
+  - { id: lamp_ct_k, type: int,   restore_value: yes, initial_value: "4000" }
+
+
+# =============================================================================
+#  4.  ONLINE IMAGES
+# =============================================================================
+online_image:
+  # Spotify album-art  (uit spotify.yaml; zet HA-basis-URL bij >>> TODO)
+  - id: album_art
+    url: "http://homeassistant.local:8123/local/album_placeholder.png"   # >>> TODO
+    format: JPEG
+    type: RGB565
+    resize: 220x220       # passend voor sidebar (212px) en player-left (220px)
+    update_interval: never
+    on_download_finished:
+      - lvgl.image.update: { id: sp_art_player,  src: album_art }
+      - lvgl.image.update: { id: sp_art_sidebar, src: album_art }
+
+  # Immich foto  (uit immich_fotolijst.yaml; volledige 800×480)
+  - id: immich_img
+    url: "http://192.168.1.10:2283/placeholder.jpg"   # >>> TODO
+    format: JPEG
+    type: RGB565
+    resize: 800x480
+    update_interval: never
+    on_download_finished:
+      - lvgl.image.update: { id: immich_photo, src: immich_img }
+
+
+# =============================================================================
+#  5.  HOME ASSISTANT SENSOREN
+#  Entity-ID's zoveel mogelijk gelijk aan de 4" YAMLs zodat bestaande
+#  HA-automations en template-sensoren zonder aanpassing herbruikbaar zijn.
+# =============================================================================
+
+sensor:
+  # ── Spotify (uit spotify.yaml) ──────────────────────────────────────────
+  - platform: homeassistant
+    id: sp_position
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: media_position
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_duration
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: media_duration
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_volume
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: volume_level
+    on_value: { then: [ script.execute: refresh_spotify ] }
+
+  # ── Lampen helderheid (HA brightness 0–255 → omgezet naar 0–8 segmenten) ──
+  - platform: homeassistant
+    id: lamp0_bri_ha
+    entity_id: light.woonkamer                 # >>> TODO
+    attribute: brightness
+    on_value: { then: [ script.execute: refresh_lights ] }
+  - platform: homeassistant
+    id: lamp1_bri_ha
+    entity_id: light.slaapkamer                # >>> TODO
+    attribute: brightness
+    on_value: { then: [ script.execute: refresh_lights ] }
+  - platform: homeassistant
+    id: lamp2_bri_ha
+    entity_id: light.keuken                    # >>> TODO
+    attribute: brightness
+    on_value: { then: [ script.execute: refresh_lights ] }
+  - platform: homeassistant
+    id: lamp3_bri_ha
+    entity_id: light.hal                       # >>> TODO
+    attribute: brightness
+    on_value: { then: [ script.execute: refresh_lights ] }
+  - platform: homeassistant
+    id: lamp4_bri_ha
+    entity_id: light.badkamer                  # >>> TODO
+    attribute: brightness
+    on_value: { then: [ script.execute: refresh_lights ] }
+  - platform: homeassistant
+    id: lamp_ct_ha
+    entity_id: light.woonkamer                 # >>> TODO: representatieve lamp voor CT
+    attribute: color_temp_kelvin
+    on_value:
+      - lambda: |-
+          if (!isnan(x)) id(lamp_ct_k) = (int)x;
+          id(refresh_lights).execute();
+
+  # ── Weer (uit weerscherm.yaml — zelfde entity_id's) ─────────────────────
+  - platform: homeassistant
+    id: ha_temp_now
+    entity_id: weather.thuis                   # >>> TODO
+    attribute: temperature
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_feels
+    entity_id: weather.thuis                   # >>> TODO
+    attribute: apparent_temperature
+  - platform: homeassistant
+    id: ha_wind_now
+    entity_id: weather.thuis                   # >>> TODO
+    attribute: wind_speed
+  - platform: homeassistant
+    id: ha_humidity
+    entity_id: weather.thuis                   # >>> TODO
+    attribute: humidity
+  - platform: homeassistant
+    id: ha_uv
+    entity_id: sensor.uv_index                 # >>> TODO
+    on_value: { then: [ script.execute: refresh_weather ] }
+  # 5-daagse forecast (HA template-sensoren — zie weerscherm.yaml §3)
+  - { platform: homeassistant, id: d0_hi,   entity_id: sensor.forecast_d0_hi,   on_value: { then: [ script.execute: refresh_weather ] } }
+  - { platform: homeassistant, id: d0_lo,   entity_id: sensor.forecast_d0_lo }
+  - { platform: homeassistant, id: d1_hi,   entity_id: sensor.forecast_d1_hi }
+  - { platform: homeassistant, id: d1_lo,   entity_id: sensor.forecast_d1_lo }
+  - { platform: homeassistant, id: d2_hi,   entity_id: sensor.forecast_d2_hi }
+  - { platform: homeassistant, id: d2_lo,   entity_id: sensor.forecast_d2_lo }
+  - { platform: homeassistant, id: d3_hi,   entity_id: sensor.forecast_d3_hi }
+  - { platform: homeassistant, id: d3_lo,   entity_id: sensor.forecast_d3_lo }
+  - { platform: homeassistant, id: d4_hi,   entity_id: sensor.forecast_d4_hi }
+  - { platform: homeassistant, id: d4_lo,   entity_id: sensor.forecast_d4_lo }
+  - { platform: homeassistant, id: d0_wind, entity_id: sensor.forecast_d0_wind }
+  - { platform: homeassistant, id: d1_wind, entity_id: sensor.forecast_d1_wind }
+  - { platform: homeassistant, id: d2_wind, entity_id: sensor.forecast_d2_wind }
+  - { platform: homeassistant, id: d3_wind, entity_id: sensor.forecast_d3_wind }
+  - { platform: homeassistant, id: d4_wind, entity_id: sensor.forecast_d4_wind }
+
+text_sensor:
+  # ── Spotify (uit spotify.yaml) ──────────────────────────────────────────
+  - platform: homeassistant
+    id: sp_state
+    entity_id: media_player.spotify            # >>> TODO
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_title
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: media_title
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_artist
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: media_artist
+  - platform: homeassistant
+    id: sp_album
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: media_album_name
+  - platform: homeassistant
+    id: sp_device
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: source
+  - platform: homeassistant
+    id: sp_shuffle
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: shuffle
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_repeat
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: repeat
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_picture
+    entity_id: media_player.spotify            # >>> TODO
+    attribute: entity_picture
+    on_value:
+      then:
+        - lambda: |-
+            // Zelfde patroon als spotify.yaml §3 sp_picture lambda
+            std::string base = "http://homeassistant.local:8123";   // >>> TODO
+            std::string p = id(sp_picture).state;
+            if (!p.empty()) {
+              std::string full = (p.rfind("http",0)==0) ? p : base + p;
+              id(album_art).set_url(full.c_str());
+              id(album_art).update();
+            }
+
+  # ── Lampen aan/uit status ────────────────────────────────────────────────
+  - { platform: homeassistant, id: lamp0_state, entity_id: light.woonkamer,  on_value: { then: [ script.execute: refresh_lights ] } }
+  - { platform: homeassistant, id: lamp1_state, entity_id: light.slaapkamer, on_value: { then: [ script.execute: refresh_lights ] } }
+  - { platform: homeassistant, id: lamp2_state, entity_id: light.keuken,     on_value: { then: [ script.execute: refresh_lights ] } }
+  - { platform: homeassistant, id: lamp3_state, entity_id: light.hal,        on_value: { then: [ script.execute: refresh_lights ] } }
+  - { platform: homeassistant, id: lamp4_state, entity_id: light.badkamer,   on_value: { then: [ script.execute: refresh_lights ] } }
+
+  # ── Weer (uit weerscherm.yaml) ───────────────────────────────────────────
+  - platform: homeassistant
+    id: ha_cond_now
+    entity_id: weather.thuis                   # >>> TODO
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_place
+    entity_id: zone.home                       # >>> TODO (of input_text met plaatsnaam)
+  - platform: homeassistant
+    id: ha_sunrise
+    entity_id: sensor.sun_next_rising          # >>> TODO
+  - platform: homeassistant
+    id: ha_sunset
+    entity_id: sensor.sun_next_setting         # >>> TODO
+  - { platform: homeassistant, id: d0_cond, entity_id: sensor.forecast_d0_cond, on_value: { then: [ script.execute: refresh_weather ] } }
+  - { platform: homeassistant, id: d1_cond, entity_id: sensor.forecast_d1_cond }
+  - { platform: homeassistant, id: d2_cond, entity_id: sensor.forecast_d2_cond }
+  - { platform: homeassistant, id: d3_cond, entity_id: sensor.forecast_d3_cond }
+  - { platform: homeassistant, id: d4_cond, entity_id: sensor.forecast_d4_cond }
+
+  # ── Immich (uit immich_fotolijst.yaml — zelfde entity_id's) ─────────────
+  - platform: homeassistant
+    id: immich_url
+    entity_id: sensor.immich_photo_url         # >>> TODO
+    on_value:
+      - lambda: |-
+          id(immich_img).set_url(x.c_str());
+          id(immich_img).update();
+  - platform: homeassistant
+    id: immich_place
+    entity_id: sensor.immich_place             # >>> TODO
+    on_value:
+      - lvgl.label.update: { id: imm_place_lbl, text: !lambda 'return x.c_str();' }
+  - platform: homeassistant
+    id: immich_date
+    entity_id: sensor.immich_date              # >>> TODO
+    on_value:
+      - lvgl.label.update: { id: imm_date_lbl, text: !lambda 'return x.c_str();' }
+  - platform: homeassistant
+    id: immich_album_txt
+    entity_id: sensor.immich_album             # >>> TODO (optioneel)
+    on_value:
+      - lvgl.label.update: { id: imm_album_lbl, text: !lambda 'return x.c_str();' }
+
+
+# =============================================================================
+#  6.  HARDWARE
+#  >>> TODO: vervang het volledige display-blok door de configuratie van jouw
+#  Guition 7" board. De 4" YAMLs gebruiken st7701s 480×480 met de pinnen
+#  hieronder — voor 800×480 is ALLEEN de dimensions-sectie anders plus de
+#  init-sequence van jouw specifieke paneel. Controleer elke pin.
+# =============================================================================
+spi:
+  - id: lcd_spi
+    clk_pin: 48       # >>> TODO
+    mosi_pin: 47      # >>> TODO
+
+display:
+  - platform: st7701s        # >>> TODO: controleer of jouw 7"-paneel ook st7701s gebruikt
+    id: disp
+    auto_clear_enabled: false
+    update_interval: never
+    data_rate: 2MHz
+    spi_id: lcd_spi
+    cs_pin: 39        # >>> TODO
+    reset_pin: 40     # >>> TODO
+    de_pin: 18        # >>> TODO
+    hsync_pin: 16     # >>> TODO
+    vsync_pin: 17     # >>> TODO
+    pclk_pin: 21      # >>> TODO
+    dimensions:
+      width: 800      # ← gewijzigd t.o.v. 4" yamls (was 480)
+      height: 480
+    data_pins:
+      red:   [11, 12, 13, 14, 0]   # >>> TODO
+      green: [8, 20, 3, 46, 9, 10] # >>> TODO
+      blue:  [4, 5, 6, 7, 15]      # >>> TODO
+    init_sequence:
+      - 1             # >>> TODO: init-bytes van jouw 800×480 paneel
+
+i2c:
+  - id: touch_i2c
+    sda: 19           # >>> TODO
+    scl: 45           # >>> TODO
+    scan: true
+
+touchscreen:
+  - platform: gt911
+    id: touch
+    i2c_id: touch_i2c
+    # interrupt_pin / reset_pin: >>> TODO indien aanwezig op jouw board
+
+output:
+  - platform: ledc
+    pin: 38           # >>> TODO: backlight-pin
+    id: backlight_out
+light:
+  - platform: monochromatic
+    output: backlight_out
+    id: backlight
+    name: "Scherm helderheid"
+    restore_mode: ALWAYS_ON
+
+
+# =============================================================================
+#  7.  LVGL
+#
+#  PALET (identiek aan afzuigkap.yaml + alle andere 4" YAMLs):
+#    0x08080A  achtergrond       0x131418  surface
+#    0x1B1C21  surface-2         0x4ADE80  groen (Spotify, status)
+#    0x38BDF8  cyaan (Immich)    0xF5B45A  amber (lampen, temp-warm)
+#    0xFFFFFF  wit               0x6B6E76  muted
+#    0x5A96EB  blauw (regen)     0x9678EB  paars (onweer)
+#
+#  TOPBAR (pag 1–3, 5–6):  height 46  ·  brand-label links  ·  6 dots midden
+#                          klok + status-stip rechts
+#  TIKZONES (alle pag):    left button 60×380 → page.previous OVER_RIGHT 250ms
+#                          right button 60×380 → page.next OVER_LEFT 250ms
+#
+#  6-DOTS INDICATOR (per pagina de actieve stip op positie 0..5):
+#    5 inactive dots: width 6, height 6, radius 3, bg 0xFFFFFF opa 22%
+#    1 active dot:    width 14, height 6, radius 3, bg 0xFFFFFF
+#    flex ROW, gap 6, container width ~80, align TOP_MID, y 20
+#
+# =============================================================================
+lvgl:
+  displays:   [ disp ]
+  touchscreens: [ touch ]
+  color_depth: 16
+  bg_color: 0x08080A
+  text_font: font_label
+
+  pages:
+
+    # =========================================================================
+    #  PAG 1 — SPOTIFY PLAYER
+    #  Layout 800×480:
+    #    TOPBAR (h=46): brand "SPOTIFY" | 6 dots (dot 0 actief) | klok
+    #    BODY (h=434): flex ROW
+    #      LEFT PANEL  (w=310): album-art 220×220 + bloom-glow + playlist-context
+    #      DIVIDER (w=1, h=380): 0x131418
+    #      RIGHT PANEL (w=489): controls (zie hieronder)
+    #
+    #  RIGHT PANEL inhoud (top→bottom):
+    #    "NU SPEELT · <sp_device>" — font_meta, kleur 0x6B6E76, letterspacing 2
+    #    Songtitel (sp_title_lbl)  — font_title (38px), wit, long_mode DOT, width 450
+    #    Artiest (sp_artist_lbl)   — font_meta, 0xC8C8CE, long_mode DOT, width 450
+    #    Chip-rij (flex ROW gap 8) — 4 labels: genre A, genre B, genre C, duur "3:38"
+    #                                bg 0x1B1C21, border 0x2A2B30, radius 999, pad 4 12
+    #    Progress slider (sp_progress) — width 450, h 5, 0-1000, bg 0x4D4D52
+    #                                    indicator bg 0xFFFFFF  knob bg 0xFFFFFF pad 5
+    #                                    on_release → media_player.media_seek (zelfde als spotify.yaml §4)
+    #    Tijdlabels: sp_pos_lbl LEFT, sp_dur_lbl RIGHT — font_meta 0xC8C8CE
+    #    Transport rij (flex ROW, space-between, w 450):
+    #      sp_shuffle_btn 38×38 radius 19 bg 0xFFFFFF opa 12%  → media_player.shuffle_set
+    #      prev-btn       38×38 radius 19 bg 0xFFFFFF opa 12%  → media_player.media_previous_track
+    #      sp_play_btn    62×62 radius 31 bg 0x4ADE80          → media_player.media_play_pause
+    #      next-btn       38×38 radius 19 bg 0xFFFFFF opa 12%  → media_player.media_next_track
+    #      sp_repeat_btn  38×38 radius 19 bg 0xFFFFFF opa 12%  → media_player.repeat_set
+    #    Volume rij: volume-icoon + sp_volume_sld (slider w 350 h 5) + sp_vol_lbl
+    #    Volgende-track-balk: bg 0x131418, radius 12, border 0x1B1C21
+    #                         "VOLGENDE" label + divider + sp_next_art (32×32) +
+    #                         sp_next_title_lbl + sp_next_dur_lbl
+    # =========================================================================
+    - id: spotify_player_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # topbar
+        - obj:
+            id: sp_topbar
+            width: 800
+            height: 46
+            align: TOP_MID
+            bg_color: 0x08080A
+            bg_opa: COVER
+            border_width: 0
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            widgets:
+              - label: { text: "SPOTIFY", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: LEFT_MID, x: 24 }
+              # 6-dots indicator: dot 0 actief (width 14), dots 1-5 inactief (width 6)
+              - obj:
+                  id: sp1_dots
+                  align: CENTER
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - label: { id: sp1_clock, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: RIGHT_MID, x: -38 }
+              - obj: { width: 7, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0, align: RIGHT_MID, x: -24 }
+
+        # body: left panel
+        - obj:
+            id: sp_left
+            x: 0
+            y: 46
+            width: 310
+            height: 434
+            bg_color: 0x000000
+            bg_opa: 45%
+            border_color: 0x131418
+            border_width: 1
+            border_side: RIGHT
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              # bloom glow achter album-art (radiale gradient — aproximeer met obj + opa blur)
+              - obj:
+                  id: sp_bloom
+                  width: 260
+                  height: 260
+                  align: TOP_MID
+                  y: 28
+                  radius: 130
+                  bg_color: 0x5A4AB4
+                  bg_opa: 28%
+                  border_width: 0
+              # album art image widget
+              - image:
+                  id: sp_art_player
+                  src: album_art
+                  align: TOP_MID
+                  y: 32
+              # playlist context
+              - label: { text: "VAN PLAYLIST", text_font: font_meta, text_color: 0x6B6E76, align: BOTTOM_MID, y: -44, letter_space: 2 }
+              - label: { id: sp1_playlist_lbl, text: "Avond Chill · 42 nummers", text_font: font_meta, text_color: 0x6B6E76, text_opa: 80%, align: BOTTOM_MID, y: -26 }
+
+        # body: right panel
+        - obj:
+            id: sp_right
+            x: 311
+            y: 46
+            width: 489
+            height: 434
+            bg_opa: TRANSP
+            border_width: 0
+            pad_left: 28
+            pad_right: 28
+            pad_top: 20
+            pad_bottom: 14
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: COLUMN, pad_row: 0 }
+            widgets:
+              # context strip
+              - label: { id: sp_context_lbl, text: "NU SPEELT · WOONKAMER", text_font: font_meta, text_color: 0x6B6E76, letter_space: 1 }
+              # titel
+              - label: { id: sp_title_lbl, text: "Midnight City", text_font: font_title, text_color: 0xFFFFFF, long_mode: DOT, width: 440 }
+              # artiest
+              - label: { id: sp_artist_lbl, text: "M83 · Hurry Up, We're Dreaming · 2011", text_font: font_meta, text_color: 0xC8C8CE, long_mode: DOT, width: 440 }
+              # genre-chips (flex rij)
+              - obj:
+                  id: sp_chips
+                  width: 440
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, pad_column: 8 }
+                  widgets:
+                    - label: { id: sp_chip0, text: "Synth-pop",  text_font: font_meta, text_color: 0xC8C8CE, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1, radius: 999, pad_top: 4, pad_bottom: 4, pad_left: 10, pad_right: 10 }
+                    - label: { id: sp_chip1, text: "Electropop", text_font: font_meta, text_color: 0xC8C8CE, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1, radius: 999, pad_top: 4, pad_bottom: 4, pad_left: 10, pad_right: 10 }
+                    - label: { id: sp_dur_chip, text: "3:38",    text_font: font_meta, text_color: 0xC8C8CE, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1, radius: 999, pad_top: 4, pad_bottom: 4, pad_left: 10, pad_right: 10 }
+              # progress slider + tijdlabels
+              - slider:
+                  id: sp_progress
+                  width: 440
+                  height: 5
+                  min_value: 0
+                  max_value: 1000
+                  value: 330
+                  bg_color: 0x4D4D52
+                  indicator: { bg_color: 0xFFFFFF, radius: 3 }
+                  knob: { bg_color: 0xFFFFFF, pad_all: 5 }
+                  on_release:
+                    - homeassistant.action:
+                        action: media_player.media_seek
+                        data: { entity_id: media_player.spotify }   # >>> TODO
+                        data_template: { seek_position: "{{ pos }}" }
+                        variables:
+                          pos: !lambda 'return (lv_slider_get_value(id(sp_progress)) / 1000.0) * id(sp_duration).state;'
+              - obj:
+                  width: 440
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - label: { id: sp_pos_lbl, text: "1:14", text_font: font_meta, text_color: 0xC8C8CE, align: LEFT_MID }
+                    - label: { id: sp_dur_lbl, text: "3:38", text_font: font_meta, text_color: 0xC8C8CE, align: RIGHT_MID }
+              # transport rij
+              - obj:
+                  id: sp_transport
+                  width: 440
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_main: SPACE_BETWEEN, flex_align_cross: CENTER }
+                  widgets:
+                    - button:
+                        id: sp_shuffle_btn
+                        width: 38
+                        height: 38
+                        radius: 19
+                        bg_color: 0xFFFFFF
+                        bg_opa: 12%
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.shuffle_set
+                              data: { entity_id: media_player.spotify }   # >>> TODO
+                              data_template: { shuffle: "{{ sh }}" }
+                              variables: { sh: !lambda 'return id(sp_shuffle).state ? "false" : "true";' }
+                        widgets:
+                          - label: { id: sp_shuffle_lbl, text: "\U000F049D", text_font: font_sp_ctl, text_color: 0x9A9AA0, align: CENTER }
+                    - button:
+                        width: 38
+                        height: 38
+                        radius: 19
+                        bg_color: 0xFFFFFF
+                        bg_opa: 12%
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action: { action: media_player.media_previous_track, data: { entity_id: media_player.spotify } }   # >>> TODO
+                        widgets:
+                          - label: { text: "\U000F04AE", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER }
+                    - button:
+                        id: sp_play_btn
+                        width: 62
+                        height: 62
+                        radius: 31
+                        bg_color: 0x4ADE80
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action: { action: media_player.media_play_pause, data: { entity_id: media_player.spotify } }   # >>> TODO
+                        widgets:
+                          - label: { id: sp_play_lbl, text: "\U000F03E4", text_font: font_sp_ctl, text_color: 0x07140D, align: CENTER }
+                    - button:
+                        width: 38
+                        height: 38
+                        radius: 19
+                        bg_color: 0xFFFFFF
+                        bg_opa: 12%
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action: { action: media_player.media_next_track, data: { entity_id: media_player.spotify } }   # >>> TODO
+                        widgets:
+                          - label: { text: "\U000F04AD", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER }
+                    - button:
+                        id: sp_repeat_btn
+                        width: 38
+                        height: 38
+                        radius: 19
+                        bg_color: 0xFFFFFF
+                        bg_opa: 12%
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: media_player.repeat_set
+                              data: { entity_id: media_player.spotify }   # >>> TODO
+                              data_template: { repeat: "{{ rp }}" }
+                              variables: { rp: !lambda 'return id(sp_repeat).state == std::string("off") ? "all" : "off";' }
+                        widgets:
+                          - label: { id: sp_repeat_lbl, text: "\U000F0456", text_font: font_sp_ctl, text_color: 0x9A9AA0, align: CENTER }
+              # volume
+              - obj:
+                  width: 440
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 10 }
+                  widgets:
+                    - label: { text: "\U000F057E", text_font: font_sp_mini, text_color: 0xC8C8CE }
+                    - slider:
+                        id: sp_volume_sld
+                        flex_grow: 1
+                        height: 5
+                        min_value: 0
+                        max_value: 100
+                        value: 62
+                        bg_color: 0x4D4D52
+                        indicator: { bg_color: 0xE6E6E6, radius: 3 }
+                        knob: { bg_color: 0xFFFFFF, pad_all: 4 }
+                        on_release:
+                          - homeassistant.action:
+                              action: media_player.volume_set
+                              data: { entity_id: media_player.spotify }   # >>> TODO
+                              data_template: { volume_level: "{{ v }}" }
+                              variables: { v: !lambda 'return lv_slider_get_value(id(sp_volume_sld)) / 100.0;' }
+                    - label: { id: sp_vol_lbl, text: "62", text_font: font_meta, text_color: 0xC8C8CE, width: 24 }
+              # volgende track balk
+              - obj:
+                  id: sp_next_bar
+                  width: 440
+                  height: 52
+                  bg_color: 0x131418
+                  border_color: 0x1B1C21
+                  border_width: 1
+                  radius: 12
+                  pad_left: 12
+                  pad_right: 12
+                  scrollbar_mode: 'OFF'
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 10 }
+                  widgets:
+                    - label: { text: "VOLGENDE", text_font: font_meta, text_color: 0x6B6E76, letter_space: 2 }
+                    - obj: { width: 1, height: 20, bg_color: 0x1B1C21, border_width: 0 }
+                    - obj: { id: sp_next_art, width: 32, height: 32, radius: 6, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1 }
+                    - obj:
+                        flex_grow: 1
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: { id: sp_next_title_lbl, text: "Wait", text_font: font_label, text_color: 0xFFFFFF, align: TOP_LEFT, y: 4 }
+                          - label: { id: sp_next_artist_lbl, text: "M83", text_font: font_meta, text_color: 0x6B6E76, align: BOTTOM_LEFT, y: -4 }
+                    - label: { id: sp_next_dur_lbl, text: "4:22", text_font: font_meta, text_color: 0x6B6E76 }
+
+        # tikzones navigatie
+        - button: { x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+    # =========================================================================
+    #  PAG 2 — SPOTIFY SONGTEKST
+    #  Layout 800×480:
+    #    TOPBAR (h=46): "SPOTIFY" | 6 dots (dot 1 actief) | klok
+    #    BODY: flex ROW
+    #      SIDEBAR (w=256): sp_art_sidebar (212×212) + titel + like-knop +
+    #                       progress-bar + transport (compact, 46×46 play) + vol-slider
+    #      CONTENT (w=544): scrollbare lyrics-container (overflow HIDDEN)
+    #                       + fade-overlays top/bottom + "songtekst"-pill rechtsboven
+    #
+    #  LYRICS CONTAINER (id: lyr_scroll):
+    #    Positie: x=256 y=46 width=544 height=434
+    #    Overflow: HIDDEN (geen scrollbar zichtbaar)
+    #    Kind-obj (id: lyr_inner, flex COLUMN, pad_row 0):
+    #      13 labels (id: lyr0 … lyr12), height elk 52px, pad_left 36
+    #      font_lyr (21px), color actief=0xFFFFFF, verleden=0x2A2B30, toekomst=0x3A3B40
+    #      Actieve regel: scale 105% (lv_obj_set_style_transform_scale)
+    #    refresh_lyrics scrollt lyr_inner met lv_obj_set_style_translate_y:
+    #      offset = 217 - (lyr_active * 52 + 26)  (centeert actieve regel)
+    #
+    #  LYRIC TEKSTEN (hardcoded, zelfde als g7-spotify.jsx LYRICS array):
+    #    0:"♪"  1:"Lichten over de snelweg, de stad ademt traag"
+    #    2:"We rijden door de nacht, geen reden om te stoppen"
+    #    3:"Jij draait het raampje open, de wind neemt het over"
+    #    4:"En alles wat we zochten ligt hier voor ons"
+    #    5:"Wakker, wakker — de morgen is van ons"
+    #    6:"Wakker, wakker — we laten het maar gaan"
+    #    7:"Neonlicht kleurt de hemel boven het asfalt"
+    #    8:"Een kort moment dat eindeloos lijkt te duren"
+    #    9:"Hou vast, hou vast, voor het straks weer verdwijnt"
+    #   10:"Wakker, wakker — de morgen is van ons"
+    #   11:"Wakker, wakker — we laten het maar gaan"
+    #   12:"♪"
+    #
+    #  TIMESTAMPS voor lyr_active (uit g7-spotify.jsx LYRICS[].t):
+    #    {0,12,22,32,42,53,63,74,85,96,107,118,130}
+    #    refresh_lyrics vergelijkt sp_position.state met deze waarden (C++ array)
+    # =========================================================================
+    - id: spotify_lyrics_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # topbar (dot 1 actief)
+        - obj:
+            width: 800
+            height: 46
+            align: TOP_MID
+            bg_color: 0x08080A
+            bg_opa: COVER
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            widgets:
+              - label: { text: "SPOTIFY", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: LEFT_MID, x: 24 }
+              - obj:
+                  align: CENTER
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - label: { id: sp2_clock, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: RIGHT_MID, x: -38 }
+              - obj: { width: 7, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0, align: RIGHT_MID, x: -24 }
+
+        # sidebar links (zelfde structuur als sp_left maar smaller, met compact transport)
+        - obj:
+            id: sp2_sidebar
+            x: 0
+            y: 46
+            width: 256
+            height: 434
+            bg_color: 0x000000
+            bg_opa: 45%
+            border_color: 0x131418
+            border_width: 1
+            border_side: RIGHT
+            pad_left: 20
+            pad_right: 18
+            pad_top: 18
+            pad_bottom: 16
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: COLUMN, pad_row: 0 }
+            widgets:
+              - image: { id: sp_art_sidebar, src: album_art, align: CENTER }
+              - obj:
+                  width: 100%
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - label: { id: sp2_title_lbl, text: "Midnight City", text_font: font_label, text_color: 0xFFFFFF, long_mode: DOT, width: 172 }
+                    - button:
+                        id: sp_like_btn
+                        align: RIGHT_MID
+                        width: 32
+                        height: 32
+                        radius: 16
+                        bg_opa: TRANSP
+                        border_width: 0
+                        on_click:
+                          - lambda: 'id(sp_liked) = !id(sp_liked);'
+                          - script.execute: refresh_spotify
+                          # >>> TODO: koppel hier script.spotify_toggle_like of HA-actie
+                        widgets:
+                          - label: { id: sp_like_lbl, text: "\U000F02D1", text_font: font_sp_mini, text_color: 0x4ADE80, align: CENTER }
+              - label: { id: sp2_artist_lbl, text: "M83", text_font: font_meta, text_color: 0x6B6E76, long_mode: DOT, width: 212 }
+              # progress bar compact
+              - slider:
+                  id: sp2_progress
+                  width: 212
+                  height: 4
+                  min_value: 0
+                  max_value: 1000
+                  value: 330
+                  bg_color: 0x4D4D52
+                  indicator: { bg_color: 0xFFFFFF, radius: 2 }
+                  knob: { bg_color: 0xFFFFFF, pad_all: 4 }
+                  on_release:
+                    - homeassistant.action:
+                        action: media_player.media_seek
+                        data: { entity_id: media_player.spotify }   # >>> TODO
+                        data_template: { seek_position: "{{ pos }}" }
+                        variables: { pos: !lambda 'return (lv_slider_get_value(id(sp2_progress)) / 1000.0) * id(sp_duration).state;' }
+              - obj:
+                  width: 212
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - label: { id: sp2_pos_lbl, text: "1:14", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID }
+                    - label: { id: sp2_dur_lbl, text: "3:38", text_font: font_meta, text_color: 0x6B6E76, align: RIGHT_MID }
+              # compact transport
+              - obj:
+                  width: 212
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_main: SPACE_BETWEEN, flex_align_cross: CENTER }
+                  widgets:
+                    - button: { id: sp2_shuffle, width: 28, height: 28, radius: 14, bg_opa: TRANSP, border_width: 0, on_click: [ homeassistant.action: { action: media_player.shuffle_set, data: { entity_id: media_player.spotify }, data_template: { shuffle: "{{ sh }}" }, variables: { sh: !lambda 'return id(sp_shuffle).state ? "false" : "true";' } } ], widgets: [ { label: { id: sp2_shuf_lbl, text: "\U000F049D", text_font: font_sp_ctl, text_color: 0x9A9AA0, align: CENTER } } ] }
+                    - button: { width: 28, height: 28, radius: 14, bg_opa: TRANSP, border_width: 0, on_click: [ homeassistant.action: { action: media_player.media_previous_track, data: { entity_id: media_player.spotify } } ], widgets: [ { label: { text: "\U000F04AE", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER } } ] }
+                    - button: { id: sp2_play_btn, width: 46, height: 46, radius: 23, bg_color: 0x4ADE80, border_width: 0, on_click: [ homeassistant.action: { action: media_player.media_play_pause, data: { entity_id: media_player.spotify } } ], widgets: [ { label: { id: sp2_play_lbl, text: "\U000F03E4", text_font: font_sp_ctl, text_color: 0x07140D, align: CENTER } } ] }
+                    - button: { width: 28, height: 28, radius: 14, bg_opa: TRANSP, border_width: 0, on_click: [ homeassistant.action: { action: media_player.media_next_track, data: { entity_id: media_player.spotify } } ], widgets: [ { label: { text: "\U000F04AD", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER } } ] }
+                    - button: { id: sp2_repeat_btn, width: 28, height: 28, radius: 14, bg_opa: TRANSP, border_width: 0, on_click: [ homeassistant.action: { action: media_player.repeat_set, data: { entity_id: media_player.spotify }, data_template: { repeat: "{{ rp }}" }, variables: { rp: !lambda 'return id(sp_repeat).state == std::string("off") ? "all" : "off";' } } ], widgets: [ { label: { id: sp2_rep_lbl, text: "\U000F0456", text_font: font_sp_ctl, text_color: 0x9A9AA0, align: CENTER } } ] }
+              # volume compact
+              - obj:
+                  width: 212
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8 }
+                  widgets:
+                    - label: { text: "\U000F057E", text_font: font_sp_mini, text_color: 0xC8C8CE }
+                    - slider:
+                        id: sp2_volume_sld
+                        flex_grow: 1
+                        height: 4
+                        min_value: 0
+                        max_value: 100
+                        bg_color: 0x4D4D52
+                        indicator: { bg_color: 0xE6E6E6, radius: 2 }
+                        knob: { bg_color: 0xFFFFFF, pad_all: 3 }
+                        on_release:
+                          - homeassistant.action: { action: media_player.volume_set, data: { entity_id: media_player.spotify }, data_template: { volume_level: "{{ v }}" }, variables: { v: !lambda 'return lv_slider_get_value(id(sp2_volume_sld)) / 100.0;' } }
+
+        # lyrics container (overflow hidden, translateY gestuurd via refresh_lyrics)
+        - obj:
+            id: lyr_scroll
+            x: 256
+            y: 46
+            width: 544
+            height: 434
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            # lyr_inner: verticale kolom van 13 labels; y-positie via lv_obj_set_style_translate_y
+            widgets:
+              - obj:
+                  id: lyr_inner
+                  width: 544
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: COLUMN, pad_row: 0 }
+                  widgets:
+                    - label: { id: lyr0,  text: "\u266A",                                             text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr1,  text: "Lichten over de snelweg, de stad ademt traag",       text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36, long_mode: DOT, width: 500 }
+                    - label: { id: lyr2,  text: "We rijden door de nacht, geen reden om te stoppen", text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36, long_mode: DOT, width: 500 }
+                    - label: { id: lyr3,  text: "Jij draait het raampje open, de wind neemt het over", text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36, long_mode: DOT, width: 500 }
+                    - label: { id: lyr4,  text: "En alles wat we zochten ligt hier voor ons",        text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr5,  text: "Wakker, wakker \u2014 de morgen is van ons",        text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr6,  text: "Wakker, wakker \u2014 we laten het maar gaan",      text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr7,  text: "Neonlicht kleurt de hemel boven het asfalt",        text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr8,  text: "Een kort moment dat eindeloos lijkt te duren",      text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr9,  text: "Hou vast, hou vast, voor het straks weer verdwijnt",text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36, long_mode: DOT, width: 500 }
+                    - label: { id: lyr10, text: "Wakker, wakker \u2014 de morgen is van ons",        text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr11, text: "Wakker, wakker \u2014 we laten het maar gaan",      text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+                    - label: { id: lyr12, text: "\u266A",                                             text_font: font_lyr, text_color: 0x3A3B40, height: 52, pad_left: 36 }
+
+        # fade-overlays lyrics
+        - obj: { x: 256, y: 46,  width: 544, height: 72,  bg_color: 0x08080A, bg_grad_color: 0x08080A, bg_grad_dir: VER, bg_main_stop: 0, bg_grad_stop: 200, bg_opa: 90%, border_width: 0, radius: 0 }
+        - obj: { x: 256, y: 408, width: 544, height: 72,  bg_color: 0x08080A, bg_grad_color: 0x08080A, bg_grad_dir: VER, bg_main_stop: 200, bg_grad_stop: 0, bg_opa: 90%, border_width: 0, radius: 0 }
+        # "songtekst" badge
+        - obj: { id: sp2_badge, align: TOP_RIGHT, x: -20, y: 66, height: 28, width: 110, radius: 14, bg_color: 0x000000, bg_opa: 55%, border_width: 0, widgets: [ { label: { text: "songtekst", text_font: font_meta, text_color: 0xFFFFFF, align: CENTER } } ] }
+        # tikzones
+        - button: { x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+    # =========================================================================
+    #  PAG 3 — SPOTIFY WIST JE DAT
+    #  Layout 800×480:
+    #    TOPBAR (h=46): "SPOTIFY" | 6 dots (dot 2 actief) | klok
+    #    BODY: flex ROW
+    #      SIDEBAR (w=256): zelfde als pag 2 — sp_art_sidebar + controls
+    #                       (widget-IDs: sp3_* om conflict te vermijden)
+    #      CONTENT (w=544): artiest-header + stats + divider + "WIST JE DAT?" +
+    #                       fact-tekst + dots-indicator + album-strip
+    #
+    #  ARTIEST-HEADER:
+    #    Artiest-avatar obj 56×56 (radius 28, bg 0x1B1C21, border, JetBrains Mono "foto")
+    #    Naam-label: "M83"  font_heading (26px)
+    #    Sub-label: "Synth-pop · Antibes, FR · 2001"  font_meta
+    #    Stats (flex ROW, gap 16, margin-left auto):
+    #      3× obj: getal (font_heading) + label (font_meta, letterspace 2)
+    #      Getallen: "12.4M" / "847" / "#3"   Labels: "LUISTERAARS"/"NUMMERS"/"TREND NL"
+    #
+    #  FACT-TEKST (id: fact_lbl):
+    #    font_subheading (17px), wit, lineheight 1.45, width 480
+    #    Geroteerd via refresh_facts: 4 teksten (hardcoded in C++)
+    #    Inhoud zelfde als g7-spotify.jsx FACTS array:
+    #      0: "M83 is genoemd naar Messier 83 — een spiraalstelsel op 15 miljoen lichtjaar afstand."
+    #      1: "Achter M83 zit de Franse muzikant Anthony Gonzalez. Begonnen als duo, nu soloproject."
+    #      2: "'Midnight City' verscheen in 2011 op het dubbelalbum Hurry Up, We're Dreaming."
+    #      3: "Het nummer eindigt met een saxofoonsolo — ongewoon voor een synthpop-hit."
+    #
+    #  FACT-DOTS (id: fact_dot_0..3): 4 obj, actief=width 20 bg 0x4ADE80, inactief=width 7 bg 0x3A3B40
+    #  ALBUM-STRIP: 3 obj 44×44 radius 8 (bg 0x1B1C21) + label (9px)
+    #    Titels: "Hurry Up…" / "Saturdays=Youth" / "Dead Cities…"
+    # =========================================================================
+    - id: spotify_facts_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # topbar (dot 2 actief)
+        - obj:
+            width: 800
+            height: 46
+            align: TOP_MID
+            bg_color: 0x08080A
+            bg_opa: COVER
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            widgets:
+              - label: { text: "SPOTIFY", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: LEFT_MID, x: 24 }
+              - obj:
+                  align: CENTER
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - label: { id: sp3_clock, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: RIGHT_MID, x: -38 }
+              - obj: { width: 7, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0, align: RIGHT_MID, x: -24 }
+
+        # sidebar (zelfde layout als pag 2 — gebruik aparte widget-IDs sp3_*)
+        # >>> Bouw op basis van sp2_sidebar maar met IDs: sp3_title_lbl, sp3_play_btn, sp3_progress, etc.
+        - obj:
+            id: sp3_sidebar
+            x: 0
+            y: 46
+            width: 256
+            height: 434
+            bg_color: 0x000000
+            bg_opa: 45%
+            border_color: 0x131418
+            border_width: 1
+            border_side: RIGHT
+            pad_left: 20
+            pad_right: 18
+            pad_top: 18
+            pad_bottom: 16
+            scrollbar_mode: 'OFF'
+            # >>> TODO: zelfde widget-tree als sp2_sidebar maar met IDs sp3_*
+            #           sp3_title_lbl, sp3_artist_lbl, sp3_progress (slider),
+            #           sp3_pos_lbl, sp3_dur_lbl, sp3_play_btn, sp3_play_lbl,
+            #           sp3_shuf_btn, sp3_rep_btn, sp3_volume_sld
+
+        # content rechts
+        - obj:
+            id: sp3_content
+            x: 256
+            y: 46
+            width: 544
+            height: 434
+            bg_opa: TRANSP
+            border_width: 0
+            pad_left: 24
+            pad_right: 28
+            pad_top: 20
+            pad_bottom: 16
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: COLUMN, pad_row: 0 }
+            widgets:
+              # artiest-header rij
+              - obj:
+                  width: 100%
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 14 }
+                  widgets:
+                    - obj: { id: sp3_avatar, width: 56, height: 56, radius: 28, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1 }
+                    - obj:
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        widgets:
+                          - label: { text: "M83", text_font: font_heading, text_color: 0xFFFFFF }
+                          - label: { text: "Synth-pop \u00b7 Antibes, FR \u00b7 2001", text_font: font_meta, text_color: 0x6B6E76, align: BOTTOM_LEFT }
+                    - obj:
+                        flex_grow: 1
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        layout: { type: flex, flex_flow: ROW, flex_align_main: END, pad_column: 16 }
+                        widgets:
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { label: { text: "12.4M", text_font: font_heading, text_color: 0xFFFFFF, align: TOP_MID } }, { label: { text: "LUISTERAARS", text_font: font_meta, text_color: 0x6B6E76, letter_space: 1, align: BOTTOM_MID } } ] }
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { label: { text: "847",   text_font: font_heading, text_color: 0xFFFFFF, align: TOP_MID } }, { label: { text: "NUMMERS",    text_font: font_meta, text_color: 0x6B6E76, letter_space: 1, align: BOTTOM_MID } } ] }
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { label: { text: "#3",    text_font: font_heading, text_color: 0xFFFFFF, align: TOP_MID } }, { label: { text: "TREND NL",  text_font: font_meta, text_color: 0x6B6E76, letter_space: 1, align: BOTTOM_MID } } ] }
+              # divider
+              - obj: { width: 100%, height: 1, bg_color: 0x131418, border_width: 0 }
+              # eyebrow
+              - label: { text: "WIST JE DAT?", text_font: font_brand, text_color: 0x4ADE80, letter_space: 2 }
+              # fact-tekst
+              - label:
+                  id: fact_lbl
+                  text: "M83 is genoemd naar Messier 83 \u2014 een spiraalstelsel op 15 miljoen lichtjaar afstand."
+                  text_font: font_subheading
+                  text_color: 0xFFFFFF
+                  long_mode: WRAP
+                  width: 480
+                  flex_grow: 1
+              # fact-dots + album-strip (bottom)
+              - obj:
+                  width: 100%
+                  height: LV_SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_main: SPACE_BETWEEN, flex_align_cross: CENTER }
+                  widgets:
+                    - obj:
+                        id: fact_dots_container
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 7 }
+                        widgets:
+                          - obj: { id: fact_dot_0, width: 20, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0 }
+                          - obj: { id: fact_dot_1, width: 7,  height: 7, radius: 4, bg_color: 0x3A3B40, border_width: 0 }
+                          - obj: { id: fact_dot_2, width: 7,  height: 7, radius: 4, bg_color: 0x3A3B40, border_width: 0 }
+                          - obj: { id: fact_dot_3, width: 7,  height: 7, radius: 4, bg_color: 0x3A3B40, border_width: 0 }
+                    - obj:
+                        id: album_strip
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8 }
+                        widgets:
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { obj: { width: 44, height: 44, radius: 8, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1 } }, { label: { text: "Hurry Up\u2026",    text_font: font_meta, text_color: 0x6B6E76, long_mode: DOT, width: 44, align: BOTTOM_MID } } ] }
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { obj: { width: 44, height: 44, radius: 8, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1 } }, { label: { text: "Saturdays\u2026", text_font: font_meta, text_color: 0x6B6E76, long_mode: DOT, width: 44, align: BOTTOM_MID } } ] }
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, widgets: [ { obj: { width: 44, height: 44, radius: 8, bg_color: 0x1B1C21, border_color: 0x2A2B30, border_width: 1 } }, { label: { text: "Dead Cities\u2026", text_font: font_meta, text_color: 0x6B6E76, long_mode: DOT, width: 44, align: BOTTOM_MID } } ] }
+
+        # tikzones
+        - button: { x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+    # =========================================================================
+    #  PAG 4 — IMMICH FULL-BLEED  (Variant A, 800×480)
+    #  (Gebaseerd op ImmichFullbleedWide uit g7-immich.jsx)
+    #
+    #  Geen topbar — alle UI zit IN de foto-scrims.
+    #
+    #  FOTO:
+    #    image widget id=immich_photo, src=immich_img, 800×480, align CENTER
+    #
+    #  SCRIM BOVEN (h=120, TOP_MID, y=0):
+    #    bg 0x000000 bg_opa 60% → transparant (gradient via bg_grad_dir VER main_stop 200)
+    #    Inhoud:
+    #      "IMMICH"      LEFT x=30, y=22  font_brand 0xFFFFFF opa 90%
+    #      sync-stip     obj 7×7 radius 4 bg 0x4ADE80  RIGHT x=-90 y=26
+    #      "SYNCHROON"   label font_meta 0x6B6E76 RIGHT x=-100 y=26
+    #      imm_clock_lbl RIGHT x=-30 y=22  font_clock 0x6B6E76
+    #
+    #  SCRIM ONDER (h=190, BOTTOM_MID, y=0):
+    #    bg 0x000000 bg_opa 80% → transparant (gradient VER main_stop 0 stop 200)
+    #    Inhoud:
+    #      imm_place_lbl BOTTOM_LEFT x=30 y=-52  font_title (38px) 0xFFFFFF
+    #      imm_date_lbl  BOTTOM_LEFT x=30 y=-26  font_label 0xC8C8CE
+    #      imm_album_lbl BOTTOM_RIGHT x=-30 y=-26 font_meta 0x38BDF8
+    #                    bg color-mix(0x38BDF8 16%), border 0x38BDF8 border_width 1 radius 999 pad 4 10
+    #      5 segment-voortgangsbars:
+    #        id imm_seg_0..4  BOTTOM_LEFT x=30+(n*80) y=-14  width 64 height 3
+    #        radius 2 bg 0xFFFFFF opa 30% → actieve seg overwritten via refresh_immich (opa 100%)
+    #        (alternatief: gebruik bar widgets ipv obj)
+    #
+    #  NAVIGATIE DOTS (6, dot 3 actief):
+    #    align TOP_MID y=22  — dezelfde structuur als andere pagina's
+    #    6 dots in flex ROW boven in de scrim, zodat ze leesbaar zijn over de foto
+    #
+    #  REFRESH:
+    #    immich_url text_sensor → set_url + update (zie §5 text_sensor)
+    #    immich_place / immich_date / immich_album → directe lvgl.label.update
+    #    Geen aparte refresh_immich script nodig — alles via on_value callbacks
+    # =========================================================================
+    - id: immich_page
+      bg_color: 0x000000
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # foto full-bleed
+        - image:
+            id: immich_photo
+            src: immich_img
+            align: CENTER
+            x: 0
+            y: 0
+        # scrim boven
+        - obj:
+            align: TOP_MID
+            x: 0
+            y: 0
+            width: 800
+            height: 120
+            bg_color: 0x000000
+            bg_grad_color: 0x000000
+            bg_grad_dir: VER
+            bg_main_stop: 200
+            bg_grad_stop: 0
+            bg_opa: 62%
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { text: "IMMICH", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 90%, align: TOP_LEFT, x: 30, y: 22 }
+              # 6-dots (dot 3 actief)
+              - obj:
+                  align: TOP_MID
+                  y: 22
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - label: { id: imm_clock_lbl, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: TOP_RIGHT, x: -30, y: 22 }
+              # sync stip
+              - obj: { width: 7, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0, align: TOP_RIGHT, x: -100, y: 26 }
+              - label: { text: "SYNCHROON", text_font: font_meta, text_color: 0x6B6E76, letter_space: 1, align: TOP_RIGHT, x: -112, y: 26 }
+
+        # scrim onder
+        - obj:
+            align: BOTTOM_MID
+            x: 0
+            y: 0
+            width: 800
+            height: 190
+            bg_color: 0x000000
+            bg_grad_color: 0x000000
+            bg_grad_dir: VER
+            bg_main_stop: 0
+            bg_grad_stop: 200
+            bg_opa: 80%
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { id: imm_place_lbl, text: "\u2014", text_font: font_title, text_color: 0xFFFFFF, long_mode: DOT, width: 500, align: BOTTOM_LEFT, x: 30, y: -52 }
+              - label: { id: imm_date_lbl,  text: "\u2014", text_font: font_label, text_color: 0xC8C8CE, align: BOTTOM_LEFT,  x: 30,  y: -26 }
+              - label: { id: imm_album_lbl, text: "\u2014", text_font: font_meta,  text_color: 0x38BDF8, bg_color: 0x0A2A3A, border_color: 0x38BDF8, border_width: 1, radius: 999, pad_top: 4, pad_bottom: 4, pad_left: 10, pad_right: 10, align: BOTTOM_RIGHT, x: -30, y: -22 }
+              # voortgangs-segmenten (5 stuks)
+              - obj: { id: imm_seg_0, x: 30,  y: -14, align: BOTTOM_LEFT, width: 120, height: 3, radius: 2, bg_color: 0xFFFFFF, bg_opa: 100%, border_width: 0 }
+              - obj: { id: imm_seg_1, x: 158, y: -14, align: BOTTOM_LEFT, width: 120, height: 3, radius: 2, bg_color: 0xFFFFFF, bg_opa: 25%,  border_width: 0 }
+              - obj: { id: imm_seg_2, x: 286, y: -14, align: BOTTOM_LEFT, width: 120, height: 3, radius: 2, bg_color: 0xFFFFFF, bg_opa: 25%,  border_width: 0 }
+              - obj: { id: imm_seg_3, x: 414, y: -14, align: BOTTOM_LEFT, width: 120, height: 3, radius: 2, bg_color: 0xFFFFFF, bg_opa: 25%,  border_width: 0 }
+              - obj: { id: imm_seg_4, x: 542, y: -14, align: BOTTOM_LEFT, width: 120, height: 3, radius: 2, bg_color: 0xFFFFFF, bg_opa: 25%,  border_width: 0 }
+
+        # tikzones
+        - button: { x: 0, y: 60, width: 60, height: 360, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 60, width: 60, height: 360, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+    # =========================================================================
+    #  PAG 5 — WEERSCHERM  (Variant "hero + uurstrip + 5-daagse", 800×480)
+    #  (Gebaseerd op WeatherScreen uit g7-home.jsx + weerscherm.yaml)
+    #
+    #  TOPBAR (h=46):  "THUIS" | 6 dots (dot 4 actief) | "Maastricht · klok"
+    #
+    #  HERO-STRIP (h=104, border BOTTOM 0x131418):
+    #    Weericoon (wx_icon): font_wx_big (64px), kleur via accent(), TOP_LEFT x=24 y=8
+    #    Grote temp (wx_temp): font_number (72px), wit, TOP_LEFT x=108 y=0
+    #    Conditie (wx_cond): font_subheading, wit, TOP_LEFT x=110 y=76
+    #    Stat-chips (flex ROW gap 8, x=240 y=12):
+    #      6 chips: WIND / VOCHTIG / GEVOELS / UV-INDEX / ZICHT / NEERSLAG
+    #      bg 0x131418, border 0x1B1C21, radius 10, pad 5 10
+    #      Elk chip: label boven (font_meta 0x6B6E76 letterspace 2) + waarde onder (font_label 0xFFFFFF)
+    #
+    #  UURSTRIP (h=66, border BOTTOM 0x131418):
+    #    8 kolommen flex ROW, border RIGHT 0x0F0F12 per kolom
+    #    Elk cel: uur-label (font_meta) + wx-icon (font_wx_small) + temp (font_label, kleur=temp_color())
+    #    Actieve cel (Nu): bg 0x131418
+    #    Uur-labels: Nu, 13h, 14h, 15h, 16h, 17h, 18h, 19h
+    #    Widget-IDs: wx_h0_lbl…wx_h7_lbl, wx_h0_icon…wx_h7_icon, wx_h0_temp…wx_h7_temp
+    #    Refresh via ha_temp_now on_value → refresh_weather
+    #
+    #  5-DAAGSE (flex COLUMN, flex 1, pad 6 28):
+    #    5 rijen (id: r0..r4), zelfde structuur als weerscherm.yaml §4 fc_list:
+    #      dagnaam · weericoon · lo-temp · RANGE-bar (temp-kleur) · hi-temp
+    #    Widget-IDs: r0_day…r4_day, r0_icon…r4_icon, r0_lo…r4_lo, r0_bar…r4_bar, r0_hi…r4_hi
+    #    refresh_weather script: identiek aan weerscherm.yaml refresh_weather lambda
+    #      (glyph/accent/tcol helpers + forecast bar schaling op wk_tmin/wk_tmax)
+    # =========================================================================
+    - id: weather_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # topbar
+        - obj:
+            id: wx_topbar
+            width: 800
+            height: 46
+            align: TOP_MID
+            bg_color: 0x08080A
+            bg_opa: COVER
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            widgets:
+              - label: { id: wx_place, text: "THUIS", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: LEFT_MID, x: 24 }
+              - obj:
+                  align: CENTER
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - label: { id: wx_status, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: RIGHT_MID, x: -24 }
+
+        # hero strip
+        - obj:
+            id: wx_hero
+            x: 0
+            y: 46
+            width: 800
+            height: 104
+            bg_opa: TRANSP
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { id: wx_icon, text: "\U000F0595", text_font: font_wx_big, text_color: 0x78B4EB, align: TOP_LEFT, x: 24, y: 6 }
+              - label: { id: wx_temp, text: "19\u00b0",   text_font: font_number, text_color: 0xFFFFFF, align: TOP_LEFT, x: 108, y: 0 }
+              - label: { id: wx_cond, text: "Gedeeltelijk bewolkt", text_font: font_subheading, text_color: 0xFFFFFF, align: TOP_LEFT, x: 110, y: 76 }
+              # stat-chips grid (6 chips)
+              - obj:
+                  id: wx_chips
+                  x: 248
+                  y: 10
+                  width: 530
+                  height: 84
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: ROW, flex_wrap: WRAP, pad_column: 8, pad_row: 6 }
+                  widgets:
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "WIND",     text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_wind, text: "ZW 14 km/h", text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "VOCHTIG",  text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_humi, text: "62%",       text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "GEVOELS",  text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_feel, text: "17\u00b0C",  text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "UV-INDEX", text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_uv,   text: "3 \u00b7 Matig", text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "ZICHT",    text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_vis,  text: "9 km",      text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+                    - obj: { bg_color: 0x131418, border_color: 0x1B1C21, border_width: 1, radius: 10, pad_top: 5, pad_bottom: 5, pad_left: 10, pad_right: 10, widgets: [ { label: { text: "NEERSLAG", text_font: font_meta, text_color: 0x6B6E76, letter_space: 2, align: TOP_LEFT } }, { label: { id: chip_rain, text: "0 mm",      text_font: font_label, text_color: 0xFFFFFF, align: BOTTOM_LEFT } } ] }
+
+        # uurstrip (8 kolommen)
+        - obj:
+            id: wx_hourstrip
+            x: 0
+            y: 150
+            width: 800
+            height: 66
+            bg_opa: TRANSP
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: ROW, pad_column: 0 }
+            widgets:
+              # 8 identieke cel-objecten; actieve (Nu) krijgt bg 0x131418
+              # IDs: wx_h0..wx_h7, daarbinnen wx_h0_lbl/icon/tmp .. wx_h7_lbl/icon/tmp
+              # >>> Bouw 8 obj-items op basis van dit patroon (voor h0=Nu t/m h7=19h):
+              - obj: { id: wx_h0, flex_grow: 1, height: 100%, bg_color: 0x131418, bg_opa: COVER, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h0_lbl,  text: "Nu",   text_font: font_meta,     text_color: 0xFFFFFF } }, { label: { id: wx_h0_icon, text: "\U000F0599", text_font: font_wx_small, text_color: 0xF5B45A } }, { label: { id: wx_h0_tmp,  text: "19\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+              - obj: { id: wx_h1, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h1_lbl,  text: "13h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h1_icon, text: "\U000F0599", text_font: font_wx_small, text_color: 0xF5B45A } }, { label: { id: wx_h1_tmp,  text: "20\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+              - obj: { id: wx_h2, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h2_lbl,  text: "14h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h2_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB } }, { label: { id: wx_h2_tmp,  text: "20\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+              - obj: { id: wx_h3, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h3_lbl,  text: "15h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h3_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB } }, { label: { id: wx_h3_tmp,  text: "19\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+              - obj: { id: wx_h4, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h4_lbl,  text: "16h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h4_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB } }, { label: { id: wx_h4_tmp,  text: "18\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+              - obj: { id: wx_h5, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h5_lbl,  text: "17h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h5_icon, text: "\U000F0597", text_font: font_wx_small, text_color: 0x5A96EB } }, { label: { id: wx_h5_tmp,  text: "17\u00b0", text_font: font_label,    text_color: 0x5A96EB } } ] }
+              - obj: { id: wx_h6, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 1, border_side: RIGHT, border_color: 0x0F0F12, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h6_lbl,  text: "18h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h6_icon, text: "\U000F0597", text_font: font_wx_small, text_color: 0x5A96EB } }, { label: { id: wx_h6_tmp,  text: "16\u00b0", text_font: font_label,    text_color: 0x5A96EB } } ] }
+              - obj: { id: wx_h7, flex_grow: 1, height: 100%, bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, flex_align_main: CENTER, pad_row: 4 }, widgets: [ { label: { id: wx_h7_lbl,  text: "19h",  text_font: font_meta,     text_color: 0x6B6E76 } }, { label: { id: wx_h7_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB } }, { label: { id: wx_h7_tmp,  text: "15\u00b0", text_font: font_label,    text_color: 0x78B4EB } } ] }
+
+        # 5-daagse forecast
+        - obj:
+            id: wx_fc
+            x: 0
+            y: 216
+            width: 800
+            height: 264
+            bg_opa: TRANSP
+            border_width: 0
+            pad_left: 28
+            pad_right: 28
+            pad_top: 6
+            pad_bottom: 8
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: COLUMN, flex_align_main: SPACE_EVENLY, pad_row: 0 }
+            widgets:
+              # 5 rijen — zelfde structuur als weerscherm.yaml §4 fc_list
+              # IDs: r0_day, r0_icon, r0_lo, r0_bar (RANGE-modus), r0_hi  … r4_*
+              - obj: &fc_row_7
+                  width: 100%
+                  height: 44
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  scrollbar_mode: 'OFF'
+                  widgets:
+                    - label: { id: r0_day,  text: "Nu", text_font: font_subheading, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r0_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB, align: LEFT_MID, x: 50 }
+                    - label: { id: r0_lo,   text: "13\u00b0", text_font: font_subheading, text_color: 0x6B6E76, align: LEFT_MID, x: 88 }
+                    - bar:
+                        id: r0_bar
+                        x: 130
+                        width: 580
+                        height: 8
+                        align: LEFT_MID
+                        min_value: 0
+                        max_value: 100
+                        mode: RANGE
+                        start_value: 28
+                        value: 78
+                        bg_color: 0x1B1C21
+                        indicator: { bg_color: 0x4ADE80, radius: 4 }
+                        radius: 4
+                    - label: { id: r0_hi, text: "21\u00b0", text_font: font_subheading, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row_7
+                  widgets:
+                    - label: { id: r1_day,  text: "Di", text_font: font_subheading, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r1_icon, text: "\U000F0590", text_font: font_wx_small, text_color: 0x96AAC3, align: LEFT_MID, x: 50 }
+                    - label: { id: r1_lo,   text: "11\u00b0", text_font: font_subheading, text_color: 0x6B6E76, align: LEFT_MID, x: 88 }
+                    - bar: { id: r1_bar, x: 130, width: 580, height: 8, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 10, value: 60, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 4 }, radius: 4 }
+                    - label: { id: r1_hi, text: "18\u00b0", text_font: font_subheading, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row_7
+                  widgets:
+                    - label: { id: r2_day,  text: "Wo", text_font: font_subheading, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r2_icon, text: "\U000F0599", text_font: font_wx_small, text_color: 0xF5B45A, align: LEFT_MID, x: 50 }
+                    - label: { id: r2_lo,   text: "14\u00b0", text_font: font_subheading, text_color: 0x6B6E76, align: LEFT_MID, x: 88 }
+                    - bar: { id: r2_bar, x: 130, width: 580, height: 8, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 30, value: 95, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 4 }, radius: 4 }
+                    - label: { id: r2_hi, text: "24\u00b0", text_font: font_subheading, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row_7
+                  widgets:
+                    - label: { id: r3_day,  text: "Do", text_font: font_subheading, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r3_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB, align: LEFT_MID, x: 50 }
+                    - label: { id: r3_lo,   text: "15\u00b0", text_font: font_subheading, text_color: 0x6B6E76, align: LEFT_MID, x: 88 }
+                    - bar: { id: r3_bar, x: 130, width: 580, height: 8, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 35, value: 85, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 4 }, radius: 4 }
+                    - label: { id: r3_hi, text: "22\u00b0", text_font: font_subheading, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row_7
+                  widgets:
+                    - label: { id: r4_day,  text: "Vr", text_font: font_subheading, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r4_icon, text: "\U000F0597", text_font: font_wx_small, text_color: 0x5A96EB, align: LEFT_MID, x: 50 }
+                    - label: { id: r4_lo,   text: "12\u00b0", text_font: font_subheading, text_color: 0x6B6E76, align: LEFT_MID, x: 88 }
+                    - bar: { id: r4_bar, x: 130, width: 580, height: 8, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 8, value: 50, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 4 }, radius: 4 }
+                    - label: { id: r4_hi, text: "19\u00b0", text_font: font_subheading, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+
+        # tikzones
+        - button: { x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 46, width: 60, height: 380, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+    # =========================================================================
+    #  PAG 6 — LAMPEN VARIANT B: SEGMENT-KOLOMMEN  (800×480)
+    #  (Gebaseerd op LightsHoodB uit g7-lights-hood.jsx + afzuigkap.yaml segment-patroon)
+    #
+    #  TOPBAR (h=46): "VERLICHTING" | 6 dots (dot 5 actief) | klok + status-stip
+    #
+    #  5 SEGMENT-KOLOMMEN (y=46, height=366):
+    #    flex ROW, pad 14, gap 10  →  elke kolom = 146px breed
+    #    Per kolom (lamp i, namen: Woonkamer/Slaapkamer/Keuken/Hal/Badkamer):
+    #      KOPTEKST (flexShrink, h≈50):
+    #        button id=lamp{i}_hdr: bg TRANSP, flex COL center, on_click → toggle_lamp(i)
+    #          label id=lamp{i}_bulb: font_bulb, kleur 0xF5B45A (aan) / 0x6B6E76 (uit)
+    #            glyph: aan → \U000F0335 (lightbulb), uit → \U000F0336 (lightbulb-outline)
+    #          label id=lamp{i}_name: font_meta letter_space 2 UPPERCASE  kleur idem
+    #      TUBE (flex_grow 1):
+    #        bg 0x131418, border 0x1B1C21, radius 22, pad 10
+    #        layout flex COL-REVERSE gap 5  (segment 0=onderaan)
+    #        8× obj id=lamp{i}_seg{j}  (j=0 onderaan .. j=7 bovenaan):
+    #          flex_grow 1, width 100%, radius 10, bg 0x1B1C21 (leeg) / 0xF5B45A met opa (vol)
+    #          on_click: zet tap_lamp=i, tap_seg=j+1, script.execute: apply_lamp
+    #        label id=lamp{i}_pct overlay: font_number (72px), align CENTER
+    #          kleur aan=0xF5B45A / uit=0x1B1C21
+    #
+    #  ONDERSTRIP (h=68, border TOP 0x131418):
+    #    flex ROW, pad 16, gap 14, align BOTTOM_MID
+    #    CT-sectie:
+    #      "KLEURTEMP"  label font_meta 0x6B6E76 letterspace 2
+    #      slider id=lamp_ct_sld: width 160 height 8
+    #        bg: linear gradient koel→warm (approximeer met bg_color 0x38BDF8 + bg_grad_color 0xF5B45A HOR)
+    #        knob bg 0xFFFFFF, indicator transparant
+    #        min=2500 max=6500 step 100
+    #        on_release → homeassistant.action: light.turn_on entity_id=light.woonkamer
+    #                      data_template: { color_temp_kelvin: "{{ ct }}" }
+    #                      variables: { ct: !lambda return lv_slider_get_value(id(lamp_ct_sld)); }
+    #      label id=lamp_ct_lbl: font_label 0x6B6E76  toont "{K}K"
+    #    Divider (1px h=30)
+    #    SCÈNES grid (6 knoppen, flex ROW gap 7):
+    #      Scènes (naam · kleur · CT-Kelvin):
+    #        Avond #F5B45A 2700K · Werk #78B4EB 6000K · Film #9678EB 2200K
+    #        Nacht #5A6EB4 2000K · Lees #AAEABB 4000K · Feest #EB5A96 3000K
+    #      Per knop id=scene_{id}:
+    #        w=68 h=50, radius 12, bg color-mix(scenecolor 20%, 0x131418)
+    #        border scenecolor opa 40%
+    #        inner dot 8×8 (scenecolor) + naam label (font_meta)
+    #        on_click: homeassistant.action: scene.turn_on entity_id=scene.{id}  >>> TODO
+    #                  + lambda: id(lamp_ct_k) = {ct}; id(refresh_lights).execute();
+    # =========================================================================
+    - id: lights_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+        # topbar (dot 5 actief = laatste)
+        - obj:
+            id: lt_topbar
+            width: 800
+            height: 46
+            align: TOP_MID
+            bg_color: 0x08080A
+            bg_opa: COVER
+            border_width: 1
+            border_side: BOTTOM
+            border_color: 0x131418
+            pad_all: 0
+            widgets:
+              - label: { text: "VERLICHTING", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: LEFT_MID, x: 24 }
+              - obj:
+                  id: lt_dots
+                  align: CENTER
+                  width: 82
+                  height: 10
+                  bg_opa: TRANSP
+                  border_width: 0
+                  layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6 }
+                  widgets:
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+                    - obj: { width: 14, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }  # actief
+              - label: { id: lt_clock, text: "--:--", text_font: font_clock, text_color: 0x6B6E76, align: RIGHT_MID, x: -38 }
+              - obj: { width: 7, height: 7, radius: 4, bg_color: 0x4ADE80, border_width: 0, align: RIGHT_MID, x: -24 }
+
+        # 5 segment-kolommen
+        - obj:
+            id: lt_cols
+            x: 0
+            y: 46
+            width: 800
+            height: 366
+            bg_opa: TRANSP
+            border_width: 0
+            pad_left: 14
+            pad_right: 14
+            pad_top: 12
+            pad_bottom: 0
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: ROW, flex_align_cross: STRETCH, pad_column: 10 }
+            widgets:
+              # ---- KOLOM 0: Woonkamer ----
+              - obj:
+                  id: lamp0_col
+                  flex_grow: 1
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 6 }
+                  widgets:
+                    - button:
+                        id: lamp0_hdr
+                        width: LV_SIZE_CONTENT
+                        height: LV_SIZE_CONTENT
+                        bg_opa: TRANSP
+                        border_width: 0
+                        on_click:
+                          - homeassistant.action:
+                              action: light.toggle
+                              data: { entity_id: light.woonkamer }   # >>> TODO
+                        widgets:
+                          - obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 3 }, widgets: [ { label: { id: lamp0_bulb, text: "\U000F0336", text_font: font_bulb, text_color: 0x6B6E76 } }, { label: { id: lamp0_name, text: "WOONKAMER", text_font: font_meta, text_color: 0x6B6E76, letter_space: 1 } } ] }
+                    - obj:
+                        id: lamp0_tube
+                        flex_grow: 1
+                        width: 100%
+                        bg_color: 0x131418
+                        border_color: 0x1B1C21
+                        border_width: 1
+                        radius: 18
+                        pad_all: 8
+                        scrollbar_mode: 'OFF'
+                        layout: { type: flex, flex_flow: COLUMN_REVERSE, pad_row: 5 }
+                        widgets:
+                          - obj: { id: lamp0_seg0, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=1;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg1, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=2;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg2, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=3;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg3, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=4;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg4, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=5;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg5, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=6;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg6, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=7;", script.execute: apply_lamp ] }
+                          - obj: { id: lamp0_seg7, flex_grow: 1, width: 100%, radius: 8, bg_color: 0x1B1C21, border_width: 0, on_click: [ lambda: "id(tap_lamp)=0; id(tap_seg)=8;", script.execute: apply_lamp ] }
+                    - label: { id: lamp0_pct, text: "0", text_font: font_number, text_color: 0x1B1C21, align: CENTER }
+              # ---- KOLOMMEN 1-4 (Slaapkamer / Keuken / Hal / Badkamer) ----
+              # >>> Bouw op basis van lamp0_col patroon:
+              #     lamp1_col … lamp4_col
+              #     lamp1_hdr, lamp1_bulb, lamp1_name ("SLAAPKAMER") … lamp4_name ("BADKAMER")
+              #     lamp1_tube … lamp4_tube
+              #     lamp1_seg0…7 met tap_lamp=1..4
+              #     lamp1_pct … lamp4_pct
+              #     entity_id's:  light.slaapkamer / light.keuken / light.hal / light.badkamer
+              - obj: { id: lamp1_col, flex_grow: 1, bg_opa: TRANSP, border_width: 0, pad_all: 0 }   # >>> TODO: volledig bouwen
+              - obj: { id: lamp2_col, flex_grow: 1, bg_opa: TRANSP, border_width: 0, pad_all: 0 }   # >>> TODO
+              - obj: { id: lamp3_col, flex_grow: 1, bg_opa: TRANSP, border_width: 0, pad_all: 0 }   # >>> TODO
+              - obj: { id: lamp4_col, flex_grow: 1, bg_opa: TRANSP, border_width: 0, pad_all: 0 }   # >>> TODO
+
+        # onderstrip: CT-slider + scènes
+        - obj:
+            id: lt_strip
+            x: 0
+            y: 412
+            width: 800
+            height: 68
+            bg_color: 0x08080A
+            border_color: 0x131418
+            border_width: 1
+            border_side: TOP
+            pad_left: 16
+            pad_right: 16
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 14 }
+            widgets:
+              # CT sectie
+              - label: { text: "KLEURTEMP", text_font: font_meta, text_color: 0x6B6E76, letter_space: 2 }
+              - slider:
+                  id: lamp_ct_sld
+                  width: 156
+                  height: 8
+                  min_value: 2500
+                  max_value: 6500
+                  value: 4000
+                  bg_color: 0x38BDF8
+                  bg_grad_color: 0xF5B45A
+                  bg_grad_dir: HOR
+                  indicator: { bg_opa: TRANSP }
+                  knob: { bg_color: 0xFFFFFF, pad_all: 5 }
+                  on_release:
+                    - lambda: 'id(lamp_ct_k) = lv_slider_get_value(id(lamp_ct_sld));'
+                    - homeassistant.action:
+                        action: light.turn_on
+                        data: { entity_id: light.woonkamer }   # >>> TODO: alle actieve lampen
+                        data_template: { color_temp_kelvin: "{{ ct }}" }
+                        variables: { ct: !lambda 'return lv_slider_get_value(id(lamp_ct_sld));' }
+              - label: { id: lamp_ct_lbl, text: "4000K", text_font: font_label, text_color: 0x6B6E76, width: 48 }
+              # divider
+              - obj: { width: 1, height: 30, bg_color: 0x131418, border_width: 0 }
+              # 6 scène-knoppen
+              - button: { id: scene_avond, width: 70, height: 50, radius: 12, bg_color: 0x2A1E0A, border_color: 0xF5B45A, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.avond } } ], widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0xF5B45A, border_width: 0 } }, { label: { text: "Avond", text_font: font_meta, text_color: 0xF5B45A } } ] } } ] }
+              - button: { id: scene_werk,  width: 70, height: 50, radius: 12, bg_color: 0x0A1825, border_color: 0x78B4EB, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.werk } } ],  widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0x78B4EB, border_width: 0 } }, { label: { text: "Werk", text_font: font_meta, text_color: 0x78B4EB } } ] } } ] }
+              - button: { id: scene_film,  width: 70, height: 50, radius: 12, bg_color: 0x180E25, border_color: 0x9678EB, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.film } } ],  widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0x9678EB, border_width: 0 } }, { label: { text: "Film", text_font: font_meta, text_color: 0x9678EB } } ] } } ] }
+              - button: { id: scene_nacht, width: 70, height: 50, radius: 12, bg_color: 0x0A0E1C, border_color: 0x5A6EB4, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.nacht } } ], widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0x5A6EB4, border_width: 0 } }, { label: { text: "Nacht", text_font: font_meta, text_color: 0x5A6EB4 } } ] } } ] }
+              - button: { id: scene_lees,  width: 70, height: 50, radius: 12, bg_color: 0x111C15, border_color: 0xAAEABB, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.lees } } ],  widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0xAAEABB, border_width: 0 } }, { label: { text: "Lees", text_font: font_meta, text_color: 0xAAEABB } } ] } } ] }
+              - button: { id: scene_feest, width: 70, height: 50, radius: 12, bg_color: 0x25091A, border_color: 0xEB5A96, border_width: 1, on_click: [ homeassistant.action: { action: scene.turn_on, data: { entity_id: scene.feest } } ], widgets: [ { obj: { bg_opa: TRANSP, border_width: 0, pad_all: 0, layout: { type: flex, flex_flow: COLUMN, flex_align_cross: CENTER, pad_row: 4 }, widgets: [ { obj: { width: 8, height: 8, radius: 4, bg_color: 0xEB5A96, border_width: 0 } }, { label: { text: "Feest", text_font: font_meta, text_color: 0xEB5A96 } } ] } } ] }
+
+        # tikzones (laatste pagina → page.next wrapt naar eerste)
+        - button: { x: 0, y: 46, width: 60, height: 340, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms } ] }
+        - button: { align: TOP_RIGHT, x: 0, y: 46, width: 60, height: 340, bg_opa: TRANSP, border_width: 0, shadow_width: 0, on_click: [ lvgl.page.next: { animation: OVER_LEFT, time: 250ms } ] }
+
+
+# =============================================================================
+#  8.  SCRIPTS
+#  Gebaseerd op de lambdas uit spotify.yaml §5 en weerscherm.yaml §5.
+#  Klok + refresh_lights zijn nieuw; de helpers (glyph/accent/tcol/uvlab) zijn
+#  identiek aan weerscherm.yaml refresh_weather.
+# =============================================================================
+script:
+
+  # ── Klok (alle topbars) ────────────────────────────────────────────────
+  - id: refresh_clock
+    then:
+      - lambda: |-
+          auto t = id(ha_time).now();
+          if (!t.is_valid()) return;
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%02d:%02d", t.hour, t.minute);
+          lv_label_set_text(id(sp1_clock), buf);
+          lv_label_set_text(id(sp2_clock), buf);
+          lv_label_set_text(id(sp3_clock), buf);
+          lv_label_set_text(id(imm_clock_lbl), buf);
+          // wx_status: "di 3 jun · 14:32"
+          static const char* dagen[7]={"zo","ma","di","wo","do","vr","za"};
+          static const char* mnd[12]={"jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"};
+          char wx[48];
+          snprintf(wx, sizeof(wx), "%s %d %s \u00b7 %02d:%02d",
+                   dagen[t.day_of_week-1], t.day_of_month, mnd[t.month-1],
+                   t.hour, t.minute);
+          lv_label_set_text(id(wx_status), wx);
+          lv_label_set_text(id(lt_clock), buf);
+
+  # ── Spotify (uit spotify.yaml refresh_spotify; uitgebreid met sidebar + pag2/3) ──
+  - id: refresh_spotify
+    then:
+      - lambda: |-
+          char buf[64];
+          // tekst
+          lv_label_set_text(id(sp_title_lbl),  id(sp_title).state.c_str());
+          lv_label_set_text(id(sp2_title_lbl), id(sp_title).state.c_str());
+          // >>> sp3_title_lbl: zelfde
+          lv_label_set_text(id(sp_artist_lbl), id(sp_artist).state.c_str());
+          lv_label_set_text(id(sp2_artist_lbl),id(sp_artist).state.c_str());
+          if (!id(sp_device).state.empty()) {
+            std::string ctx = "NU SPEELT \u00b7 " + id(sp_device).state;
+            lv_label_set_text(id(sp_context_lbl), ctx.c_str());
+          }
+          // play/pause lbl (alle 3 schermen)
+          bool playing = (id(sp_state).state == std::string("playing"));
+          const char* play_g = playing ? "\U000F03E4" : "\U000F040A";
+          lv_label_set_text(id(sp_play_lbl),  play_g);
+          lv_label_set_text(id(sp2_play_lbl), play_g);
+          // >>> sp3_play_lbl
+          // voortgang → slider 0..1000 + tijdlabels
+          float pos = id(sp_position).state, dur = id(sp_duration).state;
+          if (dur < 1) dur = 1;
+          int sv = (int)(pos / dur * 1000.0f); sv = sv<0?0:sv>1000?1000:sv;
+          lv_slider_set_value(id(sp_progress),  sv, LV_ANIM_OFF);
+          lv_slider_set_value(id(sp2_progress), sv, LV_ANIM_OFF);
+          // >>> sp3_progress
+          snprintf(buf, sizeof(buf), "%d:%02d", (int)pos/60, (int)pos%60);
+          lv_label_set_text(id(sp_pos_lbl),  buf);
+          lv_label_set_text(id(sp2_pos_lbl), buf);
+          snprintf(buf, sizeof(buf), "%d:%02d", (int)dur/60, (int)dur%60);
+          lv_label_set_text(id(sp_dur_lbl),  buf);
+          lv_label_set_text(id(sp2_dur_lbl), buf);
+          // volume
+          int v = (int)(id(sp_volume).state * 100.0f);
+          lv_slider_set_value(id(sp_volume_sld),  v, LV_ANIM_OFF);
+          lv_slider_set_value(id(sp2_volume_sld), v, LV_ANIM_OFF);
+          snprintf(buf, sizeof(buf), "%d", v);
+          lv_label_set_text(id(sp_vol_lbl), buf);
+          // shuffle kleur (groen=aan, grijs=uit)
+          bool sh = id(sp_shuffle).state;
+          lv_color_t scol = sh ? lv_color_hex(0x4ADE80) : lv_color_hex(0x9A9AA0);
+          lv_obj_set_style_text_color(id(sp_shuffle_lbl),  scol, 0);
+          lv_obj_set_style_text_color(id(sp2_shuf_lbl),    scol, 0);
+          // repeat kleur
+          bool rp = (id(sp_repeat).state != std::string("off"));
+          lv_color_t rcol = rp ? lv_color_hex(0x4ADE80) : lv_color_hex(0x9A9AA0);
+          lv_obj_set_style_text_color(id(sp_repeat_lbl),   rcol, 0);
+          lv_obj_set_style_text_color(id(sp2_rep_lbl),     rcol, 0);
+          // like-hart (groen=geliked)
+          lv_label_set_text(id(sp_like_lbl), id(sp_liked) ? "\U000F02D1" : "\U000F02D5");
+          lv_color_t lcol = id(sp_liked) ? lv_color_hex(0x4ADE80) : lv_color_hex(0x6B6E76);
+          lv_obj_set_style_text_color(id(sp_like_lbl), lcol, 0);
+
+  # ── Lyrics (elke seconde via time on_time) ──────────────────────────────
+  - id: refresh_lyrics
+    then:
+      - lambda: |-
+          static const int ts[13] = {0,12,22,32,42,53,63,74,85,96,107,118,130};
+          float pos = id(sp_position).state;
+          int act = 0;
+          for (int i=0; i<13; i++) if (pos >= ts[i]) act = i;
+          if (act == id(lyr_active)) return;
+          id(lyr_active) = act;
+          // Kleuren van alle 13 labels bijwerken
+          lv_obj_t* lbls[13] = {
+            id(lyr0),id(lyr1),id(lyr2),id(lyr3),id(lyr4),id(lyr5),id(lyr6),
+            id(lyr7),id(lyr8),id(lyr9),id(lyr10),id(lyr11),id(lyr12)
+          };
+          for (int i=0; i<13; i++) {
+            lv_color_t col;
+            if      (i == act) col = lv_color_hex(0xFFFFFF);
+            else if (i <  act) col = lv_color_hex(0x2A2B30);
+            else               col = lv_color_hex(0x3A3B40);
+            lv_obj_set_style_text_color(lbls[i], col, 0);
+          }
+          // Verticale positie: scrol lyr_inner zodat actieve regel gecentreerd staat
+          // Container hoogte = 434px, regelHoogte = 52px, helft = 217
+          int offset_y = 217 - (act * 52 + 26);
+          lv_obj_set_style_translate_y(id(lyr_inner), offset_y, 0);
+          lv_obj_mark_layout_as_dirty(id(lyr_inner));
+
+  # ── Facts (elke 7s via time on_time) ────────────────────────────────────
+  - id: refresh_facts
+    then:
+      - lambda: |-
+          static const char* facts[4] = {
+            "M83 is genoemd naar Messier 83 \u2014 een spiraalstelsel op 15 miljoen lichtjaar afstand.",
+            "Achter M83 zit de Franse muzikant Anthony Gonzalez. Begonnen als duo, nu soloproject.",
+            "'Midnight City' verscheen in 2011 op het dubbelalbum Hurry Up, We're Dreaming.",
+            "Het nummer eindigt met een saxofoonsolo \u2014 ongewoon voor een synthpop-hit."
+          };
+          lv_label_set_text(id(fact_lbl), facts[id(fact_idx)]);
+          // dots bijwerken
+          lv_obj_t* dots[4] = { id(fact_dot_0), id(fact_dot_1), id(fact_dot_2), id(fact_dot_3) };
+          for (int i=0; i<4; i++) {
+            bool active = (i == id(fact_idx));
+            lv_obj_set_width(dots[i], active ? 20 : 7);
+            lv_obj_set_style_bg_color(dots[i], active ? lv_color_hex(0x4ADE80) : lv_color_hex(0x3A3B40), 0);
+          }
+
+  # ── Weer (identiek aan weerscherm.yaml refresh_weather; glyph/accent/tcol helpers) ──
+  - id: refresh_weather
+    then:
+      - lambda: |-
+          // ── helpers (zelfde als weerscherm.yaml §5) ──
+          auto glyph = [](std::string c) -> std::string {
+            if (c=="sunny"||c=="clear")          return "\U000F0599";
+            if (c=="clear-night")                return "\U000F0594";
+            if (c=="partlycloudy")               return "\U000F0595";
+            if (c=="cloudy")                     return "\U000F0590";
+            if (c=="rainy"||c=="snowy-rainy")    return "\U000F0597";
+            if (c=="pouring")                    return "\U000F0596";
+            if (c=="lightning"||c=="lightning-rainy") return "\U000F0593";
+            if (c=="snowy")                      return "\U000F0598";
+            if (c=="fog")                        return "\U000F0591";
+            return "\U000F059D";
+          };
+          auto accent = [](std::string c) -> lv_color_t {
+            if (c=="sunny"||c=="clear")          return lv_color_hex(0xF5B45A);
+            if (c=="rainy"||c=="pouring")        return lv_color_hex(0x5A96EB);
+            if (c=="lightning"||c=="lightning-rainy") return lv_color_hex(0x9678EB);
+            if (c=="cloudy")                     return lv_color_hex(0x96AAC3);
+            return lv_color_hex(0x78B4EB);
+          };
+          auto tcol = [](float t) -> lv_color_t {
+            float x = (t + 5.0f) / 40.0f; if(x<0)x=0; if(x>1)x=1;
+            uint8_t r=(uint8_t)(0x3A+x*(0xF5-0x3A));
+            uint8_t g=(uint8_t)(0x78+x*(0x9E-0x78));
+            uint8_t b=(uint8_t)(0xD2+x*(0x42-0xD2));
+            return lv_color_make(r,g,b);
+          };
+          char buf[48];
+          // HERO
+          std::string cnow = id(ha_cond_now).state;
+          lv_label_set_text(id(wx_icon), glyph(cnow).c_str());
+          lv_obj_set_style_text_color(id(wx_icon), accent(cnow), 0);
+          snprintf(buf,sizeof(buf),"%.0f\u00b0",id(ha_temp_now).state);
+          lv_label_set_text(id(wx_temp),buf);
+          snprintf(buf,sizeof(buf),"%.0f\u00b0C",id(ha_feels).state);
+          lv_label_set_text(id(chip_feel),buf);
+          snprintf(buf,sizeof(buf),"%.0f%%",id(ha_humidity).state);
+          lv_label_set_text(id(chip_humi),buf);
+          snprintf(buf,sizeof(buf),"%.0f km/h",id(ha_wind_now).state);
+          lv_label_set_text(id(chip_wind),buf);
+          float uv = id(ha_uv).state;
+          const char* uvlab = uv<=2?"Laag":uv<=5?"Matig":uv<=7?"Hoog":"Zeer hoog";
+          snprintf(buf,sizeof(buf),"%.0f \u00b7 %s",uv,uvlab);
+          lv_label_set_text(id(chip_uv),buf);
+          // 5-DAAGSE (zelfde logica als weerscherm.yaml)
+          float los[5]={id(d0_lo).state,id(d1_lo).state,id(d2_lo).state,id(d3_lo).state,id(d4_lo).state};
+          float his[5]={id(d0_hi).state,id(d1_hi).state,id(d2_hi).state,id(d3_hi).state,id(d4_hi).state};
+          float wmin=los[0],wmax=his[0];
+          for(int i=1;i<5;i++){if(los[i]<wmin)wmin=los[i];if(his[i]>wmax)wmax=his[i];}
+          float span=(wmax-wmin);if(span<1)span=1;
+          id(wk_tmin)=wmin;id(wk_tmax)=wmax;
+          lv_obj_t* bars[5]={id(r0_bar),id(r1_bar),id(r2_bar),id(r3_bar),id(r4_bar)};
+          lv_obj_t* icons[5]={id(r0_icon),id(r1_icon),id(r2_icon),id(r3_icon),id(r4_icon)};
+          lv_obj_t* lo_l[5]={id(r0_lo),id(r1_lo),id(r2_lo),id(r3_lo),id(r4_lo)};
+          lv_obj_t* hi_l[5]={id(r0_hi),id(r1_hi),id(r2_hi),id(r3_hi),id(r4_hi)};
+          std::string conds[5]={id(d0_cond).state,id(d1_cond).state,id(d2_cond).state,id(d3_cond).state,id(d4_cond).state};
+          for(int i=0;i<5;i++){
+            int sv=(int)((los[i]-wmin)/span*100.0f);
+            int vv=(int)((his[i]-wmin)/span*100.0f);
+            if(vv<=sv)vv=sv+2;
+            lv_bar_set_start_value(bars[i],sv,LV_ANIM_OFF);
+            lv_bar_set_value(bars[i],vv,LV_ANIM_OFF);
+            lv_obj_set_style_bg_color(bars[i],tcol(los[i]),LV_PART_INDICATOR);
+            lv_obj_set_style_bg_grad_color(bars[i],tcol(his[i]),LV_PART_INDICATOR);
+            lv_obj_set_style_bg_grad_dir(bars[i],LV_GRAD_DIR_HOR,LV_PART_INDICATOR);
+            lv_label_set_text(icons[i],glyph(conds[i]).c_str());
+            lv_obj_set_style_text_color(icons[i],accent(conds[i]),0);
+            snprintf(buf,sizeof(buf),"%.0f\u00b0",los[i]);lv_label_set_text(lo_l[i],buf);
+            snprintf(buf,sizeof(buf),"%.0f\u00b0",his[i]);lv_label_set_text(hi_l[i],buf);
+          }
+
+  # ── Lampen (gesynchroniseerd vanuit HA via lamp*_bri_ha + lamp*_state) ──
+  - id: refresh_lights
+    then:
+      - lambda: |-
+          // Helper: HA brightness (0-255) → segmenten (0-8)
+          auto to_seg = [](float bri_ha, bool on) -> int {
+            if (!on) return 0;
+            return (int)(bri_ha / 255.0f * 8.0f + 0.5f);
+          };
+          struct LampData {
+            int*     seg_g;
+            float    bri_ha;
+            bool     on;
+            lv_obj_t* bulb;
+            lv_obj_t* name;
+            lv_obj_t* pct_lbl;
+            lv_obj_t* segs[8];
+          };
+          LampData lamps[5] = {
+            { &id(lamp0_seg), id(lamp0_bri_ha).state, id(lamp0_state).state=="on",
+              id(lamp0_bulb), id(lamp0_name), id(lamp0_pct),
+              { id(lamp0_seg0),id(lamp0_seg1),id(lamp0_seg2),id(lamp0_seg3),
+                id(lamp0_seg4),id(lamp0_seg5),id(lamp0_seg6),id(lamp0_seg7) } },
+            // >>> lamp1..lamp4: zelfde structuur wanneer alle kolommen gebouwd zijn
+          };
+          for (int i=0; i<1; i++) {   // >>> verander naar i<5 zodra alle kolommen bestaan
+            auto& l = lamps[i];
+            int seg = to_seg(l.bri_ha, l.on);
+            *l.seg_g = seg;
+            // bulb-icoon: aan = \U000F0335 amber / uit = \U000F0336 grijs
+            lv_label_set_text(l.bulb, l.on ? "\U000F0335" : "\U000F0336");
+            lv_color_t ic = l.on ? lv_color_hex(0xF5B45A) : lv_color_hex(0x6B6E76);
+            lv_obj_set_style_text_color(l.bulb, ic, 0);
+            lv_obj_set_style_text_color(l.name, ic, 0);
+            // %-getal overlay
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%d", (int)(seg * 100 / 8));
+            lv_label_set_text(l.pct_lbl, buf);
+            lv_obj_set_style_text_color(l.pct_lbl, l.on ? lv_color_hex(0xF5B45A) : lv_color_hex(0x1B1C21), 0);
+            // segment-kleuren (amber met oplopende alpha; zelfde patroon als afzuigkap.yaml)
+            for (int j=0; j<8; j++) {
+              if (j < seg) {
+                float alpha = 0.35f + (j / 7.0f) * 0.65f;
+                uint8_t a = (uint8_t)(alpha * 255);
+                // amber 0xF5B45A met alpha — blend op bg 0x131418
+                uint8_t r = (uint8_t)(0x13 + a/255.0f * (0xF5-0x13));
+                uint8_t g = (uint8_t)(0x14 + a/255.0f * (0xB4-0x14));
+                uint8_t b = (uint8_t)(0x18 + a/255.0f * (0x5A-0x18));
+                lv_obj_set_style_bg_color(l.segs[j], lv_color_make(r,g,b), 0);
+              } else {
+                lv_obj_set_style_bg_color(l.segs[j], lv_color_hex(0x1B1C21), 0);
+              }
+            }
+          }
+          // CT slider sync vanuit HA
+          int ct = id(lamp_ct_k);
+          lv_slider_set_value(id(lamp_ct_sld), ct, LV_ANIM_OFF);
+          char ct_buf[8];
+          snprintf(ct_buf, sizeof(ct_buf), "%dK", ct);
+          lv_label_set_text(id(lamp_ct_lbl), ct_buf);
+
+  # ── Lamp aanzetten via tap op segment ────────────────────────────────────
+  - id: apply_lamp
+    then:
+      - lambda: |-
+          // tap_lamp = kolomindex (0..4), tap_seg = gewenst segment (1..8)
+          int lamp = id(tap_lamp);
+          int seg  = id(tap_seg);
+          float bri_pct = seg / 8.0f;   // 0.125 … 1.0
+          // entity-array
+          static const char* entities[5] = {
+            "light.woonkamer",    // >>> TODO
+            "light.slaapkamer",   // >>> TODO
+            "light.keuken",       // >>> TODO
+            "light.hal",          // >>> TODO
+            "light.badkamer",     // >>> TODO
+          };
+          if (lamp < 0 || lamp > 4) return;
+          // Zet helderheid via HA-actie
+          // (directe homeassistant.action met data_template kan niet vanuit lambda;
+          //  gebruik één van de opties hieronder)
+          //
+          // OPTIE A – via HA-script met input:
+          //   homeassistant.action: script.zet_lamp_helderheid
+          //   data: { lamp: entities[lamp], bri_pct: bri_pct }
+          //
+          // OPTIE B – aparte scripts per lamp (5×):
+          //   if (lamp==0) { auto c=id(lamp0_light).turn_on(); c.set_brightness(bri_pct); c.perform(); }
+          //
+          // OPTIE C – fire-and-forget via HTTP naar HA-webhook
+          //
+          ESP_LOGI("lamp", "lamp %d -> seg %d (%.0f%%)", lamp, seg, bri_pct*100);
+
+
+# =============================================================================
+#  9.  EINDCHECKLIST  (bij oplevering controleren)
+# =============================================================================
+# [ ] Alle  >>> TODO  entity_id's en pins ingevuld voor jouw installatie.
+# [ ] Lamp-kolommen 1–4 uitgebouwd (lamp1_col … lamp4_col) naar lamp0_col-patroon.
+# [ ] sp3_sidebar volledig gebouwd (kopie sp2_sidebar, IDs sp3_*).
+# [ ] apply_lamp: kies één van de drie opties en implementeer (zie §8 apply_lamp).
+# [ ] online_image placeholder-URL's kloppen en bestand bestaat in HA /local/.
+# [ ] MDI-glyph-escapes gecontroleerd voor jouw ESPHome-versie.
+# [ ] refresh_spotify: sp3_* widget-updates toegevoegd (3× TODO-opmerking in script).
+# [ ] refresh_lights: lamps[1..4] ingevuld zodra kolommen aanwezig zijn.
+# [ ] Alle 6 pagina's staan in de juiste swipe-volgorde onder 'pages:'.
+# [ ] Display init_sequence correct voor jouw 800×480 paneel.
+# [ ] on_boot roept refresh_spotify + refresh_weather + refresh_lights aan.
+# [ ] Tekst >= 11px, touch-targets >= 44×44px (alle knoppen gecontroleerd).
+# [ ] Immich: sensor.immich_album beschikbaar in HA (of regel imm_album_lbl eruit).
+# =============================================================================

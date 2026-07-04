@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="nl"><head><meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spotify — extra schermen · Songtekst &amp; Wist je dat (4&quot; 480×480)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --green: oklch(0.74 0.16 152);
+    --muted: oklch(0.62 0.012 250);
+    --bg: #08080a;
+  }
+  body { margin: 0; }
+
+  /* ---- gedeelde schermbasis ---- */
+  .scr { width: 480px; height: 480px; color: #fff; font-family: "Montserrat", sans-serif; box-sizing: border-box; overflow: hidden; position: relative; user-select: none; }
+  .vc-bg { position: absolute; inset: 0;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.04) 0 2px, transparent 2px 11px), var(--g); }
+  .ph-tag { font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: .3px;
+    color: rgba(255,255,255,.55); background: rgba(0,0,0,.32); padding: 3px 7px; border-radius: 6px; white-space: nowrap; }
+
+  /* pills (overgenomen uit Definitief) */
+  .vc-pill { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; letter-spacing: .3px; color: #fff;
+    background: rgba(0,0,0,.36); backdrop-filter: blur(8px); padding: 7px 12px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+  .vc-pill.ghost { color: rgba(255,255,255,.9); }
+  .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+  .eq i { width: 3px; height: 40%; background: var(--green); border-radius: 1px; }
+  .eq[data-on="true"] i { animation: eq 900ms ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .2s; } .eq i:nth-child(3) { animation-delay: .4s; } .eq i:nth-child(4) { animation-delay: .1s; }
+  @keyframes eq { 0%,100% { height: 30%; } 50% { height: 100%; } }
+
+  /* ===================== SCHERM 1 — SONGTEKST ===================== */
+  .lyr-fade { position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(8,8,12,.96) 0%, rgba(8,8,12,0) 26%, rgba(8,8,12,0) 70%, rgba(8,8,12,.97) 100%),
+      linear-gradient(0deg, rgba(8,8,12,.45), rgba(8,8,12,.45)); }
+  .lyr-top { position: absolute; top: 22px; left: 24px; right: 24px; z-index: 3; display: flex; align-items: center; justify-content: space-between; }
+
+  .lyr-window { position: absolute; top: 54px; left: 0; right: 0; height: 372px; z-index: 2; overflow: hidden; }
+  .lyr-track { position: absolute; left: 0; right: 0; top: 0; transition: transform .55s cubic-bezier(.22,.61,.36,1); }
+  .lyr-line { height: 64px; display: flex; align-items: center; padding: 0 30px; box-sizing: border-box;
+    font-size: 22px; font-weight: 700; line-height: 1.12; letter-spacing: -.2px;
+    color: rgba(255,255,255,.32); transition: color .4s, opacity .4s, transform .4s; transform-origin: left center; text-wrap: pretty; }
+  .lyr-line.past { color: rgba(255,255,255,.26); }
+  .lyr-line.on { color: #fff; opacity: 1; transform: scale(1.045); }
+
+  .lyr-foot { position: absolute; left: 24px; right: 24px; bottom: 20px; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .lyr-meta { font-size: 13px; font-weight: 600; color: rgba(255,255,255,.78); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lyr-song { color: #fff; font-weight: 700; }
+
+  /* ===================== SCHERM 2 — WIST JE DAT? ===================== */
+  .fact { padding: 26px 28px; box-sizing: border-box; display: flex; flex-direction: column; }
+  .fact-scrim { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(8,8,10,.32) 0%, rgba(8,8,10,.0) 30%, rgba(8,8,10,.55) 100%); }
+  .fact-bg { opacity: .85; }
+
+  .fact-head { position: relative; z-index: 2; display: flex; align-items: center; gap: 14px; }
+  .fact-avatar { width: 56px; height: 56px; border-radius: 50%; flex: none; position: relative; display: grid; place-items: center; overflow: hidden;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.07) 0 2px, transparent 2px 9px), linear-gradient(150deg,#3a3c66,#1a1b2e);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+  .fact-avatar .ph-tag { font-size: 8px; padding: 2px 4px; background: rgba(0,0,0,.4); }
+  .fact-name { font-size: 22px; font-weight: 800; letter-spacing: -.5px; line-height: 1; }
+  .fact-sub { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 5px; letter-spacing: .2px; }
+
+  .fact-body { position: relative; z-index: 2; flex: 1; display: flex; flex-direction: column; justify-content: center; margin: 4px 0; }
+  .fact-eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 2.5px; color: var(--green); margin-bottom: 18px; }
+  .fact-quote { color: rgba(255,255,255,.16); margin-bottom: 8px; }
+  .fact-text { font-size: 27px; font-weight: 700; line-height: 1.26; letter-spacing: -.4px; text-wrap: pretty;
+    animation: factIn .5s cubic-bezier(.22,.61,.36,1) both; }
+  @keyframes factIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  .fact-foot { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .fact-dots { display: flex; align-items: center; gap: 7px; }
+  .fdot { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.24); transition: width .3s, background .3s; }
+  .fdot.on { width: 20px; border-radius: 4px; background: var(--green); }
+
+  /* ---- viewer ---- */
+  html, body { height: 100%; background: #0d0d10; }
+  #root { min-height: 100%; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel">
+const { useState, useEffect } = React;
+const fmt = (sec) => { const m = Math.floor(sec / 60); const s = Math.floor(sec % 60); return m + ":" + String(s).padStart(2, "0"); };
+
+function InfoIcon({ s = 15 }) {
+  return (<svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="9" /><path d="M12 11 v5" /><circle cx="12" cy="7.6" r="0.4" fill="currentColor" stroke="none" /></svg>);
+}
+function QuoteIcon({ s = 22 }) {
+  return (<svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M6 6 h5 v6 q0 4 -5 5 v-3 q2 -1 2 -3 H6 Z" /><path d="M14 6 h5 v6 q0 4 -5 5 v-3 q2 -1 2 -3 h-2 Z" /></svg>);
+}
+const Eq = ({ on }) => (<span className="eq" data-on={on}><i /><i /><i /><i /></span>);
+
+function usePos({ start = 41, total = 218 } = {}) {
+  const [pos, setPos] = useState(start);
+  useEffect(() => {
+    const t = setInterval(() => setPos((p) => (p >= total ? 0 : p + 1)), 1000);
+    return () => clearInterval(t);
+  }, [total]);
+  return { pos, total };
+}
+
+/* ---- SCHERM 1: SONGTEKST (placeholder-tekst, geen echte lyrics) ---- */
+const LYRICS = [
+  { t: 0,   x: "\u266A" },
+  { t: 12,  x: "Lichten over de snelweg, de stad ademt traag" },
+  { t: 22,  x: "We rijden door de nacht, geen reden om te stoppen" },
+  { t: 32,  x: "Jij draait het raampje open, de wind neemt het over" },
+  { t: 42,  x: "En alles wat we zochten ligt hier voor ons" },
+  { t: 53,  x: "Wakker, wakker \u2014 de morgen is van ons" },
+  { t: 63,  x: "Wakker, wakker \u2014 we laten het maar gaan" },
+  { t: 74,  x: "Neonlicht kleurt de hemel boven het asfalt" },
+  { t: 85,  x: "Een kort moment dat eindeloos lijkt te duren" },
+  { t: 96,  x: "Hou vast, hou vast, voor het straks weer verdwijnt" },
+  { t: 107, x: "Wakker, wakker \u2014 de morgen is van ons" },
+  { t: 118, x: "Wakker, wakker \u2014 we laten het maar gaan" },
+  { t: 130, x: "\u266A" },
+];
+const SLOT = 64, WIN = 372;
+
+function SpotLyrics() {
+  const { pos } = usePos();
+  let active = 0;
+  for (let i = 0; i < LYRICS.length; i++) if (pos >= LYRICS[i].t) active = i;
+  const offset = WIN / 2 - (active + 0.5) * SLOT;
+  return (
+    <div className="scr lyr">
+      <div className="vc-bg" style={{ "--g": "linear-gradient(160deg,oklch(0.58 0.15 285),oklch(0.42 0.13 255) 46%,#0a0b1a 92%)" }} />
+      <div className="lyr-fade" />
+      <div className="lyr-top">
+        <span className="vc-pill"><Eq on={true} /> songtekst</span>
+        <span className="vc-pill ghost">{fmt(pos)}</span>
+      </div>
+      <div className="lyr-window">
+        <div className="lyr-track" style={{ transform: "translateY(" + offset + "px)" }}>
+          {LYRICS.map((l, i) => (
+            <div key={i} className={"lyr-line" + (i === active ? " on" : (i < active ? " past" : ""))}>{l.x}</div>
+          ))}
+        </div>
+      </div>
+      <div className="lyr-foot">
+        <div className="lyr-meta"><span className="lyr-song">Midnight City</span> · M83</div>
+        <span className="ph-tag">songtekst · live van provider</span>
+      </div>
+    </div>
+  );
+}
+
+/* ---- SCHERM 2: WIST JE DAT? (roterende feitjes) ---- */
+const FACTS = [
+  "M83 is genoemd naar het sterrenstelsel Messier 83, een spiraalstelsel op zo'n 15 miljoen lichtjaar afstand.",
+  "Achter M83 zit de Franse muzikant Anthony Gonzalez \u2014 begonnen als duo, nu vooral zijn soloproject.",
+  "\u2018Midnight City\u2019 verscheen in 2011 op het dubbelalbum Hurry Up, We're Dreaming.",
+  "Het nummer eindigt met een opvallende saxofoonsolo \u2014 ongewoon voor een synthpop-hit.",
+];
+
+function SpotFacts() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setI((n) => (n + 1) % FACTS.length), 7000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="scr fact">
+      <div className="vc-bg fact-bg" style={{ "--g": "linear-gradient(165deg,oklch(0.5 0.14 285) 0%,#10111f 52%,#08080a 100%)" }} />
+      <div className="fact-scrim" />
+      <div className="fact-head">
+        <div className="fact-avatar"><span className="ph-tag">artiest</span></div>
+        <div className="fact-id">
+          <div className="fact-name">M83</div>
+          <div className="fact-sub">Synth-pop · Frankrijk · sinds 2001</div>
+        </div>
+      </div>
+      <div className="fact-body">
+        <div className="fact-eyebrow"><InfoIcon /> WIST JE DAT?</div>
+        <div className="fact-quote"><QuoteIcon /></div>
+        <div className="fact-text" key={i}>{FACTS[i]}</div>
+      </div>
+      <div className="fact-foot">
+        <div className="fact-dots">
+          {FACTS.map((_, n) => <span key={n} className={"fdot" + (n === i ? " on" : "")} />)}
+        </div>
+        <span className="ph-tag">feiten · verrijkt via provider</span>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  return (
+    <DesignCanvas>
+      <DCSection id="extra" title={'Spotify — extra schermen (4" 480×480)'} subtitle="Zelfde Ambient-stijl als Definitief · swipe-pagina's tijdens het afspelen">
+        <DCArtboard id="lyrics" label="Songtekst — gesynchroniseerd, auto-scroll" width={480} height={480}><SpotLyrics /></DCArtboard>
+        <DCArtboard id="facts" label="Wist je dat? — feitjes over artiest & nummer" width={480} height={480}><SpotFacts /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

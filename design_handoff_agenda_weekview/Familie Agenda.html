@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Familie Agenda — Guition 7″ · 800×480</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #030304; font-family: "Montserrat", sans-serif; }
+
+.scr {
+  width: 800px;
+  height: 480px;
+  font-family: "Montserrat", sans-serif;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="g7-calendar.jsx"></script>
+<script type="text/babel" src="g7-calendar-week.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  return (
+    <DesignCanvas>
+      <DCSection
+        id="agenda"
+        title='Familie Agenda — Dag-view · 800×480'
+        subtitle="Drie kleurvarianten · donker · licht · gesplitst · Google Calendar data"
+      >
+        <DCArtboard id="cal-dark"  label="A — Donker · control-room stijl"                width={800} height={480}><CalendarDark /></DCArtboard>
+        <DCArtboard id="cal-light" label="B — Licht · warm papier thema"                   width={800} height={480}><CalendarLight /></DCArtboard>
+        <DCArtboard id="cal-split" label="C — Gesplitst · donker kalender · papier agenda" width={800} height={480}><CalendarSplit /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="weekview"
+        title='Familie Agenda — Week-view · 800×480'
+        subtitle="Drie layout-aanpakken · vandaag + 3 dagen vooruit · WO 18 – ZA 21 JUNI"
+      >
+        <DCArtboard id="wv-grid"   label="A — Tijdgrid · Google Calendar stijl · 4 kolommen"       width={800} height={480}><WeekTimeGrid /></DCArtboard>
+        <DCArtboard id="wv-strips" label="B — Dag-strips · horizontale tijdlijn per dag"            width={800} height={480}><WeekDayStrips /></DCArtboard>
+        <DCArtboard id="wv-focus"  label="C — Focus + sidebar · vandaag groot · 3 dagen compact"    width={800} height={480}><WeekFocusSidebar /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

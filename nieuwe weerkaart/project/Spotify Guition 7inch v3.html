@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guition 7″ — Schermen v3 · 800×480</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --green:   oklch(0.74 0.16 152);
+  --muted:   oklch(0.58 0.012 250);
+  --bg:      #08080a;
+  --surface: #131418;
+  --surf2:   #1b1c21;
+  --line:    rgba(255,255,255,.07);
+  --line2:   rgba(255,255,255,.16);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #030304; font-family: "Montserrat", sans-serif; }
+
+.scr {
+  width: 800px; height: 480px;
+  background: var(--bg); color: #fff;
+  font-family: "Montserrat", sans-serif;
+  position: relative; overflow: hidden;
+  user-select: none;
+}
+
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.eq i { width: 3px; height: 40%; background: var(--green); border-radius: 1px; }
+.eq[data-on="true"] i { animation: eq 900ms ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: .2s; }
+.eq i:nth-child(3) { animation-delay: .4s; }
+.eq i:nth-child(4) { animation-delay: .1s; }
+@keyframes eq { 0%,100% { height: 30%; } 50% { height: 100%; } }
+
+.vc-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; letter-spacing: .3px; color: #fff;
+  background: rgba(0,0,0,.42); backdrop-filter: blur(10px);
+  padding: 7px 13px; border-radius: 999px;
+}
+
+@keyframes factIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="g7-icons.jsx"></script>
+<script type="text/babel" src="g7-spotify.jsx"></script>
+<script type="text/babel" src="g7-home.jsx"></script>
+<script type="text/babel" src="g7-weather-ios.jsx"></script>
+<script type="text/babel" src="g7-lights-hood.jsx"></script>
+<script type="text/babel" src="g7-immich.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  return (
+    <DesignCanvas>
+      <DCSection
+        id="spotify"
+        title='Spotify — Guition 7″ · 800×480'
+        subtitle="Player met bloom · Songtekst & Wist je dat met persistente sidebar"
+      >
+        <DCArtboard id="player"  label="Player — split + bloom + volgende track" width={800} height={480}><PlayerScreen /></DCArtboard>
+        <DCArtboard id="lyrics"  label="Songtekst — sidebar + fullscreen lyrics"  width={800} height={480}><LyricsScreen /></DCArtboard>
+        <DCArtboard id="facts"   label="Wist je dat — sidebar + stats + albums"   width={800} height={480}><FactsScreen /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="home"
+        title="Huis — Guition 7″ · 800×480"
+        subtitle="Weerscherm met uurstrip · Verlichting met kleurtemperatuur"
+      >
+        <DCArtboard id="weather" label="Weer — hero + uurstrip + 5-daagse"        width={800} height={480}><WeatherScreen /></DCArtboard>
+        <DCArtboard id="lights"  label="Lampen &amp; Scènes — ct-slider + sfeer"  width={800} height={480}><LightsScreen /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="immich"
+        title="Immich Fotoroulatie — Guition 7″ · 800×480"
+        subtitle="Drie varianten · auto-rotatie met crossfade · foto’s zijn placeholders"
+      >
+        <DCArtboard id="imm-a" label="A — Full-bleed landschap · scrim boven+onder · ken burns"     width={800} height={480}><ImmichFullbleedWide /></DCArtboard>
+        <DCArtboard id="imm-b" label="B — Split · foto links · info+volgende foto rechts"           width={800} height={480}><ImmichSplitWide /></DCArtboard>
+        <DCArtboard id="imm-c" label="C — Editorial panorama · foto boven · thumbnail-strip onder"  width={800} height={480}><ImmichEditorialWide /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="lampen-hood"
+        title="Lampen hood-stijl — Guition 7″ · 800×480"
+        subtitle="Drie varianten geïnspireerd op afzuigkap-ontwerp · boog-dials · segmentkolommen · hybride tegels"
+      >
+        <DCArtboard id="hood-a" label="A — Boog-dials · lamplijst links + twee arc-dials rechts"     width={800} height={480}><LightsHoodA /></DCArtboard>
+        <DCArtboard id="hood-b" label="B — Segment-kolommen · één kolom per lamp · CT+scènes onder" width={800} height={480}><LightsHoodB /></DCArtboard>
+        <DCArtboard id="hood-c" label="C — Hybride tegels · preset-knoppen + CT-boog rechts"         width={800} height={480}><LightsHoodC /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="weer-ios"
+        title="Weer iOS-varianten — Guition 7″ · 800×480"
+        subtitle="Drie varianten geïnspireerd op iOS Weather · gradient · glas · dag / avond / nacht"
+      >
+        <DCArtboard id="ios-a" label="A — Zonnig dag · azure gradiënt · glas rechts"      width={800} height={480}><WeatherIosA /></DCArtboard>
+        <DCArtboard id="ios-b" label="B — Bewolkt avond · zonsondergang · onderstrip"      width={800} height={480}><WeatherIosB /></DCArtboard>
+        <DCArtboard id="ios-c" label="C — Nacht &amp; regen · donkerblauw · regendruppels" width={800} height={480}><WeatherIosC /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

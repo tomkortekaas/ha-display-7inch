@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Afzuigkap Scherm — Ontwerpen</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --vent: oklch(0.74 0.13 222);   /* koele airflow-cyaan */
+    --light: oklch(0.80 0.13 75);   /* warme lamp-amber */
+    --muted: oklch(0.58 0.012 250);
+    --bg: #08080a;
+    --surface: #131418;
+    --surface-2: #1b1c21;
+    --line: rgba(255,255,255,0.07);
+  }
+
+  /* ---- het 480x480 scherm ---- */
+  .screen {
+    width: 480px; height: 480px;
+    background:
+      radial-gradient(120% 90% at 50% -10%, #16171c 0%, var(--bg) 60%);
+    color: #fff;
+    font-family: "Montserrat", sans-serif;
+    display: flex; flex-direction: column;
+    box-sizing: border-box;
+    padding: 26px 30px 22px;
+    user-select: none;
+    overflow: hidden;
+  }
+
+  .topbar { display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-size: 14px; font-weight: 700; letter-spacing: 3px; color: #fff; opacity: .85; }
+  .status { display: flex; align-items: center; gap: 7px; font-size: 12px; letter-spacing: .5px; color: var(--muted); font-weight: 500; }
+  .status .dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.74 0.13 150); box-shadow: 0 0 8px oklch(0.74 0.13 150 / .8); display: inline-block; }
+
+  .fan-spin { animation: spin 2.4s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* =================== VARIANT A — ARCS =================== */
+  .dials { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .divider { width: 1px; align-self: stretch; margin: 40px 0; background: linear-gradient(transparent, var(--line), transparent); }
+  .dial-col { flex: 1; display: flex; flex-direction: column; align-items: center; cursor: pointer; padding: 6px; border-radius: 24px; transition: background .2s; }
+  .dial-col:active { background: rgba(255,255,255,0.03); }
+  .dial-wrap { position: relative; width: 190px; height: 190px; }
+  .dial-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+  .dial-icon { height: 36px; display: flex; align-items: center; }
+  .dial-num { font-size: 58px; font-weight: 800; line-height: 1; letter-spacing: -2px; }
+  .dial-label { margin-top: 14px; font-size: 12.5px; font-weight: 600; letter-spacing: 2.5px; color: var(--muted); }
+  .dial-ticks { display: flex; gap: 7px; margin-top: 12px; }
+  .dial-ticks span { width: 22px; height: 4px; border-radius: 2px; transition: background .3s; }
+  .hint { text-align: center; font-size: 11px; letter-spacing: 1.5px; color: var(--muted); opacity: .6; margin-top: 4px; }
+
+  /* =================== VARIANT B — COLUMNS =================== */
+  .cols { flex: 1; display: flex; gap: 22px; padding: 14px 4px 6px; }
+  .seg-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+  .seg-head { height: 46px; display: flex; align-items: center; transition: color .3s; }
+  .seg-tube { flex: 1; width: 100%; display: flex; flex-direction: column; gap: 10px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 26px; }
+  .seg { flex: 1; position: relative; border: none; background: var(--surface-2); border-radius: 16px; cursor: pointer; overflow: hidden; padding: 0; }
+  .seg:active { transform: scale(0.985); }
+  .seg-fill { position: absolute; inset: 0; border-radius: 16px; transition: opacity .3s ease; }
+  .seg-num { font-size: 40px; font-weight: 800; margin-top: 14px; letter-spacing: -1px; }
+  .seg-label { font-size: 12px; font-weight: 600; letter-spacing: 2px; color: var(--muted); margin-top: 2px; }
+
+  /* =================== VARIANT C — TILES =================== */
+  .tiles { flex: 1; display: flex; flex-direction: column; gap: 16px; justify-content: center; }
+  .tile-row { background: var(--surface); border: 1px solid var(--line); border-radius: 26px; padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+  .tile-info { display: flex; align-items: center; gap: 16px; }
+  .tile-icon { width: 44px; display: flex; align-items: center; transition: color .3s; }
+  .tile-meta { display: flex; flex-direction: column; gap: 3px; }
+  .tile-label { font-size: 13px; font-weight: 700; letter-spacing: 2px; color: #fff; }
+  .tile-val { font-size: 12px; font-weight: 600; letter-spacing: 1.5px; transition: color .3s; }
+  .tile-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .tile-btn { height: 60px; border-radius: 18px; border: 1.5px solid var(--line); background: var(--surface-2); color: #fff; font-family: inherit; font-size: 24px; font-weight: 700; cursor: pointer; transition: all .18s ease; }
+  .tile-btn:active { transform: scale(0.95); }
+
+  /* =================== VARIANT D — HYBRIDE =================== */
+  .hyb { flex: 1; display: flex; align-items: center; gap: 8px; }
+  .hyb-col { flex: 1; display: flex; flex-direction: column; align-items: center; }
+  .hyb-dial { position: relative; width: 158px; height: 158px; }
+  .hyb-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .hyb-icon { height: 30px; display: flex; align-items: center; }
+  .hyb-num { font-size: 48px; font-weight: 800; line-height: 1; letter-spacing: -2px; }
+  .hyb-label { font-size: 12px; font-weight: 600; letter-spacing: 2.5px; color: var(--muted); margin: 12px 0 14px; }
+  .hyb-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; width: 100%; }
+  .hyb-btn { height: 52px; border-radius: 15px; border: 1.5px solid var(--line); background: var(--surface-2); color: #fff; font-family: inherit; font-size: 21px; font-weight: 700; cursor: pointer; transition: all .18s ease; }
+  .hyb-btn:active { transform: scale(0.94); }
+
+  body { margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="hood" title="Afzuigkap — 480×480 touchscreen" subtitle="D = aanbevolen hybride (A's look + B's knoppen) · zwart · Montserrat · tikbaar">
+          <DCArtboard id="hybrid" label="D · Hybride — boog + knoppen ★" width={480} height={480}><ScreenHybrid /></DCArtboard>
+          <DCArtboard id="arcs" label="A · Boog-dials" width={480} height={480}><ScreenArcs /></DCArtboard>
+          <DCArtboard id="columns" label="B · Segment-kolommen" width={480} height={480}><ScreenColumns /></DCArtboard>
+          <DCArtboard id="tiles" label="C · Discrete tegels" width={480} height={480}><ScreenTiles /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

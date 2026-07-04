@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NSPanel EUW — 480×320 Herontwerp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --green:   oklch(0.74 0.16 152);
+  --vent:    oklch(0.74 0.13 222);
+  --light:   oklch(0.80 0.13 75);
+  --muted:   oklch(0.58 0.012 250);
+  --bg:      #08080a;
+  --surface: #131418;
+  --surf2:   #1b1c21;
+  --line:    rgba(255,255,255,.07);
+  --line2:   rgba(255,255,255,.16);
+}
+*,*::before,*::after { box-sizing: border-box; margin:0; padding:0; }
+body { background:#030304; padding:44px 28px 80px; font-family:"JetBrains Mono",monospace; color:#fff; }
+
+/* canvas */
+.pg-title { font-family:"Montserrat",sans-serif; font-size:13px; font-weight:700; letter-spacing:3px; color:rgba(255,255,255,.4); text-transform:uppercase; padding-bottom:14px; border-bottom:1px solid rgba(255,255,255,.07); margin-bottom:52px; }
+.pg-title em { color:rgba(255,255,255,.2); font-style:normal; font-weight:500; }
+.section { margin-bottom:60px; }
+.sec-lbl { font-size:10px; letter-spacing:2px; color:rgba(255,255,255,.25); margin-bottom:16px; text-transform:uppercase; }
+.row { display:flex; gap:36px; flex-wrap:wrap; }
+.ab { display:flex; flex-direction:column; gap:10px; }
+.ab-lbl { font-size:10px; letter-spacing:1.5px; color:rgba(255,255,255,.22); }
+
+/* shared screen */
+.nsp {
+  width:480px; height:320px; background:var(--bg); color:#fff;
+  font-family:"Montserrat",sans-serif; position:relative; overflow:hidden;
+  border-radius:8px; user-select:none;
+  box-shadow:0 0 0 1px rgba(255,255,255,.10), 0 20px 56px rgba(0,0,0,.85);
+}
+.topbar { height:40px; padding:0 22px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--line); flex-shrink:0; position:relative; }
+.brand { font-size:12px; font-weight:700; letter-spacing:3px; opacity:.85; }
+.live-dot { width:7px; height:7px; border-radius:50%; background:oklch(0.74 0.13 150); box-shadow:0 0 7px oklch(0.74 0.13 150/.8); display:inline-block; flex-shrink:0; }
+.status { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:500; color:var(--muted); letter-spacing:.4px; }
+.pager { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); display:flex; gap:5px; }
+.pager i { width:5px; height:5px; border-radius:50%; background:rgba(255,255,255,.2); }
+.pager i.on { width:14px; border-radius:3px; background:#fff; }
+
+/* spotify main — full-bleed */
+.sp-bg { position:absolute; inset:0; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.04) 0 2px,transparent 2px 11px),linear-gradient(160deg,oklch(0.58 0.15 285),oklch(0.42 0.13 255) 46%,#0a0b1a); }
+.sp-scrim-top { position:absolute; top:0; left:0; right:0; height:100px; background:linear-gradient(rgba(0,0,0,.55),transparent); pointer-events:none; }
+.sp-scrim-bot { position:absolute; bottom:0; left:0; right:0; height:190px; background:linear-gradient(transparent,rgba(0,0,0,.82)); pointer-events:none; }
+.sp-topbar { position:absolute; top:0; left:0; right:0; height:40px; padding:0 18px; display:flex; align-items:center; justify-content:space-between; z-index:2; }
+.sp-bottom { position:absolute; bottom:0; left:0; right:0; padding:0 20px 14px; z-index:2; }
+.sp-pill { display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:600; color:rgba(255,255,255,.75); background:rgba(0,0,0,.32); backdrop-filter:blur(6px); padding:3px 9px; border-radius:999px; }
+.sp-pill.gr { color:var(--green); background:color-mix(in oklch,var(--green) 14%,transparent); }
+.sp-title { font-size:24px; font-weight:800; letter-spacing:-.6px; line-height:1.1; }
+.sp-artist { font-size:12px; font-weight:600; color:rgba(255,255,255,.6); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.eq { display:inline-flex; align-items:flex-end; gap:2px; height:10px; }
+.eq i { width:2.5px; background:var(--green); border-radius:1px; height:40%; }
+.eq[data-on="true"] i { animation:eq 900ms ease-in-out infinite; }
+.eq i:nth-child(2){animation-delay:.2s}.eq i:nth-child(3){animation-delay:.4s}.eq i:nth-child(4){animation-delay:.1s}
+@keyframes eq{0%,100%{height:30%}50%{height:100%}}
+.sp-title { font-size:21px; font-weight:800; letter-spacing:-.5px; line-height:1.1; }
+.sp-artist { font-size:11.5px; font-weight:600; color:rgba(255,255,255,.6); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.prog-wrap { margin:9px 0 5px; }
+.prog-track { position:relative; height:4px; border-radius:2px; background:rgba(255,255,255,.2); cursor:pointer; }
+.prog-fill { position:absolute; left:0; top:0; height:100%; border-radius:2px; background:#fff; }
+.prog-knob { position:absolute; top:50%; width:11px; height:11px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); }
+.prog-times { display:flex; justify-content:space-between; font-size:10px; font-weight:500; color:rgba(255,255,255,.5); font-variant-numeric:tabular-nums; margin-top:4px; }
+.transport { display:flex; align-items:center; justify-content:space-between; margin:7px 0; }
+.tbtn { width:34px; height:34px; border-radius:50%; border:none; background:rgba(255,255,255,.08); color:#fff; cursor:pointer; display:grid; place-items:center; transition:background .15s; }
+.tbtn.act { color:var(--green); }
+.tplay { width:48px; height:48px; border-radius:50%; border:none; background:var(--green); color:#07140d; cursor:pointer; display:grid; place-items:center; box-shadow:0 5px 18px color-mix(in oklch,var(--green) 38%,transparent); transition:transform .12s; }
+.tplay:active { transform:scale(.93); }
+.vol-row { display:flex; align-items:center; gap:8px; }
+.vol-track { position:relative; flex:1; height:4px; border-radius:2px; background:rgba(255,255,255,.18); cursor:pointer; }
+.vol-fill { position:absolute; left:0; top:0; height:100%; border-radius:2px; background:rgba(255,255,255,.8); }
+.vol-pct { font-size:10px; font-weight:600; color:rgba(255,255,255,.5); width:20px; text-align:right; font-variant-numeric:tabular-nums; }
+
+/* songtekst */
+.lyr-bg { position:absolute; inset:0; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 2px,transparent 2px 11px),linear-gradient(160deg,oklch(0.58 0.15 285),oklch(0.42 0.13 255) 46%,#0a0b1a); }
+.lyr-fade { position:absolute; inset:0; z-index:1; pointer-events:none; background:linear-gradient(180deg,rgba(8,8,12,.88) 0%,transparent 20%,transparent 74%,rgba(8,8,12,.94) 100%); }
+.lyr-topbar { position:absolute; top:12px; left:18px; right:18px; z-index:3; display:flex; align-items:center; justify-content:space-between; }
+.lyr-pill { display:inline-flex; align-items:center; gap:5px; font-size:10.5px; font-weight:600; color:#fff; background:rgba(0,0,0,.38); backdrop-filter:blur(8px); padding:5px 10px; border-radius:999px; font-variant-numeric:tabular-nums; }
+.lyr-window { position:absolute; top:40px; bottom:38px; left:0; right:0; z-index:2; overflow:hidden; }
+.lyr-track { position:absolute; left:0; right:0; top:0; transition:transform .5s cubic-bezier(.22,.61,.36,1); }
+.lyr-line { height:46px; display:flex; align-items:center; padding:0 22px; font-size:15.5px; font-weight:700; letter-spacing:-.2px; line-height:1.15; color:rgba(255,255,255,.28); transition:color .4s,transform .4s; transform-origin:left center; text-wrap:pretty; }
+.lyr-line.past { color:rgba(255,255,255,.2); }
+.lyr-line.on { color:#fff; transform:scale(1.04); }
+.lyr-foot { position:absolute; bottom:10px; left:18px; right:18px; z-index:3; display:flex; align-items:center; justify-content:space-between; }
+.lyr-meta { font-size:11px; font-weight:600; color:rgba(255,255,255,.65); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.lyr-song { color:#fff; }
+
+/* weetjes */
+.fact-bg { position:absolute; inset:0; opacity:.83; background-image:repeating-linear-gradient(135deg,rgba(255,255,255,.04) 0 2px,transparent 2px 9px),linear-gradient(165deg,oklch(0.50 0.14 285) 0%,#10111f 52%,#08080a 100%); }
+.fact-scrim { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,8,10,.28) 0%,transparent 28%,rgba(8,8,10,.48) 100%); }
+.fact-inner { position:absolute; inset:0; z-index:2; display:flex; padding:16px 20px; gap:18px; }
+.fact-left { width:108px; flex-shrink:0; display:flex; flex-direction:column; }
+.fact-avatar { width:58px; height:58px; border-radius:50%; background:linear-gradient(150deg,#3a3c66,#1a1b2e); box-shadow:inset 0 0 0 1px rgba(255,255,255,.14); display:grid; place-items:center; overflow:hidden; }
+.fact-avatar span { font-family:"JetBrains Mono",monospace; font-size:7px; color:rgba(255,255,255,.4); }
+.fact-name { font-size:18px; font-weight:800; letter-spacing:-.4px; margin-top:9px; }
+.fact-sub { font-size:9.5px; font-weight:600; color:var(--muted); margin-top:3px; letter-spacing:.2px; line-height:1.5; }
+.fact-right { flex:1; display:flex; flex-direction:column; }
+.fact-eyebrow { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:700; letter-spacing:2.5px; color:var(--green); margin-bottom:10px; flex-shrink:0; }
+.fact-text { font-size:15.5px; font-weight:700; line-height:1.38; letter-spacing:-.3px; flex:1; text-wrap:pretty; animation:factIn .45s cubic-bezier(.22,.61,.36,1) both; }
+@keyframes factIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.fact-foot { display:flex; align-items:center; justify-content:space-between; margin-top:8px; flex-shrink:0; }
+.fdots { display:flex; gap:5px; align-items:center; }
+.fdot { width:6px; height:6px; border-radius:50%; background:rgba(255,255,255,.22); transition:width .3s,background .3s; }
+.fdot.on { width:17px; border-radius:3px; background:var(--green); }
+.ftag { font-family:"JetBrains Mono",monospace; font-size:8px; color:rgba(255,255,255,.32); background:rgba(0,0,0,.3); padding:2px 5px; border-radius:3px; }
+
+/* weerscherm */
+.wx { background:radial-gradient(120% 90% at 50% -10%,#16171c 0%,var(--bg) 60%); display:flex; flex-direction:column; }
+.wx-hero { height:106px; display:flex; align-items:center; padding:0 20px; gap:10px; border-bottom:1px solid var(--line); flex-shrink:0; }
+.wx-iconwrap { position:relative; width:78px; height:78px; display:grid; place-items:center; flex-shrink:0; }
+.wx-iconwrap::before { content:""; position:absolute; inset:-10%; border-radius:50%; background:radial-gradient(circle,var(--wg,rgba(100,180,255,.32)) 0%,transparent 66%); filter:blur(10px); }
+.wx-iconwrap svg { position:relative; z-index:1; }
+.wx-main { flex:1; }
+.wx-temp { font-size:68px; font-weight:800; line-height:.88; letter-spacing:-4px; font-variant-numeric:tabular-nums; }
+.wx-deg { font-size:30px; font-weight:600; letter-spacing:0; vertical-align:super; }
+.wx-cond { font-size:13.5px; font-weight:700; margin-top:4px; }
+.wx-wind { font-size:10.5px; font-weight:500; color:var(--muted); margin-top:2px; }
+.wx-cards { width:172px; flex-shrink:0; display:flex; flex-direction:column; gap:5px; }
+.wx-card { background:var(--surface); border:1px solid var(--line2); border-radius:11px; padding:6px 10px; }
+.wx-clbl { font-size:9px; font-weight:700; letter-spacing:2px; color:var(--muted); }
+.wx-sun-row { display:flex; gap:10px; margin-top:2px; }
+.wx-stime { font-size:11px; font-weight:700; font-variant-numeric:tabular-nums; }
+.wx-ssub { font-size:8.5px; color:var(--muted); }
+.wx-uv-row { display:flex; align-items:center; gap:8px; margin-top:2px; }
+.wx-uvnum { font-size:22px; font-weight:800; letter-spacing:-1px; font-variant-numeric:tabular-nums; line-height:1; }
+.wx-uvlbl { font-size:10px; font-weight:700; }
+.wx-uvbar { flex:1; position:relative; height:4px; border-radius:2px; background:linear-gradient(90deg,#3a78d2,#4ADE80 30%,#F5B45A 62%,#EF4444 86%); }
+.wx-uvknob { position:absolute; top:50%; width:9px; height:9px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); box-shadow:0 1px 4px rgba(0,0,0,.6); }
+.wx-forecast { flex:1; display:flex; flex-direction:column; justify-content:space-evenly; padding:0 20px; }
+.wx-row { display:flex; align-items:center; gap:8px; }
+.wx-day { width:22px; font-size:11px; font-weight:700; letter-spacing:.3px; }
+.wx-lo { width:24px; text-align:right; font-size:10px; font-weight:600; color:var(--muted); font-variant-numeric:tabular-nums; }
+.wx-barwrap { flex:1; position:relative; height:5px; border-radius:2.5px; background:var(--surf2); }
+.wx-barfill { position:absolute; height:100%; border-radius:2.5px; }
+.wx-nowdot { position:absolute; top:50%; width:9px; height:9px; border-radius:50%; background:#fff; transform:translate(-50%,-50%); box-shadow:0 0 5px rgba(255,255,255,.7); }
+.wx-hi { width:26px; font-size:10.5px; font-weight:700; font-variant-numeric:tabular-nums; }
+
+/* afzuigkap */
+.af { background:radial-gradient(120% 90% at 50% -10%,#16171c 0%,var(--bg) 60%); display:flex; flex-direction:column; }
+.af-body { flex:1; display:flex; padding:4px 16px 12px; gap:6px; }
+.af-divider { width:1px; background:linear-gradient(transparent,var(--line2),transparent); margin:16px 0; }
+.af-col { flex:1; display:flex; flex-direction:column; align-items:center; padding:8px 4px 0; }
+.af-arcwrap { position:relative; flex-shrink:0; }
+.af-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+.af-icon { height:24px; display:flex; align-items:center; }
+.af-num { font-size:44px; font-weight:800; line-height:1; letter-spacing:-2px; font-variant-numeric:tabular-nums; }
+.af-lbl { font-size:10.5px; font-weight:600; letter-spacing:2.5px; color:var(--muted); margin-top:4px; }
+.af-btns { display:flex; gap:5px; margin-top:7px; width:100%; }
+.af-btn { flex:1; height:44px; border-radius:11px; border:1px solid var(--line2); background:var(--surf2); color:rgba(255,255,255,.7); font-family:"Montserrat",sans-serif; font-size:14px; font-weight:700; cursor:pointer; display:grid; place-items:center; transition:all .15s; }
+.af-btn:active { transform:scale(.93); }
+@keyframes spin{to{transform:rotate(360deg)}}
+.fan-spin { animation:spin 2.4s linear infinite; }
+@keyframes fillbar{from{width:0%}to{width:100%}}
+</style>
+</head>
+<body>
+
+<div class="pg-title">NSPanel EUW · 480×320 <em>— herontwerp</em></div>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+const fmtT = s => Math.floor(s/60)+":"+(Math.floor(s%60)+"").padStart(2,"0");
+const ic = { fill:"none", stroke:"currentColor", strokeWidth:2, strokeLinecap:"round", strokeLinejoin:"round" };
+
+/* ── shared icons ── */
+function PlayI({s=22}){return<svg width={s} height={s} viewBox="0 0 24 24"><path d="M7 4.5L19 12 7 19.5Z" fill="currentColor"/></svg>}
+function PauseI({s=22}){return<svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1.3"/><rect x="14" y="5" width="4" height="14" rx="1.3"/></svg>}
+function NextI({s=18}){return<svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M5 5L15 12 5 19Z"/><rect x="16" y="5" width="3" height="14" rx="1.2"/></svg>}
+function PrevI({s=18}){return<svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor"><path d="M19 5L9 12 19 19Z"/><rect x="5" y="5" width="3" height="14" rx="1.2"/></svg>}
+function ShufI({s=17}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><path d="M3 6h4l10 12h4"/><path d="M3 18h4l3.5-4.2"/><path d="M14.5 8.2L17 6h4"/><path d="M18.5 3.5L21 6l-2.5 2.5"/><path d="M18.5 15.5L21 18l-2.5 2.5"/></svg>}
+function RepI({s=17}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><path d="M6 7h10a3 3 0 013 3v1"/><path d="M18 4.5L20.5 7 18 9.5"/><path d="M18 17H8a3 3 0 01-3-3v-1"/><path d="M6 19.5L3.5 17 6 14.5"/></svg>}
+function VolI({s=18}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><path d="M4 9h3l4-3.5v13l-4-3.5H4Z" fill="currentColor" stroke="none"/><path d="M15.5 9a4 4 0 010 6"/><path d="M18 6.5a7.5 7.5 0 010 11"/></svg>}
+function DevI({s=13}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><rect x="4" y="3" width="16" height="18" rx="3"/><circle cx="12" cy="15" r="3.2"/><circle cx="12" cy="7" r="1" fill="currentColor"/></svg>}
+function HrtI({s=18,fill=false}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic} fill={fill?"currentColor":"none"}><path d="M12 20C12 20 4 14.5 4 8.8A4.2 4.2 0 0112 6.4 4.2 4.2 0 0120 8.8C20 14.5 12 20 12 20Z"/></svg>}
+function InfoI({s=12}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r=".5" fill="currentColor" stroke="none"/></svg>}
+function FanI({s=22,spin=false}){return<svg width={s} height={s} viewBox="0 0 24 24" fill="currentColor" style={spin?{animation:"spin 2.4s linear infinite"}:{}}><path d="M12 12c0-2 1.5-4 4-4.5C18 7 20 8.5 20 10.5s-2 3-4.5 2.5C14 12.7 13 13.5 13 16c0 2-1.5 3.5-3.5 3.5S6 18 6 16c0-2 2-3 4.5-2.5C11.8 13 12 12.8 12 12Z"/><path d="M12 12c2 0 4-1.5 4.5-4 .5-2-1-4-3-4S10 5.5 10 8c-.3 1.5.5 2.5 2 4Z"/><path d="M12 12c0 2-1.5 4-4 4.5-2 .5-4-1-4-3s2-3 4.5-2.5C10 10.3 11 9.5 11 7c0-2 1.5-3.5 3.5-3.5" opacity=".5"/></svg>}
+function LmpI({s=20}){return<svg width={s} height={s} viewBox="0 0 24 24" {...ic}><path d="M9 21h6"/><path d="M12 3a6 6 0 016 6c0 2.4-1.4 4.5-3.5 5.5V17H9.5v-2.5C7.4 13.5 6 11.4 6 9a6 6 0 016-6z" fill="currentColor" stroke="none" fillOpacity=".9"/></svg>}
+
+/* ── Artboard wrapper ── */
+function AB({label,children}){return<div className="ab"><span className="ab-lbl">{label}</span>{children}</div>}
+
+/* ════════════════════════════════════
+   SPOTIFY HOOFDSCHERM
+════════════════════════════════════ */
+const LS_SP = "nsp_spotify";
+const loadSp = () => { try{return JSON.parse(localStorage.getItem(LS_SP))||{}}catch{return{}} };
+
+function SpotifyMain() {
+  const sv = loadSp();
+  const total = 218;
+  const [playing, setPlaying] = useState(sv.playing ?? true);
+  const [pos, setPos]         = useState(sv.pos ?? 74);
+  const [vol, setVol]         = useState(sv.vol ?? 0.62);
+  const [shuffle, setShuffle] = useState(sv.shuffle ?? true);
+  const [repeat, setRepeat]   = useState(sv.repeat ?? false);
+  const [liked, setLiked]     = useState(sv.liked ?? true);
+  const barRef = useRef(null), volRef = useRef(null);
+
+  useEffect(()=>{
+    if(!playing) return;
+    const t = setInterval(()=>setPos(p=>p>=total?0:p+1),1000);
+    return()=>clearInterval(t);
+  },[playing]);
+  useEffect(()=>{
+    localStorage.setItem(LS_SP, JSON.stringify({playing,pos,vol,shuffle,repeat,liked}));
+  },[playing,pos,vol,shuffle,repeat,liked]);
+
+  const seek = e=>{const r=barRef.current.getBoundingClientRect();setPos(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width))*total)};
+  const setV = e=>{const r=volRef.current.getBoundingClientRect();setVol(Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)))};
+  const pct = pos/total*100;
+
+  return (
+    <div className="nsp">
+      <div className="sp-bg"/>
+      <div className="sp-scrim-top"/>
+      <div className="sp-scrim-bot"/>
+      <div className="sp-topbar">
+        <span className="sp-pill"><DevI s={12}/> Woonkamer</span>
+        <span className="sp-pill gr"><span className="eq" data-on={String(playing)}><i/><i/><i/><i/></span> live</span>
+      </div>
+      <div className="sp-bottom">
+        <div className="sp-title">Midnight City</div>
+        <div className="sp-artist">M83 · Hurry Up, We're Dreaming</div>
+        <div className="prog-wrap" style={{marginTop:10}}>
+          <div className="prog-track" ref={barRef} onClick={seek}>
+            <span className="prog-fill" style={{width:pct+"%"}}/>
+            <span className="prog-knob" style={{left:pct+"%"}}/>
+          </div>
+          <div className="prog-times"><span>{fmtT(pos)}</span><span>{fmtT(total)}</span></div>
+        </div>
+        <div className="transport" style={{marginTop:6}}>
+          <button className={"tbtn"+(shuffle?" act":"")} onClick={()=>setShuffle(!shuffle)}><ShufI/></button>
+          <button className="tbtn" onClick={()=>setPos(0)}><PrevI/></button>
+          <button className="tplay" onClick={()=>setPlaying(!playing)}>{playing?<PauseI/>:<PlayI/>}</button>
+          <button className="tbtn" onClick={()=>setPos(0)}><NextI/></button>
+          <button className={"tbtn"+(repeat?" act":"")} onClick={()=>setRepeat(!repeat)}><RepI/></button>
+        </div>
+        <div className="vol-row" style={{marginTop:6}}>
+          <VolI/>
+          <div className="vol-track" ref={volRef} onClick={setV}>
+            <span className="vol-fill" style={{width:vol*100+"%"}}/>
+          </div>
+          <span className="vol-pct">{Math.round(vol*100)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   SONGTEKST
+════════════════════════════════════ */
+const LYRICS = [
+  {t:0, x:"♪"},
+  {t:12, x:"Lichten over de snelweg, de stad ademt traag"},
+  {t:22, x:"We rijden door de nacht, geen reden om te stoppen"},
+  {t:32, x:"Jij draait het raampje open, de wind neemt het over"},
+  {t:42, x:"En alles wat we zochten ligt hier voor ons"},
+  {t:53, x:"Wakker, wakker — de morgen is van ons"},
+  {t:63, x:"Wakker, wakker — we laten het maar gaan"},
+  {t:74, x:"Neonlicht kleurt de hemel boven het asfalt"},
+  {t:85, x:"Een kort moment dat eindeloos lijkt te duren"},
+  {t:96, x:"Hou vast, hou vast, voor het straks weer verdwijnt"},
+  {t:107,x:"Wakker, wakker — de morgen is van ons"},
+  {t:118,x:"Wakker, wakker — we laten het maar gaan"},
+  {t:130,x:"♪"},
+];
+const SLOT=46, WIN=242;
+
+function SpotifyLyrics() {
+  const [pos, setPos] = useState(41);
+  useEffect(()=>{
+    const t = setInterval(()=>setPos(p=>p>=218?0:p+1),1000);
+    return()=>clearInterval(t);
+  },[]);
+  let active=0;
+  for(let i=0;i<LYRICS.length;i++) if(pos>=LYRICS[i].t) active=i;
+  const offset = WIN/2 - (active+0.5)*SLOT;
+  return (
+    <div className="nsp">
+      <div className="lyr-bg"/>
+      <div className="lyr-fade"/>
+      <div className="lyr-topbar">
+        <span className="lyr-pill"><span className="eq" data-on="true"><i/><i/><i/><i/></span> songtekst</span>
+        <span className="lyr-pill">{fmtT(pos)}</span>
+      </div>
+      <div className="lyr-window">
+        <div className="lyr-track" style={{transform:`translateY(${offset}px)`}}>
+          {LYRICS.map((l,i)=>(
+            <div key={i} className={"lyr-line"+(i===active?" on":i<active?" past":"")}>{l.x}</div>
+          ))}
+        </div>
+      </div>
+      <div className="lyr-foot">
+        <div className="lyr-meta"><span className="lyr-song">Midnight City</span> · M83</div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   WEETJES
+════════════════════════════════════ */
+const FACTS = [
+  "M83 is genoemd naar het sterrenstelsel Messier 83, zo'n 15 miljoen lichtjaar van ons vandaan.",
+  "Achter M83 zit Anthony Gonzalez — begonnen als duo, nu zijn soloproject.",
+  "'Midnight City' verscheen in 2011 op het dubbelalbum Hurry Up, We're Dreaming.",
+  "Het nummer eindigt met een saxofoonsolo — ongewoon voor een synthpop-hit.",
+];
+
+function SpotifyFacts() {
+  const [i, setI] = useState(0);
+  useEffect(()=>{
+    const t = setInterval(()=>setI(n=>(n+1)%FACTS.length),7000);
+    return()=>clearInterval(t);
+  },[]);
+  return (
+    <div className="nsp">
+      <div className="fact-bg"/>
+      <div className="fact-scrim"/>
+      <div className="fact-inner">
+        <div className="fact-left">
+          <div className="fact-avatar"><span>artiest</span></div>
+          <div className="fact-name">M83</div>
+          <div className="fact-sub">Synth-pop · Frankrijk · sinds 2001</div>
+        </div>
+        <div className="fact-right">
+          <div className="fact-eyebrow"><InfoI/> WIST JE DAT?</div>
+          <div className="fact-text" key={i}>{FACTS[i]}</div>
+          <div className="fact-foot">
+            <div className="fdots">{FACTS.map((_,n)=><span key={n} className={"fdot"+(n===i?" on":"")}/>)}</div>
+            <span className="ftag">via provider</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   WEERSCHERM
+════════════════════════════════════ */
+const GLO_LO=9, GLO_HI=23;
+const DAYS = [
+  {day:"Nu",  cond:"partly", lo:13, hi:20, now:true},
+  {day:"Za",  cond:"rain",   lo:20, hi:20},
+  {day:"Zo",  cond:"rain",   lo:20, hi:23},
+  {day:"Ma",  cond:"rain",   lo:13, hi:23},
+  {day:"Di",  cond:"rain",   lo:13, hi:20},
+];
+function tempColor(t){
+  if(t<=10) return "#3a78d2";
+  if(t<=15) return "#4ADE80";
+  if(t<=20) return "#78c048";
+  if(t<=25) return "#F5B45A";
+  return "#F59E42";
+}
+
+function WxIcon({cond, s=48}){
+  if(cond==="sun") return (
+    <svg width={s} height={s} viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="10" fill="#F5B45A"/>
+      {[0,45,90,135,180,225,270,315].map(a=>{
+        const r=a*Math.PI/180, x1=24+15*Math.cos(r), y1=24+15*Math.sin(r), x2=24+20*Math.cos(r), y2=24+20*Math.sin(r);
+        return <line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#F5B45A" strokeWidth="2.5" strokeLinecap="round"/>;
+      })}
+    </svg>
+  );
+  if(cond==="partly") return (
+    <svg width={s} height={s} viewBox="0 0 48 48" fill="none">
+      <circle cx="22" cy="18" r="8" fill="#5A96EB"/>
+      {[315,0,45].map(a=>{const r=a*Math.PI/180,x1=22+12*Math.cos(r),y1=18+12*Math.sin(r),x2=22+16*Math.cos(r),y2=18+16*Math.sin(r);return<line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#5A96EB" strokeWidth="2" strokeLinecap="round"/>})}
+      <path d="M10 30 q0-7 8-7 q1-5 7-5 q8 0 8 7 h2 q4 0 4 4t-4 4H13q-3 0-3-3Z" fill="#78B4EB"/>
+    </svg>
+  );
+  /* rain */
+  return (
+    <svg width={s} height={s} viewBox="0 0 48 48" fill="none">
+      <path d="M10 26 q0-8 9-8 q1-6 8-6 q9 0 9 8 h2 q4 0 4 4t-4 4H14q-4 0-4-4Z" fill="#5A96EB"/>
+      {[[16,38],[22,42],[28,38],[34,42]].map(([x,y],i)=>(
+        <line key={i} x1={x} y1={y-5} x2={x} y2={y} stroke="#78B4EB" strokeWidth="2" strokeLinecap="round"/>
+      ))}
+    </svg>
+  );
+}
+
+function WxIconSm({cond,s=16}){
+  const fills={partly:"#78B4EB",rain:"#5A96EB",sun:"#F5B45A"};
+  const f = fills[cond]||"#78B4EB";
+  if(cond==="sun") return <svg width={s} height={s} viewBox="0 0 16 16"><circle cx="8" cy="8" r="4" fill={f}/>{[0,45,90,135,180,225,270,315].map(a=>{const r=a*Math.PI/180,x1=8+5.5*Math.cos(r),y1=8+5.5*Math.sin(r),x2=8+7.5*Math.cos(r),y2=8+7.5*Math.sin(r);return<line key={a} x1={x1} y1={y1} x2={x2} y2={y2} stroke={f} strokeWidth="1.2" strokeLinecap="round"/>})}</svg>;
+  if(cond==="partly") return <svg width={s} height={s} viewBox="0 0 16 16"><path d="M3 10q0-3 4-3q0-2 3-2q3 0 3 3h1q2 0 2 1.5T14 11H5q-2 0-2-1Z" fill={f}/></svg>;
+  return <svg width={s} height={s} viewBox="0 0 16 16"><path d="M2 9q0-3 4-3q0-2 3-2q3 0 3 3h1q2 0 2 1.5T13 10H5q-3 0-3-1Z" fill={f}/>{[[4,14],[7,12],[10,14],[13,12]].map(([x,y],i)=><line key={i} x1={x} y1={y-3} x2={x} y2={y} stroke={f} strokeWidth="1.2" strokeLinecap="round"/>)}</svg>;
+}
+
+function WeatherScreen() {
+  const uvPct = 6/11*100;
+  return (
+    <div className="nsp wx">
+      <div className="topbar">
+        <span className="brand">BEVERWIJK</span>
+        <div className="pager"><i/><i/><i className="on"/></div>
+        <span className="status"><i className="live-dot"/>Vr 5 jun · 14:19</span>
+      </div>
+      <div className="wx-hero">
+        <div className="wx-iconwrap" style={{"--wg":"rgba(90,150,235,.32)"}}>
+          <WxIcon cond="partly"/>
+        </div>
+        <div className="wx-main">
+          <div className="wx-temp">20<span className="wx-deg">°</span></div>
+          <div className="wx-cond">Licht bewolkt</div>
+          <div className="wx-wind">↓ 5 km/u NNW</div>
+        </div>
+        <div className="wx-cards">
+          <div className="wx-card">
+            <div className="wx-clbl">ZON · 16u 37m daglicht</div>
+            <div className="wx-sun-row">
+              <div><div className="wx-stime">05:21</div><div className="wx-ssub">opkomst</div></div>
+              <div><div className="wx-stime">21:58</div><div className="wx-ssub">ondergang</div></div>
+            </div>
+          </div>
+          <div className="wx-card">
+            <div className="wx-clbl">UV INDEX</div>
+            <div className="wx-uv-row">
+              <span className="wx-uvnum" style={{color:"#F5B45A"}}>6</span>
+              <span className="wx-uvlbl" style={{color:"#F5B45A"}}>Hoog</span>
+              <div className="wx-uvbar">
+                <div className="wx-uvknob" style={{left:uvPct+"%"}}/>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="wx-forecast">
+        {DAYS.map((d,i)=>{
+          const lo=(d.lo-GLO_LO)/(GLO_HI-GLO_LO)*100;
+          const hi=(d.hi-GLO_LO)/(GLO_HI-GLO_LO)*100;
+          const nowPct = d.now ? (20-GLO_LO)/(GLO_HI-GLO_LO)*100 : null;
+          return (
+            <div key={i} className="wx-row">
+              <span className="wx-day">{d.day}</span>
+              <span className="wx-lo" style={{width:18,display:"grid",placeItems:"center"}}><WxIconSm cond={d.cond}/></span>
+              <span className="wx-lo">{d.lo}°</span>
+              <div className="wx-barwrap">
+                <div className="wx-barfill" style={{left:lo+"%",right:(100-hi)+"%",background:`linear-gradient(90deg,${tempColor(d.lo)},${tempColor(d.hi)})`}}/>
+                {d.now && <div className="wx-nowdot" style={{left:nowPct+"%"}}/>}
+              </div>
+              <span className="wx-hi" style={{color:tempColor(d.hi)}}>{d.hi}°</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   AFZUIGKAP
+════════════════════════════════════ */
+function polarXY(cx,cy,r,deg){
+  const rad=(deg-90)*Math.PI/180;
+  return [cx+r*Math.cos(rad), cy+r*Math.sin(rad)];
+}
+function descArc(cx,cy,r,a1,a2){
+  const a2n = a2<a1 ? a2+360 : a2;
+  const [sx,sy]=polarXY(cx,cy,r,a1);
+  const [ex,ey]=polarXY(cx,cy,r,a2);
+  const lg = (a2n-a1)>180?1:0;
+  return `M${sx.toFixed(2)},${sy.toFixed(2)} A${r},${r} 0 ${lg} 1 ${ex.toFixed(2)},${ey.toFixed(2)}`;
+}
+const ARC_S=225, ARC_E=135, MAX_LVL=3;
+function endAngle(lvl){ return ARC_S + (lvl/MAX_LVL)*270; }
+
+function Dial({lvl,color,icon,label}){
+  const SIZE=134, CX=67, CY=67, R=52, SW=10;
+  return (
+    <div className="af-arcwrap" style={{width:SIZE,height:SIZE}}>
+      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`} style={{overflow:"visible"}}>
+        <path d={descArc(CX,CY,R,ARC_S,ARC_E)} fill="none" stroke="var(--surf2)" strokeWidth={SW} strokeLinecap="round"/>
+        {lvl>0 && <path d={descArc(CX,CY,R,ARC_S,endAngle(lvl))} fill="none" stroke={color} strokeWidth={SW} strokeLinecap="round" style={{filter:`drop-shadow(0 0 5px ${color}88)`}}/>}
+      </svg>
+      <div className="af-center">
+        <div className="af-icon">{icon}</div>
+        <div className="af-num" style={{color}}>{lvl}</div>
+      </div>
+    </div>
+  );
+}
+
+const LS_AF="nsp_afzuigkap";
+const loadAf=()=>{try{return JSON.parse(localStorage.getItem(LS_AF))||{}}catch{return{}}};
+
+function AfzuigkapScreen(){
+  const sv = loadAf();
+  const [vent,  setVent]  = useState(sv.vent  ?? 2);
+  const [light, setLight] = useState(sv.light ?? 1);
+  useEffect(()=>{localStorage.setItem(LS_AF,JSON.stringify({vent,light}));},[vent,light]);
+
+  const ventColor  = "var(--vent)";
+  const lightColor = "var(--light)";
+
+  const VentBtns = ()=>(
+    <div className="af-btns">
+      {[0,1,2,3].map(n=>(
+        <button key={n} className="af-btn"
+          style={vent===n?{background:ventColor,color:"#05131a",borderColor:ventColor}:{}}
+          onClick={()=>setVent(n)}>{n}</button>
+      ))}
+    </div>
+  );
+  const LightBtns = ()=>(
+    <div className="af-btns">
+      {[null,1,2,3].map((n,i)=>(
+        <button key={i} className="af-btn"
+          style={light===(n??0)?{background:lightColor,color:"#1a1000",borderColor:lightColor}:{}}
+          onClick={()=>setLight(n??0)}>
+          {n===null ? "⏻" : n}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="nsp af">
+      <div className="topbar">
+        <span className="brand">AFZUIGKAP</span>
+        <span className="status"><i className="live-dot"/> verbonden</span>
+      </div>
+      <div className="af-body">
+        <div className="af-col">
+          <Dial lvl={vent} color="var(--vent)" icon={<FanI s={22} spin={vent>0}/>} label="VENTILATIE"/>
+          <span className="af-lbl">VENTILATIE</span>
+          <VentBtns/>
+        </div>
+        <div className="af-divider"/>
+        <div className="af-col">
+          <Dial lvl={light} color="var(--light)" icon={<LmpI s={20}/>} label="VERLICHTING"/>
+          <span className="af-lbl">VERLICHTING</span>
+          <LightBtns/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════
+   APP
+════════════════════════════════════ */
+function App(){
+  return (
+    <div>
+      <div className="section">
+        <div className="sec-lbl">Spotify · 3 schermen</div>
+        <div className="row">
+          <AB label="Hoofdscherm — bediening"><SpotifyMain/></AB>
+          <AB label="Songtekst — auto-scroll"><SpotifyLyrics/></AB>
+          <AB label="Weetjes — artiest &amp; nummer"><SpotifyFacts/></AB>
+        </div>
+      </div>
+      <div className="section">
+        <div className="sec-lbl">Weerscherm · Afzuigkap</div>
+        <div className="row">
+          <AB label="Weerscherm — Beverwijk"><WeatherScreen/></AB>
+          <AB label="Afzuigkap — boog + knoppen"><AfzuigkapScreen/></AB>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

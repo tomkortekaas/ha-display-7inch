@@ -1,0 +1,319 @@
+# =============================================================================
+#  IMMICH FOTOLIJST — 4" 480x480 touchscreen  ·  Variant A (full-bleed ambient)
+#  ESPHome + LVGL
+# -----------------------------------------------------------------------------
+#  AANPAK (gekozen default — betrouwbaarste route):
+#   • Home Assistant regelt de ROTATIE en de SELECTIE (welke foto, welk album,
+#     herinneringen, enz.) en duwt drie waarden naar de ESP:
+#        - sensor.immich_photo_url   (kant-en-klare JPEG-URL van de foto)
+#        - sensor.immich_place       (locatie-bijschrift)
+#        - sensor.immich_date        (datum-bijschrift)
+#   • De ESP doet alleen: foto ophalen via online_image + tonen + klok/bijschrift.
+#
+#  >>> Onderaan dit bestand staat OPTIE 2: de ESP haalt zélf willekeurige foto's
+#      op via de Immich-API (standalone, zonder HA) — als commentaar, geavanceerd.
+#
+#  BELANGRIJK over het beeldformaat:
+#   online_image leest PNG of JPEG. Immich-thumbnails zijn vaak WebP, dus laat
+#   Home Assistant een JPEG-URL leveren (bv. /api/assets/{id}/thumbnail?...&format=jpeg
+#   of een via HA getranscodeerde afbeelding).
+# =============================================================================
+
+esphome:
+  name: immich-fotolijst
+  friendly_name: Immich Fotolijst
+  on_boot:
+    - delay: 3s
+    - lvgl.label.update:
+        id: clock_lbl
+        text: !lambda 'return id(ha_time).now().strftime("%H:%M");'
+
+esp32:
+  board: esp32-s3-devkitc-1            # >>> TODO: zelfde board als de afzuigkap
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+api:
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        then:
+          - lvgl.label.update:
+              id: clock_lbl
+              text: !lambda 'return id(ha_time).now().strftime("%H:%M");'
+
+# =============================================================================
+#  KLEUREN
+#   0x08080A achtergrond · 0x38BDF8 cyaan-accent · 0xFFFFFF wit · 0xC8CACE muted
+# =============================================================================
+
+font:
+  - file: "gfonts://Montserrat@800"
+    id: font_place
+    size: 30
+  - file: "gfonts://Montserrat@700"
+    id: font_brand
+    size: 14
+  - file: "gfonts://Montserrat@600"
+    id: font_clock
+    size: 16
+  - file: "gfonts://Montserrat@500"
+    id: font_date
+    size: 15
+
+# =============================================================================
+#  WAARDEN VANUIT HOME ASSISTANT
+# =============================================================================
+text_sensor:
+  - platform: homeassistant
+    id: immich_url
+    entity_id: sensor.immich_photo_url
+    on_value:
+      # nieuwe foto-URL ontvangen -> laad 'm in online_image
+      - lambda: |-
+          id(immich_img).set_url(x.c_str());
+          id(immich_img).update();
+
+  - platform: homeassistant
+    id: immich_place
+    entity_id: sensor.immich_place
+    on_value:
+      - lvgl.label.update:
+          id: place_lbl
+          text: !lambda 'return x.c_str();'
+
+  - platform: homeassistant
+    id: immich_date
+    entity_id: sensor.immich_date
+    on_value:
+      - lvgl.label.update:
+          id: date_lbl
+          text: !lambda 'return x.c_str();'
+
+# =============================================================================
+#  DE FOTO  (online_image haalt de JPEG op en tekent 'm)
+# =============================================================================
+online_image:
+  - id: immich_img
+    # placeholder-url; wordt bij elke nieuwe foto overschreven door HA
+    url: "http://192.168.1.10:2283/placeholder.jpg"   # >>> TODO
+    format: JPEG
+    type: RGB565
+    resize: 480x480           # vult het hele scherm; pas aan naar 'cover'-gedrag
+    update_interval: never
+    on_download_finished:
+      - lvgl.image.update:
+          id: photo_widget
+          src: immich_img
+
+# =============================================================================
+#  >>> TODO: DISPLAY + TOUCHSCREEN  —  zelfde paneel als afzuigkap.yaml
+#  (ST7701S RGB 480x480 + GT911 template — CONTROLEER elke pin!)
+# =============================================================================
+spi:
+  - id: lcd_spi
+    clk_pin: 48
+    mosi_pin: 47
+
+display:
+  - platform: st7701s
+    id: disp
+    auto_clear_enabled: false
+    update_interval: never
+    data_rate: 2MHz
+    spi_id: lcd_spi
+    cs_pin: 39
+    reset_pin: 40
+    de_pin: 18
+    hsync_pin: 16
+    vsync_pin: 17
+    pclk_pin: 21
+    dimensions:
+      width: 480
+      height: 480
+    data_pins:
+      red:   [11, 12, 13, 14, 0]
+      green: [8, 20, 3, 46, 9, 10]
+      blue:  [4, 5, 6, 7, 15]
+    init_sequence:
+      - 1   # >>> TODO: init-sequence van jouw paneel
+
+i2c:
+  - id: touch_i2c
+    sda: 19          # >>> TODO
+    scl: 45          # >>> TODO
+    scan: true
+
+touchscreen:
+  - platform: gt911
+    id: touch
+    i2c_id: touch_i2c
+
+output:
+  - platform: ledc
+    pin: 38          # >>> TODO: backlight pin
+    id: backlight_out
+light:
+  - platform: monochromatic
+    output: backlight_out
+    id: backlight
+    name: "Scherm helderheid"
+    restore_mode: ALWAYS_ON
+
+# =============================================================================
+#  LVGL  —  VARIANT A (full-bleed ambient)
+# =============================================================================
+lvgl:
+  displays:
+    - disp
+  touchscreens:
+    - touch
+  color_depth: 16
+  bg_color: 0x08080A
+
+  pages:
+    - id: photo_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+
+        # ---- de foto, schermvullend ----
+        - image:
+            id: photo_widget
+            src: immich_img
+            align: CENTER
+            x: 0
+            y: 0
+
+        # ---- scrim onderaan voor leesbaarheid ----
+        - obj:
+            width: 480
+            height: 210
+            align: BOTTOM_MID
+            y: 0
+            radius: 0
+            border_width: 0
+            bg_color: 0x000000
+            bg_opa: 60%
+            pad_all: 0
+
+        # ---- scrim bovenaan ----
+        - obj:
+            width: 480
+            height: 90
+            align: TOP_MID
+            y: 0
+            radius: 0
+            border_width: 0
+            bg_color: 0x000000
+            bg_opa: 45%
+            pad_all: 0
+
+        # ---- topbalk: merk + klok ----
+        - label:
+            text: "IMMICH"
+            text_font: font_brand
+            text_color: 0xFFFFFF
+            text_opa: 90%
+            align: TOP_LEFT
+            x: 28
+            y: 26
+        - label:
+            id: clock_lbl
+            text: "--:--"
+            text_font: font_clock
+            text_color: 0xFFFFFF
+            align: TOP_RIGHT
+            x: -28
+            y: 24
+
+        # ---- onderaan: locatie + datum ----
+        - label:
+            id: place_lbl
+            text: "—"
+            text_font: font_place
+            text_color: 0xFFFFFF
+            long_mode: DOT
+            width: 420
+            align: BOTTOM_LEFT
+            x: 28
+            y: -58
+        - label:
+            id: date_lbl
+            text: "—"
+            text_font: font_date
+            text_color: 0xC8CACE
+            align: BOTTOM_LEFT
+            x: 28
+            y: -34
+
+        # ---- dun accent-streepje (voortgang kun je later via een bar doen) ----
+        - obj:
+            width: 60
+            height: 3
+            radius: 2
+            border_width: 0
+            bg_color: 0x38BDF8
+            align: BOTTOM_LEFT
+            x: 28
+            y: -22
+
+# =============================================================================
+#  HOME ASSISTANT KANT (ter referentie — dit zet je in HA, niet in ESPHome)
+# -----------------------------------------------------------------------------
+#  1) REST-sensor of template die elke 30s een willekeurige Immich-asset kiest
+#     en sensor.immich_photo_url / _place / _date vult. Voorbeeld-automation:
+#
+#     trigger: time_pattern (every 30s)
+#     action: roep Immich /api/assets/random aan met je API-key,
+#             pak id + exifInfo.city/country + fileCreatedAt,
+#             zet de drie input_text/sensor-waarden.
+#     De URL bouw je als:
+#       {immich}/api/assets/{id}/thumbnail?size=preview   (zorg dat 't JPEG is)
+#
+#  2) De API-key zet je in HA (secrets), NIET op de ESP.
+# =============================================================================
+
+# =============================================================================
+#  >>> OPTIE 2 (geavanceerd, standalone zonder HA) — als startpunt, uitgecommentarieerd
+# -----------------------------------------------------------------------------
+#  De ESP haalt zélf elke 30s een willekeurige foto op. Vereist http_request +
+#  json, en het parsen van de Immich-respons op de ESP. Minder robuust, maar het
+#  kan. Globale lijnen:
+#
+#  http_request:
+#    verify_ssl: false        # voor self-hosted zonder geldig cert
+#    timeout: 10s
+#
+#  interval:
+#    - interval: 30s
+#      then:
+#        - http_request.get:
+#            url: "http://192.168.1.10:2283/api/assets/random?count=1"
+#            headers:
+#              x-api-key: !secret immich_api_key
+#            capture_response: true
+#            on_response:
+#              then:
+#                - lambda: |-
+#                    // body bevat een JSON-array: [ { "id": "...", "exifInfo": {...}, ... } ]
+#                    // parse met json::parse_json en pak id + exifInfo.city/country + fileCreatedAt,
+#                    // bouw de thumbnail-URL (JPEG!), zet 'm op id(immich_img) en update,
+#                    // werk place_lbl / date_lbl bij.
+# =============================================================================

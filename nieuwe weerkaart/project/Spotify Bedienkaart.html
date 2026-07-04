@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Spotify Bedienkaart — 7" 1024×600</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --green: oklch(0.74 0.16 152);     /* muziek-accent (groen) */
+    --muted: oklch(0.62 0.012 250);
+    --muted-2: oklch(0.48 0.01 250);
+    --bg: #08080a;
+    --surface: #16171b;
+    --surface-2: #1f2025;
+    --line: rgba(255,255,255,0.08);
+  }
+  body { margin: 0; }
+
+  .sp {
+    width: 1024px; height: 600px;
+    background: radial-gradient(130% 100% at 18% 40%, #141519 0%, var(--bg) 62%);
+    color: #fff;
+    font-family: "Montserrat", sans-serif;
+    box-sizing: border-box;
+    padding: 48px;
+    display: flex;
+    align-items: center;
+    gap: 56px;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* sfeer-gloed */
+  .sp-glow { position: absolute; left: -60px; top: 50%; transform: translateY(-50%); width: 520px; height: 520px; border-radius: 50%;
+    background: radial-gradient(circle, color-mix(in oklch, var(--green) 38%, transparent) 0%, transparent 68%); filter: blur(40px); opacity: .35; pointer-events: none; }
+
+  /* ---- album ---- */
+  .sp-art { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .sp-cover { width: 372px; height: 372px; border-radius: 20px; position: relative; overflow: hidden;
+    background:
+      repeating-linear-gradient(135deg, rgba(255,255,255,.05) 0 2px, transparent 2px 9px),
+      linear-gradient(145deg, #2a8f5a, #11633a 50%, #0c2b1e);
+    box-shadow: 0 30px 70px rgba(0,0,0,.6), inset 0 0 0 1px var(--line); }
+  .ph-tag { position: absolute; left: 12px; bottom: 10px; font-family: "JetBrains Mono", monospace; font-size: 11px; letter-spacing: .5px;
+    color: rgba(255,255,255,.6); background: rgba(0,0,0,.32); padding: 3px 8px; border-radius: 6px; }
+  .sp-device { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--green); letter-spacing: .3px; }
+
+  /* ---- rechts ---- */
+  .sp-main { flex: 1; z-index: 1; display: flex; flex-direction: column; min-width: 0; }
+  .sp-eyebrow { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: 700; letter-spacing: 2.5px; color: var(--muted); margin-bottom: 14px; }
+  .eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 14px; }
+  .eq i { width: 3px; height: 40%; background: var(--green); border-radius: 1px; }
+  .eq[data-on="true"] i { animation: eq 900ms ease-in-out infinite; }
+  .eq i:nth-child(2) { animation-delay: .2s; } .eq i:nth-child(3) { animation-delay: .4s; } .eq i:nth-child(4) { animation-delay: .1s; }
+  @keyframes eq { 0%,100% { height: 30%; } 50% { height: 100%; } }
+
+  .sp-title { font-size: 50px; font-weight: 800; letter-spacing: -1.5px; line-height: 1.02; }
+  .sp-artist { font-size: 24px; font-weight: 600; color: #fff; opacity: .82; margin-top: 8px; }
+  .sp-album { font-size: 15px; font-weight: 500; color: var(--muted); margin-top: 4px; letter-spacing: .2px; }
+
+  /* voortgang */
+  .sp-prog { margin-top: 34px; }
+  .sp-track { position: relative; height: 6px; border-radius: 3px; background: var(--surface-2); cursor: pointer; }
+  .sp-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 3px; background: var(--green); }
+  .sp-knob { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  .sp-times { display: flex; justify-content: space-between; margin-top: 9px; font-size: 13px; font-weight: 500; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* transport */
+  .sp-transport { display: flex; align-items: center; gap: 20px; margin-top: 28px; }
+  .sp-sec { width: 56px; height: 56px; border-radius: 50%; border: none; background: transparent; color: var(--muted); cursor: pointer; display: grid; place-items: center; transition: color .15s, background .15s; }
+  .sp-sec:hover { color: #fff; }
+  .sp-sec.act { color: var(--green); }
+  .sp-sec.act::after { content: ""; position: absolute; }
+  .sp-sec.big { color: #fff; }
+  .sp-play { width: 84px; height: 84px; border-radius: 50%; border: none; background: var(--green); color: #07140d; cursor: pointer; display: grid; place-items: center;
+    box-shadow: 0 10px 30px color-mix(in oklch, var(--green) 40%, transparent); transition: transform .12s; margin: 0 6px; }
+  .sp-play:active { transform: scale(0.94); }
+
+  /* volume */
+  .sp-vol { display: flex; align-items: center; gap: 16px; margin-top: 32px; }
+  .sp-vol-ic { color: var(--muted); display: flex; }
+  .sp-voltrack { position: relative; flex: 1; height: 6px; border-radius: 3px; background: var(--surface-2); cursor: pointer; }
+  .sp-volfill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 3px; background: rgba(255,255,255,.85); }
+  .sp-volknob { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 2px 6px rgba(0,0,0,.5); }
+  .sp-vol-pct { font-size: 14px; font-weight: 600; color: var(--muted); width: 28px; text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="spotify.jsx"></script>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="spotify" title="Spotify bedienkaart — 7&quot; JC1060P470C (1024×600)" subtitle="Zelfde stijl · groen muziek-accent · tikbaar: play/pause, voortgang, volume">
+          <DCArtboard id="card" label="Nu afgespeeld" width={1024} height={600}><SpotifyCard /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

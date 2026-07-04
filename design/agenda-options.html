@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agenda opties - HA Display 7</title>
+  <style>
+    :root {
+      --bg: #000;
+      --rail: #050507;
+      --panel: #0b0b0f;
+      --panel-2: #121218;
+      --line: #24242c;
+      --text: #fff;
+      --muted: #8d8d98;
+      --low: #54545f;
+      --blue: #35c7ff;
+      --mint: #48e09a;
+      --amber: #ffd166;
+      --pink: #ff4f87;
+      --violet: #9b6cff;
+      --orange: #ff9f43;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #15151a;
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }
+
+    .wrap {
+      width: min(1180px, 100%);
+      display: grid;
+      gap: 20px;
+    }
+
+    .chooser {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    button {
+      height: 40px;
+      border: 1px solid #363642;
+      background: #202029;
+      color: #f7f7fb;
+      border-radius: 8px;
+      padding: 0 14px;
+      font: 700 13px/1 Inter, sans-serif;
+      cursor: pointer;
+    }
+
+    button[aria-pressed="true"] {
+      border-color: var(--blue);
+      background: #083242;
+      color: #fff;
+    }
+
+    .display {
+      width: 1024px;
+      height: 600px;
+      max-width: 100%;
+      aspect-ratio: 1024 / 600;
+      background: var(--bg);
+      border: 1px solid #2a2a32;
+      box-shadow: 0 24px 80px rgb(0 0 0 / .42);
+      display: grid;
+      grid-template-columns: 88px 1fr;
+      overflow: hidden;
+    }
+
+    .rail {
+      background: var(--rail);
+      border-right: 1px solid #17171e;
+      padding: 20px 14px;
+      display: grid;
+      grid-template-rows: 48px 1fr 70px;
+      gap: 20px;
+    }
+
+    .logo {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      background: linear-gradient(135deg, #6f4dff, #39c8ff);
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+    }
+
+    .nav {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+      justify-items: center;
+    }
+
+    .nav span {
+      width: 56px;
+      height: 56px;
+      border-radius: 8px;
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      background: #0a0a0f;
+      border: 1px solid #181820;
+      font-size: 21px;
+    }
+
+    .nav .active {
+      color: white;
+      background: #102938;
+      border-color: #236982;
+      box-shadow: inset 4px 0 0 var(--blue);
+    }
+
+    .chip {
+      color: var(--low);
+      writing-mode: vertical-rl;
+      font: 800 10px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .08em;
+      justify-self: center;
+    }
+
+    .screen {
+      display: grid;
+      grid-template-rows: 56px 1fr;
+      min-width: 0;
+    }
+
+    .status {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      border-bottom: 1px solid #15151b;
+      background: #020203;
+    }
+
+    .clock {
+      font-size: 24px;
+      font-weight: 900;
+    }
+
+    .date {
+      color: var(--muted);
+      margin-left: 12px;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .status-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--mint);
+      box-shadow: 0 0 10px var(--mint);
+    }
+
+    .page {
+      padding: 20px 24px 22px;
+      display: none;
+      min-height: 0;
+    }
+
+    .page.active { display: grid; }
+
+    h1, h2, h3, p { margin: 0; }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    h1 {
+      font-size: 30px;
+      line-height: 1;
+      font-weight: 900;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 750;
+    }
+
+    .option-tag {
+      color: #d9f5ff;
+      background: #092a36;
+      border: 1px solid #1e6077;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .week-columns {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      min-height: 0;
+    }
+
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .day {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      min-width: 0;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 9px;
+    }
+
+    .day.today {
+      border-color: var(--blue);
+      box-shadow: inset 0 3px 0 var(--blue);
+    }
+
+    .day-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .day-name {
+      font-size: 13px;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .day-num {
+      color: var(--muted);
+      font: 850 18px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .events {
+      display: grid;
+      gap: 7px;
+      align-content: start;
+      min-height: 0;
+    }
+
+    .event {
+      border-left: 3px solid var(--blue);
+      background: var(--panel-2);
+      border-radius: 7px;
+      padding: 7px 7px 7px 8px;
+      min-width: 0;
+    }
+
+    .event.mint { border-left-color: var(--mint); }
+    .event.amber { border-left-color: var(--amber); }
+    .event.pink { border-left-color: var(--pink); }
+    .event.violet { border-left-color: var(--violet); }
+    .event.orange { border-left-color: var(--orange); }
+
+    .time {
+      color: var(--muted);
+      font: 850 10px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      margin-bottom: 4px;
+    }
+
+    .summary {
+      font-size: 12px;
+      line-height: 1.18;
+      font-weight: 850;
+      white-space: normal;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .more {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      align-self: end;
+    }
+
+    .timeline-layout {
+      grid-template-rows: auto 1fr;
+    }
+
+    .timeline-body {
+      display: grid;
+      grid-template-columns: 116px repeat(7, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+      min-height: 0;
+    }
+
+    .hours {
+      border-right: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: 34px repeat(8, 1fr);
+      color: var(--muted);
+      font: 850 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+
+    .hours span {
+      border-top: 1px solid #1a1a21;
+      padding: 7px 10px;
+    }
+
+    .time-day {
+      position: relative;
+      border-right: 1px solid #1a1a21;
+      display: grid;
+      grid-template-rows: 34px repeat(8, 1fr);
+      min-width: 0;
+    }
+
+    .time-day:last-child { border-right: 0; }
+
+    .time-day > strong {
+      padding: 9px 8px 0;
+      font-size: 12px;
+      border-bottom: 1px solid #1a1a21;
+    }
+
+    .slot {
+      border-bottom: 1px solid #15151c;
+    }
+
+    .pill-event {
+      position: absolute;
+      left: 7px;
+      right: 7px;
+      min-height: 32px;
+      border-radius: 7px;
+      padding: 7px;
+      background: #123747;
+      border: 1px solid #2d7894;
+      font-size: 11px;
+      line-height: 1.12;
+      font-weight: 850;
+      overflow: hidden;
+    }
+
+    .pill-event small {
+      display: block;
+      color: #b5deeb;
+      font: 850 10px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      margin-bottom: 3px;
+    }
+
+    .hybrid {
+      grid-template-rows: auto 1fr;
+    }
+
+    .hybrid-body {
+      display: grid;
+      grid-template-columns: 310px 1fr;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .today-panel {
+      background: var(--panel);
+      border: 1px solid var(--blue);
+      border-radius: 8px;
+      padding: 16px;
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .big-date {
+      font-size: 68px;
+      line-height: .9;
+      font-weight: 950;
+      color: var(--blue);
+    }
+
+    .today-title {
+      font-size: 22px;
+      font-weight: 950;
+    }
+
+    .stack {
+      display: grid;
+      gap: 9px;
+      align-content: start;
+    }
+
+    .mini-week {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .mini-day {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 11px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 9px;
+      min-width: 0;
+    }
+
+    .mini-day .summary { font-size: 13px; }
+
+    .note {
+      text-align: center;
+      color: #bdbdc7;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <div class="chooser" aria-label="Agenda opties">
+      <button type="button" aria-pressed="true" data-page="columns">Optie A · 7 kolommen</button>
+      <button type="button" aria-pressed="false" data-page="timeline">Optie B · tijdlijn</button>
+      <button type="button" aria-pressed="false" data-page="hybrid">Optie C · vandaag + week</button>
+    </div>
+
+    <section class="display">
+      <aside class="rail">
+        <div class="logo">H</div>
+        <div class="nav">
+          <span>⚡</span>
+          <span>☀</span>
+          <span>♫</span>
+          <span>☔</span>
+          <span>▣</span>
+          <span class="active">□</span>
+        </div>
+        <div class="chip">HA DISPLAY</div>
+      </aside>
+
+      <div class="screen">
+        <header class="status">
+          <div><span class="clock">08:42</span><span class="date">woensdag 17 juni</span></div>
+          <div class="status-right"><span>21.4°C</span><span>428 W</span><span class="dot"></span></div>
+        </header>
+
+        <article class="page week-columns active" id="columns">
+          <div class="title-row">
+            <div>
+              <h1>Familie agenda</h1>
+              <p class="subtitle">7 dagen · compacte kaart per dag · max 3 afspraken zichtbaar</p>
+            </div>
+            <div class="option-tag">Aanbevolen voor wanddisplay</div>
+          </div>
+          <div class="days">
+            <section class="day today">
+              <div class="day-head"><span class="day-name">Vandaag</span><span class="day-num">17</span></div>
+              <div class="events">
+                <div class="event"><div class="time">09:00</div><div class="summary">Schoolgesprek Fien</div></div>
+                <div class="event amber"><div class="time">13:30</div><div class="summary">Boodschappen ophalen</div></div>
+                <div class="event mint"><div class="time">18:15</div><div class="summary">Voetbaltraining</div></div>
+              </div>
+              <div class="more">3 afspraken</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Do</span><span class="day-num">18</span></div>
+              <div class="events">
+                <div class="event pink"><div class="time">08:30</div><div class="summary">Tandarts Tom</div></div>
+                <div class="event"><div class="time">20:00</div><div class="summary">Ouderavond</div></div>
+              </div>
+              <div class="more">2 afspraken</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Vr</span><span class="day-num">19</span></div>
+              <div class="events">
+                <div class="event violet"><div class="time">hele dag</div><div class="summary">Studiedag school</div></div>
+                <div class="event orange"><div class="time">17:45</div><div class="summary">Eten bij opa en oma</div></div>
+              </div>
+              <div class="more">2 afspraken</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Za</span><span class="day-num">20</span></div>
+              <div class="events">
+                <div class="event mint"><div class="time">10:00</div><div class="summary">Zwemles</div></div>
+                <div class="event amber"><div class="time">14:00</div><div class="summary">Verjaardag Noor</div></div>
+                <div class="event"><div class="time">19:30</div><div class="summary">Filmavond thuis</div></div>
+              </div>
+              <div class="more">+1 meer</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Zo</span><span class="day-num">21</span></div>
+              <div class="events">
+                <div class="event orange"><div class="time">11:00</div><div class="summary">Brunch familie</div></div>
+              </div>
+              <div class="more">1 afspraak</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Ma</span><span class="day-num">22</span></div>
+              <div class="events">
+                <div class="event"><div class="time">07:45</div><div class="summary">Gymtas mee</div></div>
+                <div class="event pink"><div class="time">16:10</div><div class="summary">Huisarts</div></div>
+              </div>
+              <div class="more">2 afspraken</div>
+            </section>
+            <section class="day">
+              <div class="day-head"><span class="day-name">Di</span><span class="day-num">23</span></div>
+              <div class="events">
+                <div class="event amber"><div class="time">18:00</div><div class="summary">Muziekles</div></div>
+              </div>
+              <div class="more">1 afspraak</div>
+            </section>
+          </div>
+        </article>
+
+        <article class="page timeline-layout" id="timeline">
+          <div class="title-row">
+            <div>
+              <h1>Familie agenda</h1>
+              <p class="subtitle">7 dagen · visuele tijdblokken per dag</p>
+            </div>
+            <div class="option-tag">Beste voor tijdsgevoel</div>
+          </div>
+          <div class="timeline-body">
+            <div class="hours"><strong></strong><span>07:00</span><span>09:00</span><span>11:00</span><span>13:00</span><span>15:00</span><span>17:00</span><span>19:00</span><span>21:00</span></div>
+            <section class="time-day"><strong>Vandaag 17</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:73px"><small>09:00</small>Schoolgesprek</div><div class="pill-event" style="top:292px;background:#143727;border-color:#3d8b62"><small>18:15</small>Voetbal</div></section>
+            <section class="time-day"><strong>Do 18</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:54px;background:#421529;border-color:#9b3c5f"><small>08:30</small>Tandarts</div><div class="pill-event" style="top:375px"><small>20:00</small>Ouderavond</div></section>
+            <section class="time-day"><strong>Vr 19</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:42px;bottom:16px;background:#2c204d;border-color:#765fc0"><small>Hele dag</small>Studiedag</div></section>
+            <section class="time-day"><strong>Za 20</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:94px;background:#143727;border-color:#3d8b62"><small>10:00</small>Zwemles</div><div class="pill-event" style="top:212px;background:#3b3214;border-color:#977b29"><small>14:00</small>Verjaardag</div></section>
+            <section class="time-day"><strong>Zo 21</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:129px;background:#3d2413;border-color:#9a6030"><small>11:00</small>Brunch</div></section>
+            <section class="time-day"><strong>Ma 22</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:44px"><small>07:45</small>Gymtas</div><div class="pill-event" style="top:263px;background:#421529;border-color:#9b3c5f"><small>16:10</small>Huisarts</div></section>
+            <section class="time-day"><strong>Di 23</strong><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><i class="slot"></i><div class="pill-event" style="top:286px;background:#3b3214;border-color:#977b29"><small>18:00</small>Muziekles</div></section>
+          </div>
+        </article>
+
+        <article class="page hybrid" id="hybrid">
+          <div class="title-row">
+            <div>
+              <h1>Familie agenda</h1>
+              <p class="subtitle">Vandaag groot · overige zes dagen compact</p>
+            </div>
+            <div class="option-tag">Beste voor dagelijks gebruik</div>
+          </div>
+          <div class="hybrid-body">
+            <section class="today-panel">
+              <div>
+                <div class="big-date">17</div>
+                <div class="today-title">Vandaag</div>
+                <p class="subtitle">woensdag · 3 afspraken</p>
+              </div>
+              <div class="event"><div class="time">09:00 - 09:30</div><div class="summary">Schoolgesprek Fien</div></div>
+              <div class="stack">
+                <div class="event amber"><div class="time">13:30</div><div class="summary">Boodschappen ophalen</div></div>
+                <div class="event mint"><div class="time">18:15</div><div class="summary">Voetbaltraining</div></div>
+              </div>
+            </section>
+            <section class="mini-week">
+              <div class="mini-day"><div class="day-head"><span class="day-name">Do</span><span class="day-num">18</span></div><div class="events"><div class="event pink"><div class="time">08:30</div><div class="summary">Tandarts Tom</div></div><div class="event"><div class="time">20:00</div><div class="summary">Ouderavond</div></div></div></div>
+              <div class="mini-day"><div class="day-head"><span class="day-name">Vr</span><span class="day-num">19</span></div><div class="events"><div class="event violet"><div class="time">hele dag</div><div class="summary">Studiedag school</div></div><div class="event orange"><div class="time">17:45</div><div class="summary">Eten bij opa en oma</div></div></div></div>
+              <div class="mini-day"><div class="day-head"><span class="day-name">Za</span><span class="day-num">20</span></div><div class="events"><div class="event mint"><div class="time">10:00</div><div class="summary">Zwemles</div></div><div class="event amber"><div class="time">14:00</div><div class="summary">Verjaardag Noor</div></div></div></div>
+              <div class="mini-day"><div class="day-head"><span class="day-name">Zo</span><span class="day-num">21</span></div><div class="events"><div class="event orange"><div class="time">11:00</div><div class="summary">Brunch familie</div></div></div></div>
+              <div class="mini-day"><div class="day-head"><span class="day-name">Ma</span><span class="day-num">22</span></div><div class="events"><div class="event"><div class="time">07:45</div><div class="summary">Gymtas mee</div></div><div class="event pink"><div class="time">16:10</div><div class="summary">Huisarts</div></div></div></div>
+              <div class="mini-day"><div class="day-head"><span class="day-name">Di</span><span class="day-num">23</span></div><div class="events"><div class="event amber"><div class="time">18:00</div><div class="summary">Muziekles</div></div></div></div>
+            </section>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <p class="note">Klik bovenaan tussen de drie opties. Dit is een visuele mockup; de uiteindelijke ESPHome/LVGL-versie wordt simpeler in effecten, maar behoudt de indeling, typografie en kleurcodering.</p>
+  </main>
+
+  <script>
+    const buttons = [...document.querySelectorAll("button[data-page]")];
+    const pages = [...document.querySelectorAll(".page")];
+
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        pages.forEach((page) => page.classList.toggle("active", page.id === button.dataset.page));
+      });
+    });
+  </script>
+</body>
+</html>

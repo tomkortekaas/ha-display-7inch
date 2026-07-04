@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weerscherm — 4" 480×480</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --muted: oklch(0.58 0.012 250);
+    --bg: #08080a;
+    --surface: #131418;
+    --surface-2: #1b1c21;
+    --line: rgba(255,255,255,0.07);
+    --line2: rgba(255,255,255,0.16);
+    --cool: oklch(0.62 0.10 248);
+  }
+  body { margin: 0; }
+
+  /* ---- gedeelde 480×480 schermbasis ---- */
+  .screen {
+    width: 480px; height: 480px;
+    background: radial-gradient(120% 90% at 50% -10%, #16171c 0%, var(--bg) 60%);
+    color: #fff;
+    font-family: "Montserrat", sans-serif;
+    display: flex; flex-direction: column;
+    box-sizing: border-box;
+    padding: 26px 30px 24px;
+    user-select: none;
+    overflow: hidden;
+  }
+  .topbar { display: flex; align-items: center; justify-content: space-between; position: relative; }
+  .pager { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 6px; }
+  .pager i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.22); }
+  .pager i.on { background: #fff; width: 16px; border-radius: 3px; }
+  .brand { font-size: 14px; font-weight: 700; letter-spacing: 3px; color: #fff; opacity: .85; }
+  .status { display: flex; align-items: center; gap: 7px; font-size: 12px; letter-spacing: .5px; color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .status .dot { width: 7px; height: 7px; border-radius: 50%; background: oklch(0.74 0.13 150); box-shadow: 0 0 8px oklch(0.74 0.13 150 / .8); display: inline-block; }
+
+  /* glow achter het hoofd-icoon */
+  .wx-iconwrap { position: relative; display: grid; place-items: center; }
+  .wx-iconwrap::before { content: ""; position: absolute; inset: -28%; border-radius: 50%;
+    background: radial-gradient(circle, var(--g) 0%, transparent 66%); filter: blur(14px); }
+  .wx-iconwrap svg { position: relative; z-index: 1; }
+  .wx-iconwrap.sm::before { inset: -16%; }
+
+  .wx-temp { font-size: 104px; font-weight: 800; line-height: .9; letter-spacing: -5px; font-variant-numeric: tabular-nums; }
+  .wx-temp.sm { font-size: 60px; letter-spacing: -3px; }
+  .wx-deg { font-weight: 600; letter-spacing: 0; }
+  .wx-cond { font-size: 22px; font-weight: 700; margin-top: 8px; }
+  .wx-cond.sm { font-size: 17px; }
+  .wx-feels { font-size: 14px; font-weight: 600; color: var(--muted); margin-top: 4px; letter-spacing: .3px; }
+
+  /* ===== VARIANT A — NU ===== */
+  .wx-hero { flex: 1; display: flex; align-items: center; gap: 22px; }
+  .wx-now { display: flex; flex-direction: column; }
+  .wx-minmax { display: flex; gap: 22px; font-size: 19px; font-weight: 700; align-items: center; margin: 4px 0 16px 4px; }
+  .wx-minmax span { display: inline-flex; align-items: center; gap: 5px; }
+  .wx-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+  .wx-chip { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 13px 0; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .wx-chip b { font-size: 21px; font-weight: 800; letter-spacing: -.5px; }
+  .wx-chip i { font-style: normal; font-size: 10px; font-weight: 600; letter-spacing: 1px; color: var(--muted); text-align: center; }
+
+  /* ===== gedeelde compacte 'nu' kop (B & C) ===== */
+  .wx-cur { display: flex; align-items: center; gap: 16px; margin-top: 18px; }
+  .wx-cur.compact { margin-top: 16px; }
+  .wx-curmeta { display: flex; flex-direction: column; gap: 3px; }
+  .wx-sectlabel { font-size: 12px; font-weight: 700; letter-spacing: 2.5px; color: var(--muted); margin: 22px 2px 12px; }
+
+  /* ===== VARIANT B — UREN ===== */
+  .wx-hourbox { flex: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 28px; padding: 16px 6px 18px; position: relative; display: flex; flex-direction: column; justify-content: flex-end; }
+  .wx-curve { position: absolute; left: 0; right: 0; top: 14px; width: 100%; height: 56px; }
+  .wx-hours { display: grid; grid-template-columns: repeat(6, 1fr); align-items: end; }
+  .wx-hour { display: flex; flex-direction: column; align-items: center; gap: 9px; padding: 12px 0 4px; border-radius: 18px; }
+  .wx-hour.on { background: var(--surface-2); }
+  .wx-h { font-size: 13px; font-weight: 700; letter-spacing: 1px; color: var(--muted); }
+  .wx-hour.on .wx-h { color: #fff; }
+  .wx-ht { font-size: 19px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+
+  /* ===== VARIANT C — DAGEN ===== */
+  .wx-days { flex: 1; display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+  .wx-day { display: grid; grid-template-columns: 64px 34px 34px 1fr 34px; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 18px; }
+  .wx-day.on { background: var(--surface); border: 1px solid var(--line); padding: 9px 13px; }
+  .wx-dname { font-size: 16px; font-weight: 700; }
+  .wx-dlo { font-size: 16px; font-weight: 700; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .wx-dhi { font-size: 16px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .wx-bar { position: relative; height: 7px; border-radius: 4px; background: var(--surface-2); }
+  .wx-barfill { position: absolute; top: 0; height: 100%; border-radius: 4px; }
+
+  /* ===== VARIANT D — VOORUITBLIK (referentie) ===== */
+  .cw-days { display: flex; flex-direction: column; gap: 9px; margin-top: 20px; }
+  .cw-day { display: grid; grid-template-columns: 42px 26px 34px 1fr 34px; align-items: center; gap: 11px; }
+  .cw-dname { font-size: 16px; font-weight: 700; }
+  .cw-lo { font-size: 16px; font-weight: 700; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+  .cw-hi { font-size: 16px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .cw-track { position: relative; height: 18px; }
+  .cw-fill { position: absolute; top: 0; height: 100%; border-radius: 9px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+  .cw-now { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(255,255,255,.9), 0 0 0 3px rgba(255,255,255,.18); }
+
+  .cw-sun { position: relative; height: 40px; margin: 26px 0 0; border-radius: 20px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+  .cw-sun-day { position: absolute; top: 0; height: 100%; background: linear-gradient(180deg, oklch(0.86 0.10 85), oklch(0.80 0.12 78)); }
+  .cw-moon { position: absolute; top: 50%; left: 18px; transform: translateY(-50%); display: flex; }
+  .cw-suni { position: absolute; top: 50%; transform: translate(-50%, -50%); display: flex; }
+  .cw-nowline { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; transform: translateX(-50%); box-shadow: 0 0 8px rgba(255,255,255,.8); }
+
+  .cw-hours { display: grid; grid-template-columns: repeat(6, 1fr); margin-top: 16px; }
+  .cw-hr { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .cw-hrt { font-size: 12px; font-weight: 700; letter-spacing: .5px; color: var(--muted); }
+  .cw-hrv { font-size: 18px; font-weight: 800; letter-spacing: -.5px; font-variant-numeric: tabular-nums; }
+
+  /* ===== VARIANT E — DAG (mix C + D) ===== */
+  .dd-hero { display: flex; align-items: center; gap: 16px; margin-top: 10px; }
+  .dd-now { display: flex; flex-direction: column; min-width: 0; }
+  .dd-temp { font-size: 56px; font-weight: 800; line-height: .88; letter-spacing: -3px; font-variant-numeric: tabular-nums; }
+  .dd-cond { font-size: 17px; font-weight: 700; margin-top: 6px; }
+  .dd-sub { display: flex; gap: 16px; margin-top: 7px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .dd-wind, .dd-uv { display: inline-flex; align-items: center; gap: 5px; }
+
+  .dd-cards { display: grid; grid-template-columns: 1.25fr 1fr; gap: 12px; margin-top: 10px; }
+  .dd-card { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 10px 14px 9px; }
+  .dd-cardhead { display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; }
+  .dd-cardhead span { font-size: 10.5px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+  .dd-cardhead b { font-size: 13.5px; font-weight: 700; color: #fff; }
+  .dd-rainsvg { width: 100%; height: 28px; display: block; }
+  .dd-rainx { display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: 4px; }
+  .dd-sun { display: flex; flex-direction: column; align-items: center; }
+  .dd-sunsvg { width: 100%; height: 40px; display: block; margin-top: 3px; }
+  .dd-suntimes { display: flex; justify-content: space-between; width: 100%; font-size: 12px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; margin-top: 1px; }
+  .dd-suntimes span:last-child { color: var(--muted); }
+
+  .dd-days { display: flex; flex-direction: column; gap: 5px; margin-top: 9px; }
+  .dd-day { display: grid; grid-template-columns: 34px 28px 40px 28px 1fr 28px; align-items: center; gap: 10px; }
+  .dd-dname { font-size: 15px; font-weight: 700; }
+  .dd-wmini { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* ===== VARIANT E2 — duidelijker bovenhelft ===== */
+  .d2-rain { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 12px 16px 11px; margin-top: 14px; }
+  .d2-rainhead { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 7px; }
+  .d2-lab { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+  .d2-cap { font-size: 15px; font-weight: 700; color: #fff; }
+  .d2-graph .dd-rainsvg { height: 38px; }
+  .d2-rainx { display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  .d2-sun { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin-top: 13px; padding: 0 2px; }
+  .d2-sunlab { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+  .d2-sundur { font-size: 13px; font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+  .ss { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
+  .ss-side { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; }
+  .ss-side.r { color: var(--muted); }
+  .ss-ico { font-size: 13px; opacity: .8; }
+  .ss-track { position: relative; height: 6px; border-radius: 3px; background: var(--surface-2); }
+  .ss-fill { position: absolute; left: 0; top: 0; height: 100%; border-radius: 3px; background: linear-gradient(90deg, oklch(0.70 0.10 60), oklch(0.86 0.13 82)); }
+  .ss-sun { position: absolute; top: 50%; width: 13px; height: 13px; border-radius: 50%; background: oklch(0.86 0.13 82); transform: translate(-50%, -50%); box-shadow: 0 0 9px oklch(0.86 0.13 82 / .9); }
+  .d2-days { gap: 6px; margin-top: 12px; }
+
+  /* ===== VARIANT E3 — staaf-neerslag + zon/UV rechts ===== */
+  .d3-top { display: grid; grid-template-columns: 1fr 158px; gap: 14px; margin-top: 12px; }
+  .d3-left { display: flex; flex-direction: column; }
+  .d3-hero { display: flex; align-items: center; gap: 12px; }
+  .d3-now { display: flex; flex-direction: column; }
+  .d3-meta { display: flex; align-items: center; gap: 14px; margin-top: 8px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .d3-feels { font-variant-numeric: tabular-nums; }
+
+  .d3-rain { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 11px 14px 10px; margin-top: 14px; }
+  .d3-rainhead { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
+  .d3-cap { font-size: 14px; font-weight: 700; color: #fff; }
+  .d3-rainx { display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+  /* staafjes-grafiek */
+  .bb { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; align-items: end; height: 50px; }
+  .bb-col { display: flex; align-items: flex-end; height: 100%; }
+  .bb-bar { width: 100%; border-radius: 4px 4px 2px 2px; background: linear-gradient(180deg, oklch(0.74 0.12 248), oklch(0.55 0.13 250)); }
+
+  /* zon + UV paneel */
+  .suc { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 12px 14px 14px; display: flex; flex-direction: column; }
+  .suc-sun { display: flex; flex-direction: column; align-items: center; }
+  .sd { display: block; }
+  .suc-times { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; width: 100%; margin-top: 2px; }
+  .suc-t { font-size: 13px; font-weight: 800; color: #fff; font-variant-numeric: tabular-nums; display: inline-flex; align-items: center; gap: 2px; }
+  .suc-t.r { color: var(--muted); justify-content: flex-end; }
+  .suc-t i { font-style: normal; font-size: 11px; opacity: .7; }
+  .suc-dur { font-size: 10px; font-weight: 700; letter-spacing: .5px; color: var(--muted); text-align: center; }
+  .suc-div { height: 1px; background: var(--line); margin: 12px 0 11px; }
+  .suc-uvlab { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--muted); margin-bottom: 8px; }
+
+  .uvm { display: flex; flex-direction: column; }
+  .uvm-top { display: flex; align-items: baseline; gap: 7px; }
+  .uvm-val { font-size: 30px; font-weight: 800; line-height: 1; letter-spacing: -1px; }
+  .uvm-lab { font-size: 13px; font-weight: 700; color: #fff; }
+  .uvm-scale { position: relative; height: 7px; border-radius: 4px; margin-top: 9px;
+    background: linear-gradient(90deg, oklch(0.74 0.13 150), oklch(0.82 0.15 95), oklch(0.78 0.16 60), oklch(0.64 0.21 28), oklch(0.58 0.22 330)); }
+  .uvm-marker { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: #fff; transform: translate(-50%, -50%); box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
+  .uvm-ends { display: flex; justify-content: space-between; font-size: 9px; font-weight: 700; color: var(--muted); margin-top: 4px; }
+
+  .d3-days { gap: 6px; margin-top: 14px; }
+
+  /* ===== VARIANT E4 — gecombineerde zon/UV + neerslag volle breedte ===== */
+  .d4-top { display: grid; grid-template-columns: minmax(0,1fr) 212px; gap: 14px; margin-top: 12px; align-items: stretch; }
+  .d4-hero { display: flex; align-items: center; gap: 12px; min-width: 0; }
+  .d4-meta { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .suw { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 12px; display: grid; grid-template-columns: minmax(0,1fr) 1px 74px; gap: 11px; align-items: center; overflow: hidden; }
+  .suw-sun { display: flex; flex-direction: column; align-items: center; min-width: 0; }
+  .suw-times { display: flex; justify-content: space-between; width: 100%; margin-top: 1px; }
+  .suw-dur { font-size: 10px; font-weight: 700; letter-spacing: .3px; color: var(--muted); margin-top: 3px; white-space: nowrap; }
+  .suw-div { width: 1px; align-self: stretch; background: var(--line); }
+  .suw-uv { display: flex; flex-direction: column; min-width: 0; }
+  .suw-uv .uvm-val { font-size: 26px; }
+  .suw-uv .uvm-lab { font-size: 12px; }
+
+  .d4-rain { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 12px 16px 11px; margin-top: 14px; }
+  .d4-rainx { display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--muted); margin-top: 6px; font-variant-numeric: tabular-nums; }
+  .d4-rain .bb { height: 46px; }
+  .d4-days { gap: 6px; margin-top: 13px; }
+
+  /* ===== VARIANT E5 — UV in de zonneboog + 5-daags ===== */
+  .d5-top { display: grid; grid-template-columns: minmax(0,1fr) 184px; gap: 14px; margin-top: 4px; align-items: center; }
+  .sua { display: flex; flex-direction: column; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 10px 14px 9px; }
+  .sua-arcwrap { position: relative; display: flex; justify-content: center; }
+  .sua-uv { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; line-height: 1; }
+  .sua-uvlab { font-size: 8.5px; font-weight: 700; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 3px; }
+  .sua-uvval { font-size: 27px; font-weight: 800; letter-spacing: -1px; line-height: .9; }
+  .sua-uvcat { font-size: 10px; font-weight: 700; margin-top: 2px; }
+  .sua-adv { display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11px; font-weight: 700; margin-top: 8px; white-space: nowrap; }
+  .sua-times { display: flex; align-items: baseline; justify-content: space-between; width: 100%; margin-top: 6px; }
+  .sua-dur { font-size: 9.5px; font-weight: 700; color: var(--muted); }
+
+  .d5-rain { background: var(--surface); border: 1px solid var(--line); border-radius: 22px; padding: 9px 16px 7px; margin-top: 6px; }
+  .d5-rain .bb { height: 30px; }
+  .d5-days { gap: 3px; margin-top: 5px; }
+  .d5-days .dd-day { grid-template-columns: 32px 26px 36px 26px 1fr 26px; gap: 9px; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="weather.jsx"></script>
+<script type="text/babel">
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  function App() {
+    return (
+      <DesignCanvas>
+        <DCSection id="weather" title="Weerscherm — 4&quot; 480×480 touchscreen" subtitle="Zelfde stijl · conditie-afhankelijke accenten · zwart · Montserrat">
+          <DCArtboard id="now" label="A · Nu — hero" width={480} height={480}><WeatherNow /></DCArtboard>
+          <DCArtboard id="day" label="E · Dag — mix (hero + buienradar + zon + forecast) ★" width={480} height={480}><WeatherDay /></DCArtboard>
+          <DCArtboard id="forecast" label="D · Vooruitblik — verlopende balken" width={480} height={480}><WeatherForecast /></DCArtboard>
+          <DCArtboard id="hourly" label="B · Uurverwachting" width={480} height={480}><WeatherHourly /></DCArtboard>
+          <DCArtboard id="daily" label="C · 5-daags" width={480} height={480}><WeatherDaily /></DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

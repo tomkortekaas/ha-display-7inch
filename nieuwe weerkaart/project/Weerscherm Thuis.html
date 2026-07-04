@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weerscherm Thuis — 1024×600</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --muted:   oklch(0.58 0.012 250);
+  --bg:      #08080a;
+  --surface: #131418;
+  --surf2:   #1b1c21;
+  --line:    rgba(255,255,255,.07);
+  --line2:   rgba(255,255,255,.16);
+  --cyan:    #38BDF8;
+  --amber:   #F5B45A;
+  --green:   oklch(0.74 0.13 150);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #000; font-family: "Montserrat", sans-serif; }
+#stage { position: fixed; inset: 0; display: grid; place-items: center; }
+#screen-wrap { transform-origin: center center; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 24px 80px rgba(0,0,0,.75); }
+
+.scr {
+  width: 1024px; height: 600px;
+  background: var(--bg); color: #fff;
+  font-family: "Montserrat", sans-serif;
+  display: flex; flex-direction: column;
+  overflow: hidden; user-select: none;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  height: 44px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px; border-bottom: 1px solid var(--line);
+}
+.brand  { font-size: 13px; font-weight: 700; letter-spacing: 3px; color: rgba(255,255,255,.85); }
+.status { display: flex; align-items: center; gap: 7px; font-size: 11px;
+          font-weight: 600; letter-spacing: .5px; color: var(--muted); }
+.dot    { width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+          box-shadow: 0 0 8px oklch(0.74 0.13 150 / .8); flex-shrink: 0; }
+
+/* ── BODY ── */
+.body { flex: 1; display: flex; min-height: 0; }
+
+/* ── LEFT COLUMN ── */
+.left-col {
+  width: 320px; flex-shrink: 0;
+  display: flex; flex-direction: column;
+  padding: 18px 16px 16px 24px; gap: 14px;
+  border-right: 1px solid var(--line);
+}
+.hero { display: flex; align-items: center; gap: 14px; flex-shrink: 0; }
+.icon-wrap { position: relative; display: grid; place-items: center; flex-shrink: 0; }
+.icon-wrap::before {
+  content: ""; position: absolute; inset: -32%; border-radius: 50%;
+  background: radial-gradient(circle, var(--g,rgba(120,180,235,.5)) 0%, transparent 66%);
+  filter: blur(12px); pointer-events: none;
+}
+.icon-wrap svg { position: relative; z-index: 1; }
+.hero-info  { display: flex; flex-direction: column; }
+.temp-big   { font-size: 92px; font-weight: 800; line-height: .88; letter-spacing: -5px;
+              font-variant-numeric: tabular-nums; }
+.temp-deg   { font-size: 40px; font-weight: 600; letter-spacing: 0; }
+.cond-text  { font-size: 18px; font-weight: 700; margin-top: 8px; }
+.wind-text  { font-size: 13px; font-weight: 600; color: var(--muted); margin-top: 5px; letter-spacing: .3px; }
+
+/* Buienradar */
+.radar-card {
+  flex: 1; min-height: 0;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 11px 13px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+.radar-head { display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.micro-label { font-size: 10px; font-weight: 700; letter-spacing: 2px; color: var(--muted); }
+.radar-chip {
+  font-size: 10px; font-weight: 600; letter-spacing: .3px; color: var(--cyan);
+  background: rgba(56,189,248,.10); border: 1px solid rgba(56,189,248,.22);
+  border-radius: 10px; padding: 3px 8px;
+}
+.radar-map  { aspect-ratio: 1 / 1; width: 100%; flex-shrink: 0;
+              border-radius: 11px; overflow: hidden; position: relative; }
+.radar-ts   {
+  position: absolute; top: 7px; left: 9px;
+  font-size: 11px; font-weight: 700; color: rgba(255,255,255,.82);
+  font-variant-numeric: tabular-nums; letter-spacing: .2px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.6);
+}
+
+/* ── RIGHT AREA ── */
+.right-area {
+  flex: 1; display: flex; flex-direction: column;
+  padding: 18px 20px 16px; gap: 12px; min-width: 0;
+}
+
+/* TOP ROW */
+.top-row { display: flex; align-items: stretch; gap: 14px; flex-shrink: 0; }
+
+/* Alert + regenbalken */
+.alert-area {
+  flex: 1; display: flex; flex-direction: column;
+  gap: 10px; justify-content: center;
+}
+.alert-text { font-size: 21px; font-weight: 700; color: var(--cyan); letter-spacing: .2px; }
+
+/* ZON / UV kaart */
+.sun-uv-card {
+  width: 236px; flex-shrink: 0;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 18px; padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+/* ── 5-DAAGSE (compact) ── */
+.forecast { flex: 1; display: flex; flex-direction: column; gap: 4px; min-height: 0; }
+.forecast-list { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.day-row {
+  display: grid;
+  grid-template-columns: 36px 20px 66px 110px 1fr 32px 28px;
+  align-items: center; gap: 8px;
+  padding: 5px 10px; border-radius: 12px;
+}
+.day-on    { background: var(--surf2); }
+.day-name  { font-size: 14px; font-weight: 700; }
+.day-wind  { font-size: 11px; font-weight: 600; color: var(--muted);
+             font-variant-numeric: tabular-nums; white-space: nowrap; }
+.day-cond  { font-size: 12px; font-weight: 600; color: rgba(255,255,255,.68); }
+.t-track   { position: relative; height: 6px; border-radius: 3px; background: var(--surf2); }
+.t-fill    { position: absolute; top: 0; height: 100%; border-radius: 3px; }
+.day-hi    { font-size: 14px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+.day-lo    { font-size: 12px; font-weight: 600; color: var(--muted); text-align: right;
+             font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="screen-wrap"><div id="root"></div></div></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel">
+/* ════════════════════════════════════════════
+   WEERICONEN
+════════════════════════════════════════════ */
+function CloudShape({ x=0, y=0, s=1, color="currentColor" }) {
+  return (
+    <g transform={`translate(${x} ${y}) scale(${s})`} fill={color}>
+      <circle cx="17" cy="27" r="9" /><circle cx="29" cy="23" r="12" />
+      <circle cx="40" cy="28" r="8" /><rect x="14" y="29" width="29" height="9" />
+    </g>
+  );
+}
+function WIcon({ type="partly", size=56, color="currentColor" }) {
+  const sunG = (cx,cy,r) => (
+    <g>
+      <circle cx={cx} cy={cy} r={r} fill={color} />
+      {[0,45,90,135,180,225,270,315].map(a => (
+        <line key={a} x1={cx} y1={cy-r-3} x2={cx} y2={cy-r-9}
+          stroke={color} strokeWidth="3.2" strokeLinecap="round"
+          transform={`rotate(${a} ${cx} ${cy})`} />
+      ))}
+    </g>
+  );
+  let body;
+  if      (type==="clear")  body = sunG(28,28,13);
+  else if (type==="cloudy") body = <CloudShape x={1} y={2} color={color} />;
+  else                      body = <g>{sunG(18,16,9)}<CloudShape x={6} y={12} s={.92} color={color} /></g>;
+  return (
+    <svg width={size} height={size} viewBox="0 0 56 56" fill="none"
+         style={{display:"block", flexShrink:0}}>{body}</svg>
+  );
+}
+
+/* ════════════════════════════════════════════
+   BUIENRADAR MAP PLACEHOLDER
+════════════════════════════════════════════ */
+function RadarMap() {
+  return (
+    <svg width="100%" height="100%" viewBox="0 0 222 190"
+         preserveAspectRatio="xMidYMid slice" style={{display:"block"}}>
+      <rect width="222" height="190" fill="#0b1e30"/>
+      <path d="M58 8 L128 5 L168 18 L192 56 L182 105 L158 138 L112 155 L70 150 L40 132 L22 100 L18 56 Z"
+            fill="#142b1c" opacity=".7"/>
+      <path d="M0 0 L58 8 L22 100 L0 130 Z"        fill="#0d2236" opacity=".8"/>
+      <path d="M180 0 L222 0 L222 50 L192 56 Z"    fill="#0d2236" opacity=".65"/>
+      <circle cx="90"  cy="80"  r="32" fill="oklch(0.60 0.15 248)" opacity=".48"/>
+      <circle cx="112" cy="64"  r="19" fill="oklch(0.68 0.16 150)" opacity=".40"/>
+      <circle cx="74"  cy="94"  r="24" fill="oklch(0.58 0.18 248)" opacity=".52"/>
+      <circle cx="122" cy="96"  r="13" fill="oklch(0.66 0.13 248)" opacity=".34"/>
+      <circle cx="56"  cy="72"  r="12" fill="oklch(0.62 0.14 248)" opacity=".30"/>
+      {[0,44,88,132,176,222].map(x=><line key={x} x1={x} y1="0" x2={x} y2="190" stroke="rgba(255,255,255,.035)" strokeWidth="1"/>)}
+      {[0,47,94,141,190].map(y=><line key={y} x1="0" y1={y} x2="222" y2={y} stroke="rgba(255,255,255,.035)" strokeWidth="1"/>)}
+      <circle cx="111" cy="95" r="85" fill="none" stroke="rgba(56,189,248,.06)" strokeWidth="1"/>
+      <circle cx="111" cy="95" r="55" fill="none" stroke="rgba(56,189,248,.04)" strokeWidth="1"/>
+    </svg>
+  );
+}
+
+/* ════════════════════════════════════════════
+   NEERSLAG STAAFJES  (buienradar +60 min)
+════════════════════════════════════════════ */
+const RAIN_60 = [0.06,0.14,0.28,0.42,0.52,0.60,0.58,0.54,0.50,0.46,0.42,0.38];
+
+function RainBars({ bars=RAIN_60 }) {
+  const maxV = 0.7;
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:5}}>
+      <div style={{
+        display:"grid",
+        gridTemplateColumns:`repeat(${bars.length},1fr)`,
+        gap:3, height:34, alignItems:"flex-end"
+      }}>
+        {bars.map((v,i) => (
+          <div key={i} style={{display:"flex", alignItems:"flex-end", height:"100%"}}>
+            <div style={{
+              width:"100%",
+              height: Math.max(3, (Math.min(v,maxV)/maxV)*100)+"%",
+              borderRadius:"3px 3px 2px 2px",
+              background:"linear-gradient(180deg, oklch(0.74 0.12 248), oklch(0.55 0.13 250))",
+              opacity: v < 0.05 ? 0.22 : 1,
+            }}/>
+          </div>
+        ))}
+      </div>
+      <div style={{
+        display:"flex", justifyContent:"space-between",
+        fontSize:9.5, fontWeight:600, color:"var(--muted)",
+        letterSpacing:.3
+      }}>
+        <span>nu</span><span>+30m</span><span>+60m</span>
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   ZON-BOOG  met UV in de buik
+════════════════════════════════════════════ */
+function uvInfo(u) {
+  if (u<=2)  return {lab:"Laag",     c:"oklch(0.74 0.13 150)"};
+  if (u<=5)  return {lab:"Matig",    c:"oklch(0.80 0.14 95)"};
+  if (u<=7)  return {lab:"Hoog",     c:"oklch(0.78 0.15 60)"};
+  if (u<=10) return {lab:"Zeer hoog",c:"oklch(0.66 0.20 28)"};
+  return            {lab:"Extreem",  c:"oklch(0.58 0.22 330)"};
+}
+
+function SunArc({ rise=5.35, set=22.117, now=11.917, uv=3, w=208 }) {
+  const f   = Math.max(0, Math.min(1, (now-rise)/(set-rise)));
+  const h   = Math.round(w * 0.50);          // halve-cirkel hoogte
+  const r   = w/2 - 9;
+  const cx  = w/2, cy = h;
+  const ang = Math.PI - f*Math.PI;
+  const sx  = cx + r*Math.cos(ang);
+  const sy  = cy - r*Math.sin(ang);
+  const arc = `M${cx-r} ${cy} A${r} ${r} 0 0 1 ${cx+r} ${cy}`;
+  const aL  = Math.PI * r;
+  const uvI = uvInfo(uv);
+  const fmt = v => {
+    const hh = Math.floor(v), mm = Math.round((v%1)*60);
+    return `${String(hh).padStart(2,'0')}:${String(mm).padStart(2,'0')}`;
+  };
+  return (
+    <div style={{display:"flex", flexDirection:"column", gap:6}}>
+
+      {/* boog + UV-waarde */}
+      <div style={{position:"relative", width:w, height:h+8}}>
+        <svg width={w} height={h+4} viewBox={`0 0 ${w} ${h}`}
+             style={{display:"block", overflow:"visible"}}>
+          <defs>
+            <linearGradient id="sarc" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0"   stopColor="oklch(0.70 0.10 60)"/>
+              <stop offset="0.5" stopColor="oklch(0.88 0.14 84)"/>
+              <stop offset="1"   stopColor="oklch(0.70 0.10 60)"/>
+            </linearGradient>
+          </defs>
+          {/* baan */}
+          <path d={arc} fill="none" stroke="#1b1c21" strokeWidth="5" strokeLinecap="round"/>
+          {/* gevuld deel */}
+          <path d={arc} fill="none" stroke="url(#sarc)" strokeWidth="5" strokeLinecap="round"
+            strokeDasharray={aL} strokeDashoffset={aL*(1-f)}/>
+          {/* zon punt */}
+          <circle cx={sx} cy={sy} r="12" fill="oklch(0.88 0.14 84)" opacity=".22"/>
+          <circle cx={sx} cy={sy} r="6.5" fill="oklch(0.90 0.15 84)"/>
+        </svg>
+
+        {/* UV overlaid in de buik */}
+        <div style={{
+          position:"absolute", bottom:0, left:0, right:0,
+          display:"flex", flexDirection:"column", alignItems:"center",
+          gap:1, paddingBottom:6
+        }}>
+          <span style={{
+            fontSize:28, fontWeight:800, lineHeight:1,
+            letterSpacing:-1, color:uvI.c,
+            fontVariantNumeric:"tabular-nums"
+          }}>{uv}</span>
+          <span style={{
+            fontSize:9, fontWeight:700, letterSpacing:1.5,
+            color:"rgba(255,255,255,.45)"
+          }}>UV · {uvI.lab.toUpperCase()}</span>
+        </div>
+      </div>
+
+      {/* op / onder tijden */}
+      <div style={{
+        display:"flex", justifyContent:"space-between",
+        fontSize:12, fontWeight:800, fontVariantNumeric:"tabular-nums"
+      }}>
+        <span style={{display:"flex", alignItems:"baseline", gap:3}}>
+          <span style={{fontSize:10, fontWeight:600, color:"var(--muted)"}}>op</span>
+          {fmt(rise)}
+        </span>
+        <span style={{display:"flex", alignItems:"baseline", gap:3, color:"var(--muted)"}}>
+          <span style={{fontSize:10}}>onder</span>
+          {fmt(set)}
+        </span>
+      </div>
+
+      <div style={{fontSize:11, fontWeight:600, color:"var(--muted)", letterSpacing:.2}}>
+        16u 46m daglicht
+      </div>
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════
+   DATA & KLEURHULP
+════════════════════════════════════════════ */
+const ACCENT = {
+  clear:  { c:"oklch(0.82 0.13 78)",  g:"rgba(245,190,90,.55)" },
+  partly: { c:"oklch(0.78 0.09 235)", g:"rgba(120,180,235,.5)" },
+  cloudy: { c:"oklch(0.74 0.04 240)", g:"rgba(150,170,195,.4)" },
+  rain:   { c:"oklch(0.70 0.12 248)", g:"rgba(90,150,235,.55)" },
+};
+function tempColor(t) {
+  const x = Math.max(0, Math.min(1,(t+5)/40));
+  return `oklch(0.74 0.13 ${250-x*228})`;
+}
+const DAYS = [
+  { d:"Nu", c:"partly", wind:"20 km/u", cond:"half bewolkt", lo:18, hi:22 },
+  { d:"ma", c:"clear",  wind:"22 km/u", cond:"zonnig",       lo:13, hi:19 },
+  { d:"di", c:"clear",  wind:"20 km/u", cond:"zonnig",       lo:11, hi:16 },
+  { d:"wo", c:"cloudy", wind:" 9 km/u", cond:"bewolkt",      lo:11, hi:15 },
+  { d:"do", c:"partly", wind:"13 km/u", cond:"half bewolkt", lo:11, hi:16 },
+];
+const allLo = Math.min(...DAYS.map(x=>x.lo));
+const allHi = Math.max(...DAYS.map(x=>x.hi));
+const span  = allHi - allLo;
+
+/* ════════════════════════════════════════════
+   HOOFDSCHERM
+════════════════════════════════════════════ */
+function WeerschermThuis() {
+  const curA = ACCENT.partly;
+  return (
+    <div className="scr">
+
+      {/* TOPBAR */}
+      <div className="topbar">
+        <span className="brand">WEER THUIS</span>
+        <div className="status"><span className="dot"/><span>live · 11:55</span></div>
+      </div>
+
+      {/* BODY */}
+      <div className="body">
+
+        {/* ── LEFT ── */}
+        <div className="left-col">
+          <div className="hero">
+            <div className="icon-wrap" style={{"--g":curA.g}}>
+              <WIcon type="partly" size={86} color={curA.c}/>
+            </div>
+            <div className="hero-info">
+              <div className="temp-big">28<span className="temp-deg">°</span></div>
+              <div className="cond-text">half bewolkt</div>
+              <div className="wind-text">3 km/u O</div>
+            </div>
+          </div>
+          <div className="radar-card">
+            <div className="radar-head">
+              <span className="micro-label">BUIENRADAR</span>
+              <span className="radar-chip">radar +60 min</span>
+            </div>
+            <div className="radar-map">
+              <RadarMap/>
+              <span className="radar-ts">za 11:55</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── RIGHT ── */}
+        <div className="right-area">
+
+          {/* TOP ROW */}
+          <div className="top-row">
+
+            {/* Alert + regenbalken */}
+            <div className="alert-area">
+              <div className="alert-text">matige regen verwacht</div>
+              <RainBars/>
+            </div>
+
+            {/* ZON / UV met boog */}
+            <div className="sun-uv-card">
+              <span className="micro-label">ZON / UV</span>
+              <SunArc rise={5.35} set={22.117} now={11.917} uv={3} w={208}/>
+            </div>
+
+          </div>
+
+          {/* 5-DAAGSE */}
+          <div className="forecast">
+            <div className="micro-label" style={{paddingLeft:10}}>5 DAGEN</div>
+            <div className="forecast-list">
+              {DAYS.map((x,i) => {
+                const a    = ACCENT[x.c]||ACCENT.partly;
+                const left = ((x.lo-allLo)/span)*100;
+                const wid  = ((x.hi-x.lo)/span)*100;
+                return (
+                  <div key={i} className={"day-row"+(i===0?" day-on":"")}>
+                    <span className="day-name">{x.d}</span>
+                    <WIcon type={x.c} size={20} color={a.c}/>
+                    <span className="day-wind">{x.wind}</span>
+                    <span className="day-cond">{x.cond}</span>
+                    <div className="t-track">
+                      <div className="t-fill" style={{
+                        left:left+"%", width:wid+"%",
+                        background:`linear-gradient(90deg,${tempColor(x.lo)},${tempColor(x.hi)})`
+                      }}/>
+                    </div>
+                    <span className="day-hi">{x.hi}°</span>
+                    <span className="day-lo">{x.lo}°</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<WeerschermThuis/>);
+
+function fit() {
+  const pad = 24;
+  const s = Math.min(
+    (window.innerWidth  - pad) / 1024,
+    (window.innerHeight - pad) / 600
+  );
+  document.getElementById("screen-wrap").style.transform = "scale("+Math.max(.2,s)+")";
+}
+window.addEventListener("resize", fit);
+fit();
+</script>
+</body>
+</html>

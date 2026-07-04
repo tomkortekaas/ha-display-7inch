@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Guition 7″ — Schermen 800×480</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+:root {
+  --green:   oklch(0.74 0.16 152);
+  --muted:   oklch(0.58 0.012 250);
+  --bg:      #08080a;
+  --surface: #131418;
+  --surf2:   #1b1c21;
+  --line:    rgba(255,255,255,.07);
+  --line2:   rgba(255,255,255,.16);
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #030304; font-family: "Montserrat", sans-serif; }
+
+/* ── shared screen shell ── */
+.scr {
+  width: 800px; height: 480px;
+  background: var(--bg); color: #fff;
+  font-family: "Montserrat", sans-serif;
+  position: relative; overflow: hidden;
+  user-select: none;
+}
+
+/* ── eq animation ── */
+.eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.eq i { width: 3px; height: 40%; background: var(--green); border-radius: 1px; }
+.eq[data-on="true"] i { animation: eq 900ms ease-in-out infinite; }
+.eq i:nth-child(2) { animation-delay: .2s; }
+.eq i:nth-child(3) { animation-delay: .4s; }
+.eq i:nth-child(4) { animation-delay: .1s; }
+@keyframes eq { 0%,100% { height: 30%; } 50% { height: 100%; } }
+
+/* ── pills ── */
+.vc-pill {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 12px; font-weight: 600; letter-spacing: .3px; color: #fff;
+  background: rgba(0,0,0,.42); backdrop-filter: blur(10px);
+  padding: 7px 13px; border-radius: 999px;
+}
+.vc-pill.ghost { color: rgba(255,255,255,.9); }
+
+/* ── fact animation ── */
+@keyframes factIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: none; } }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<!-- component bestanden — volgorde is belangrijk -->
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="g7-icons.jsx"></script>
+<script type="text/babel" src="g7-spotify.jsx"></script>
+<script type="text/babel" src="g7-home.jsx"></script>
+
+<script type="text/babel">
+function App() {
+  const { DesignCanvas, DCSection, DCArtboard } = window;
+  return (
+    <DesignCanvas>
+      <DCSection
+        id="spotify"
+        title='Spotify — Guition 7″ · 800×480'
+        subtitle="Drie swipe-schermen tijdens het afspelen · full-bleed album art"
+      >
+        <DCArtboard id="player"  label="Player — full-bleed"           width={800} height={480}><PlayerScreen /></DCArtboard>
+        <DCArtboard id="lyrics"  label="Songtekst — auto-scroll"       width={800} height={480}><LyricsScreen /></DCArtboard>
+        <DCArtboard id="facts"   label="Wist je dat? — artiest"        width={800} height={480}><FactsScreen /></DCArtboard>
+      </DCSection>
+
+      <DCSection
+        id="home"
+        title="Huis — Guition 7″ · 800×480"
+        subtitle="Weerscherm en verlichtingsbediening"
+      >
+        <DCArtboard id="weather" label="Weer — 5-daagse forecast"      width={800} height={480}><WeatherScreen /></DCArtboard>
+        <DCArtboard id="lights"  label="Lampen &amp; Scènes"           width={800} height={480}><LightsScreen /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

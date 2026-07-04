@@ -1,0 +1,606 @@
+# =============================================================================
+#  WEERSCHERM — 4" 480x480 touchscreen  ·  Variant E (Dag-mix)
+#  ESPHome + LVGL  ·  bedoeld om TE MERGEN in je bestaande config
+# -----------------------------------------------------------------------------
+#  Dit bestand bevat ALLEEN de weer-specifieke onderdelen. Voeg elk blok toe
+#  aan het gelijknamige top-level blok van je bestaande YAML (esphome:, font:,
+#  lvgl:, script:, ...). Heb je een blok nog niet, plak het dan in zijn geheel.
+#
+#  De UI toont:
+#   - Hero: groot weericoon + grote temperatuur + conditie + wind + UV
+#   - Kaart BUIENRADAR : neerslag-grafiekje komende ~2 uur
+#   - Kaart ZON        : daglicht-boog met zonsop-/ondergangstijd
+#   - 5-daagse forecast: icoon, windrichting+snelheid, lo–hi balk (kleur = temp)
+#
+#  ALLE WAARDEN KOMEN UIT HOME ASSISTANT. Zoek op  >>> TODO  voor wat jij invult:
+#   1. De entity-id's van je weather-entiteit + sensoren (sensor-blok onderaan)
+#   2. (Aanbevolen) HA template-sensoren voor de 5 forecast-dagen — zie comment
+#   3. Hoe je naar deze pagina navigeert vanaf je andere 2 schermen (zie NAV)
+# =============================================================================
+
+
+# =============================================================================
+#  1) FONTS   ·  voeg toe aan je bestaande  font:  blok
+# -----------------------------------------------------------------------------
+#  We hergebruiken Montserrat (zoals de afzuigkap) en laden de MDI-weericonen.
+# =============================================================================
+font:
+  - file: "gfonts://Montserrat@800"
+    id: font_temp_big
+    size: 56
+  - file: "gfonts://Montserrat@700"
+    id: font_cond
+    size: 18
+  - file: "gfonts://Montserrat@800"
+    id: font_day_num
+    size: 17
+  - file: "gfonts://Montserrat@600"
+    id: font_meta
+    size: 13
+  - file: "gfonts://Montserrat@800"
+    id: font_uv
+    size: 30
+  # font_brand (16) / font_status (13) / font_num komen uit je afzuigkap-config
+  # Grote weericoon (hero)
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_wx_big
+    size: 78
+    glyphs: &wx_glyphs
+      - "\U000F0599"   # weather-sunny
+      - "\U000F0594"   # weather-night
+      - "\U000F0595"   # weather-partly-cloudy
+      - "\U000F0590"   # weather-cloudy
+      - "\U000F0597"   # weather-rainy
+      - "\U000F0596"   # weather-pouring
+      - "\U000F0593"   # weather-lightning
+      - "\U000F0598"   # weather-snowy
+      - "\U000F0591"   # weather-fog
+      - "\U000F059D"   # weather-windy
+  # Kleine weericoon (forecast-rijen)
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_wx_small
+    size: 26
+    glyphs: *wx_glyphs
+  # Mini-iconen voor wind / UV / pijlen
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_mini
+    size: 16
+    glyphs:
+      - "\U000F059D"   # weather-windy
+      - "\U000F0599"   # weather-sunny (UV)
+      - "\U000F005D"   # arrow-up
+      - "\U000F005E"   # arrow-down
+      - "\U000F004D"   # arrow-bottom-left  (windrichting, geroteerde set hieronder)
+
+
+# =============================================================================
+#  2) GLOBALS   ·  voeg toe aan je bestaande  globals:  blok
+# -----------------------------------------------------------------------------
+#  We cachen de week-min/max zodat de forecast-balken correct schalen.
+# =============================================================================
+globals:
+  - id: wk_tmin
+    type: float
+    restore_value: no
+    initial_value: "0"
+  - id: wk_tmax
+    type: float
+    restore_value: no
+    initial_value: "20"
+
+
+# =============================================================================
+#  3) HOME ASSISTANT SENSOREN   ·  voeg toe aan  sensor:  /  text_sensor:
+# -----------------------------------------------------------------------------
+#  >>> TODO: vervang elke 'entity_id' (en evt. 'attribute') door die van JOU.
+#
+#  Voor de 5-DAAGSE forecast heeft HA losse waarden nodig. De makkelijkste weg:
+#  maak in Home Assistant (configuration.yaml -> template:) deze sensoren aan,
+#  gevoed door 'weather.get_forecasts'. Voorbeeld voor dag-index i (0..4):
+#
+#     template:
+#       - trigger:
+#           - platform: time_pattern
+#             minutes: "/30"
+#         action:
+#           - service: weather.get_forecasts
+#             target: { entity_id: weather.thuis }   # >>> jouw weather-entiteit
+#             data: { type: daily }
+#             response_variable: fc
+#         sensor:
+#           - name: "Forecast d0 hi"
+#             unique_id: fc_d0_hi
+#             state: "{{ fc['weather.thuis'].forecast[0].temperature }}"
+#           - name: "Forecast d0 lo"
+#             unique_id: fc_d0_lo
+#             state: "{{ fc['weather.thuis'].forecast[0].templow }}"
+#           - name: "Forecast d0 cond"
+#             unique_id: fc_d0_cond
+#             state: "{{ fc['weather.thuis'].forecast[0].condition }}"
+#           - name: "Forecast d0 wind"
+#             unique_id: fc_d0_wind
+#             state: "{{ fc['weather.thuis'].forecast[0].wind_speed }}"
+#           # ... herhaal voor [1]..[4]
+#  Daarna importeer je ze hieronder als homeassistant-sensoren.
+# =============================================================================
+sensor:
+  # ----- HUIDIG WEER (attributen van de weather-entiteit) -----
+  - platform: homeassistant
+    id: ha_temp_now
+    entity_id: weather.thuis           # >>> TODO
+    attribute: temperature
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_feels
+    entity_id: weather.thuis           # >>> TODO
+    attribute: apparent_temperature
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_wind_now
+    entity_id: weather.thuis           # >>> TODO
+    attribute: wind_speed
+  - platform: homeassistant
+    id: ha_wind_bearing
+    entity_id: weather.thuis           # >>> TODO  (graden, 0=N)
+  - platform: homeassistant
+    id: ha_uv
+    entity_id: sensor.uv_index         # >>> TODO  (of weather-attribuut 'uv_index')
+    on_value: { then: [ script.execute: refresh_weather ] }
+
+  # ----- 5-DAAGSE forecast (zie HA-template hierboven) -----
+  - { platform: homeassistant, id: d0_hi, entity_id: sensor.forecast_d0_hi, on_value: { then: [ script.execute: refresh_weather ] } }  # >>> TODO
+  - { platform: homeassistant, id: d0_lo, entity_id: sensor.forecast_d0_lo }   # >>> TODO
+  - { platform: homeassistant, id: d1_hi, entity_id: sensor.forecast_d1_hi }   # >>> TODO
+  - { platform: homeassistant, id: d1_lo, entity_id: sensor.forecast_d1_lo }   # >>> TODO
+  - { platform: homeassistant, id: d2_hi, entity_id: sensor.forecast_d2_hi }   # >>> TODO
+  - { platform: homeassistant, id: d2_lo, entity_id: sensor.forecast_d2_lo }   # >>> TODO
+  - { platform: homeassistant, id: d3_hi, entity_id: sensor.forecast_d3_hi }   # >>> TODO
+  - { platform: homeassistant, id: d3_lo, entity_id: sensor.forecast_d3_lo }   # >>> TODO
+  - { platform: homeassistant, id: d4_hi, entity_id: sensor.forecast_d4_hi }   # >>> TODO
+  - { platform: homeassistant, id: d4_lo, entity_id: sensor.forecast_d4_lo }   # >>> TODO
+  # windsnelheid per dag (optioneel — voor de mini-wind in de forecast-rijen)
+  - { platform: homeassistant, id: d0_wind, entity_id: sensor.forecast_d0_wind }  # >>> TODO
+  - { platform: homeassistant, id: d1_wind, entity_id: sensor.forecast_d1_wind }  # >>> TODO
+  - { platform: homeassistant, id: d2_wind, entity_id: sensor.forecast_d2_wind }  # >>> TODO
+  - { platform: homeassistant, id: d3_wind, entity_id: sensor.forecast_d3_wind }  # >>> TODO
+  - { platform: homeassistant, id: d4_wind, entity_id: sensor.forecast_d4_wind }  # >>> TODO
+
+text_sensor:
+  # ----- huidige conditie + tekstvelden -----
+  - platform: homeassistant
+    id: ha_cond_now
+    entity_id: weather.thuis           # >>> TODO  (state = conditie, bv. 'partlycloudy')
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_place
+    entity_id: zone.home               # >>> TODO  (of een input_text met plaatsnaam)
+  # zonsop-/ondergang als ISO-tijd (sun-integratie)
+  - platform: homeassistant
+    id: ha_sunrise
+    entity_id: sensor.sun_next_rising  # >>> TODO
+    on_value: { then: [ script.execute: refresh_weather ] }
+  - platform: homeassistant
+    id: ha_sunset
+    entity_id: sensor.sun_next_setting # >>> TODO
+    on_value: { then: [ script.execute: refresh_weather ] }
+  # conditie per forecast-dag (state = 'rainy' etc.)
+  - { platform: homeassistant, id: d0_cond, entity_id: sensor.forecast_d0_cond, on_value: { then: [ script.execute: refresh_weather ] } }  # >>> TODO
+  - { platform: homeassistant, id: d1_cond, entity_id: sensor.forecast_d1_cond }  # >>> TODO
+  - { platform: homeassistant, id: d2_cond, entity_id: sensor.forecast_d2_cond }  # >>> TODO
+  - { platform: homeassistant, id: d3_cond, entity_id: sensor.forecast_d3_cond }  # >>> TODO
+  - { platform: homeassistant, id: d4_cond, entity_id: sensor.forecast_d4_cond }  # >>> TODO
+
+# Klok voor topbar (datum/tijd). Voeg toe als je er nog geen hebt.
+time:
+  - platform: homeassistant
+    id: ha_time
+    on_time:
+      - seconds: 0
+        minutes: /1
+        then: [ script.execute: refresh_clock ]
+
+
+# =============================================================================
+#  4) LVGL PAGINA   ·  voeg deze PAGINA toe onder  lvgl: -> pages:
+# -----------------------------------------------------------------------------
+#  Kleuren identiek aan de afzuigkap:
+#    0x08080A bg · 0x131418 surface · 0x1B1C21 surface-2
+#    0xFFFFFF tekst · 0x6B6E76 muted · accenten per conditie (lambda)
+# =============================================================================
+lvgl:
+  pages:
+    - id: weather_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+
+        # ---------- TOPBAR ----------
+        - label: { id: wx_place, text: "AMERSFOORT", text_font: font_brand, text_color: 0xFFFFFF, text_opa: 85%, align: TOP_LEFT, x: 30, y: 26 }
+        - label: { id: wx_status, text: "di 3 juni · 14:32 · UV 4", text_font: font_status, text_color: 0x6B6E76, align: TOP_RIGHT, x: -30, y: 30 }
+
+        # ---------- PAGINA-INDICATOR (3 stipjes, gecentreerd) ----------
+        #  Actieve = derde stip (weer). Kopieer dit blok naar je andere 2
+        #  pagina's en verplaats de brede 'on'-stip (width:16) naar de juiste.
+        - obj:
+            align: TOP_MID
+            x: 0
+            y: 30
+            width: 40
+            height: 8
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            layout: { type: flex, flex_flow: ROW, flex_align_main: CENTER, flex_align_cross: CENTER, pad_column: 6 }
+            widgets:
+              - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - obj: { width: 6,  height: 6, radius: 3, bg_color: 0xFFFFFF, bg_opa: 22%, border_width: 0 }
+              - obj: { width: 16, height: 6, radius: 3, bg_color: 0xFFFFFF, border_width: 0 }
+
+        # ---------- TIKZONES links/rechts (onzichtbaar) -> vorige/volgende ----------
+        - button:
+            x: 0
+            y: 56
+            width: 56
+            height: 380
+            bg_opa: TRANSP
+            border_width: 0
+            shadow_width: 0
+            on_click:
+              - lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms }
+        - button:
+            align: TOP_RIGHT
+            x: 0
+            y: 56
+            width: 56
+            height: 380
+            bg_opa: TRANSP
+            border_width: 0
+            shadow_width: 0
+            on_click:
+              - lvgl.page.next: { animation: OVER_LEFT, time: 250ms }
+
+        # ---------- HERO: icoon + temp + conditie + wind/UV ----------
+        - label: { id: wx_icon, text: "\U000F0595", text_font: font_wx_big, text_color: 0x78B4EB, align: TOP_LEFT, x: 26, y: 64 }
+        - label: { id: wx_temp, text: "14°", text_font: font_temp_big, text_color: 0xFFFFFF, align: TOP_LEFT, x: 150, y: 62 }
+        - label: { id: wx_cond, text: "Licht bewolkt", text_font: font_cond, text_color: 0xFFFFFF, align: TOP_LEFT, x: 152, y: 126 }
+        - label: { id: wx_wind, text: "\U000F059D 12 km/u ZW", text_font: font_meta, text_color: 0x6B6E76, align: TOP_LEFT, x: 152, y: 152 }
+        # (UV zit nu in het rechter ZON/UV-paneel — niet meer als losse hero-label)
+
+        # ---------- RECHTS: GECOMBINEERDE ZON + UV kaart (horizontaal) ----------
+        - obj:
+            id: card_sunuv
+            x: -30
+            y: 56
+            align: TOP_RIGHT
+            width: 184
+            height: 140
+            bg_color: 0x131418
+            border_color: 0x2A2B30
+            border_width: 1
+            radius: 22
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              # zon-boog (180->360 = bovenhelft); knob = zonpositie (0=opkomst .. 100=ondergang)
+              - arc:
+                  id: sun_arc
+                  align: TOP_MID
+                  y: 14
+                  width: 130
+                  height: 66
+                  start_angle: 180
+                  end_angle: 360
+                  min_value: 0
+                  max_value: 100
+                  value: 55                    # refresh_weather: zonpositie
+                  arc_width: 4
+                  arc_color: 0x1B1C21
+                  indicator: { arc_color: 0xF5B45A, arc_width: 4 }
+                  knob: { bg_color: 0xF5B45A, pad_all: 4 }
+              # UV-index IN het hart van de boog; kleur volgt het niveau (refresh_weather)
+              - label: { text: "UV-INDEX", text_font: font_status, text_color: 0x6B6E76, align: TOP_MID, x: 0, y: 40 }
+              - label: { id: uv_val, text: "4",     text_font: font_uv,  text_color: 0xF5B45A, align: TOP_MID, x: 0, y: 50 }
+              - label: { id: uv_lab, text: "Matig", text_font: font_meta, text_color: 0xF5B45A, align: TOP_MID, x: 0, y: 82 }
+              # zonnebrand-advies (WHO: vanaf UV 3 insmeren); kleur volgt niveau
+              - label: { id: uv_adv, text: "smeer je in", text_font: font_status, text_color: 0xF5B45A, align: TOP_MID, x: 0, y: 100 }
+              # zonsop-/ondergang onder de boog
+              - label: { id: sun_rise, text: "↑05:32", text_font: font_meta, text_color: 0xFFFFFF, align: TOP_LEFT,  x: 14,  y: 118 }
+              - label: { id: sun_caption, text: "15u 13m", text_font: font_status, text_color: 0x6B6E76, align: TOP_MID, x: 0, y: 120 }
+              - label: { id: sun_set,  text: "↓21:45", text_font: font_meta, text_color: 0x6B6E76, align: TOP_RIGHT, x: -14, y: 118 }
+
+        # ---------- KAART: NEERSLAG als STAAFJES (volle breedte, BAR-chart) ----------
+        - obj:
+            id: card_rain
+            x: 30
+            y: 200
+            width: 420
+            height: 96
+            bg_color: 0x131418
+            border_color: 0x2A2B30
+            border_width: 1
+            radius: 22
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { text: "NEERSLAG · KOMENDE 2 UUR", text_font: font_meta, text_color: 0x6B6E76, align: TOP_LEFT, x: 16, y: 12 }
+              - label: { id: rain_caption, text: "Lichte regen rond 17:00", text_font: font_cond, text_color: 0xFFFFFF, align: TOP_RIGHT, x: -16, y: 10 }
+              # neerslag als STAAFJES — chart type BAR (18 staven). Punten in refresh_weather.
+              - chart:
+                  id: rain_chart
+                  x: 10
+                  y: 36
+                  width: 400
+                  height: 42
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  type: BAR
+                  point_count: 18
+                  y_axis: { min: 0, max: 100 }   # neerslag 0..100 (genormaliseerd)
+                  series:
+                    - id: rain_series
+                      color: 0x5A96EB
+                      y_axis: PRIMARY
+              - label: { text: "nu",    text_font: font_status, text_color: 0x6B6E76, align: BOTTOM_LEFT,  x: 16,  y: -4 }
+              - label: { text: "+1u",   text_font: font_status, text_color: 0x6B6E76, align: BOTTOM_MID,   x: 0,   y: -4 }
+              - label: { text: "+2u",   text_font: font_status, text_color: 0x6B6E76, align: BOTTOM_RIGHT, x: -16, y: -4 }
+
+        # ---------- FORECAST: 5 rijen ----------
+        #  Elke rij = day-label · icoon · wind · lo · temp-balk(RANGE) · hi
+        #  De balk is een 'bar' in RANGE-modus; start/value worden geschaald op
+        #  de week-min/max in refresh_weather. Kleur = temperatuur (lambda).
+        - obj:
+            id: fc_list
+            x: 0
+            y: 300
+            align: TOP_MID
+            width: 420
+            height: 156
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollbar_mode: 'OFF'
+            layout: { type: flex, flex_flow: COLUMN, pad_row: 5 }
+            widgets:
+              # ---- macro-achtige herhaling; 5 rijen met dezelfde structuur ----
+              - obj: &fc_row
+                  width: 100%
+                  height: 26
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  scrollbar_mode: 'OFF'
+                  widgets:
+                    - label: { id: r0_day,  text: "Nu", text_font: font_day_num, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r0_icon, text: "\U000F0595", text_font: font_wx_small, text_color: 0x78B4EB, align: LEFT_MID, x: 44 }
+                    - label: { id: r0_wind, text: "12", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID, x: 82 }
+                    - label: { id: r0_lo,   text: "9°", text_font: font_day_num, text_color: 0x6B6E76, align: LEFT_MID, x: 120 }
+                    - bar:
+                        id: r0_bar
+                        x: 150
+                        width: 200
+                        height: 14
+                        align: LEFT_MID
+                        min_value: 0
+                        max_value: 100
+                        mode: RANGE
+                        start_value: 30
+                        value: 80
+                        bg_color: 0x1B1C21
+                        indicator: { bg_color: 0x4ADE80, radius: 7 }
+                        radius: 7
+                    - label: { id: r0_hi,   text: "16°", text_font: font_day_num, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row
+                  widgets:
+                    - label: { id: r1_day,  text: "Wo", text_font: font_day_num, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r1_icon, text: "\U000F0597", text_font: font_wx_small, text_color: 0x5A96EB, align: LEFT_MID, x: 44 }
+                    - label: { id: r1_wind, text: "18", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID, x: 82 }
+                    - label: { id: r1_lo,   text: "8°", text_font: font_day_num, text_color: 0x6B6E76, align: LEFT_MID, x: 120 }
+                    - bar: { id: r1_bar, x: 150, width: 200, height: 14, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 20, value: 60, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 7 }, radius: 7 }
+                    - label: { id: r1_hi,   text: "13°", text_font: font_day_num, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row
+                  widgets:
+                    - label: { id: r2_day,  text: "Do", text_font: font_day_num, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r2_icon, text: "\U000F0596", text_font: font_wx_small, text_color: 0x5A96EB, align: LEFT_MID, x: 44 }
+                    - label: { id: r2_wind, text: "22", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID, x: 82 }
+                    - label: { id: r2_lo,   text: "7°", text_font: font_day_num, text_color: 0x6B6E76, align: LEFT_MID, x: 120 }
+                    - bar: { id: r2_bar, x: 150, width: 200, height: 14, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 10, value: 50, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 7 }, radius: 7 }
+                    - label: { id: r2_hi,   text: "12°", text_font: font_day_num, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row
+                  widgets:
+                    - label: { id: r3_day,  text: "Vr", text_font: font_day_num, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r3_icon, text: "\U000F0599", text_font: font_wx_small, text_color: 0xF5B45A, align: LEFT_MID, x: 44 }
+                    - label: { id: r3_wind, text: "8", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID, x: 82 }
+                    - label: { id: r3_lo,   text: "6°", text_font: font_day_num, text_color: 0x6B6E76, align: LEFT_MID, x: 120 }
+                    - bar: { id: r3_bar, x: 150, width: 200, height: 14, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 0, value: 100, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 7 }, radius: 7 }
+                    - label: { id: r3_hi,   text: "17°", text_font: font_day_num, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+              - obj:
+                  <<: *fc_row
+                  widgets:
+                    - label: { id: r4_day,  text: "Za", text_font: font_day_num, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+                    - label: { id: r4_icon, text: "\U000F0590", text_font: font_wx_small, text_color: 0x96AAC3, align: LEFT_MID, x: 44 }
+                    - label: { id: r4_wind, text: "14", text_font: font_meta, text_color: 0x6B6E76, align: LEFT_MID, x: 82 }
+                    - label: { id: r4_lo,   text: "9°", text_font: font_day_num, text_color: 0x6B6E76, align: LEFT_MID, x: 120 }
+                    - bar: { id: r4_bar, x: 150, width: 200, height: 14, align: LEFT_MID, min_value: 0, max_value: 100, mode: RANGE, start_value: 20, value: 70, bg_color: 0x1B1C21, indicator: { bg_color: 0x4ADE80, radius: 7 }, radius: 7 }
+                    - label: { id: r4_hi,   text: "15°", text_font: font_day_num, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+
+
+# =============================================================================
+#  5) SCRIPTS   ·  voeg toe aan je bestaande  script:  blok
+# -----------------------------------------------------------------------------
+#  refresh_weather  : leest alle HA-sensoren en werkt de widgets bij
+#  refresh_clock    : zet de datum/tijd in de topbar
+#  Twee C++ helpers (wx_glyph, temp_color) staan in een esphome: includes-vrij
+#  lambda — eenvoudig genoeg om inline te houden.
+# =============================================================================
+script:
+  - id: refresh_weather
+    then:
+      - lambda: |-
+          // ---- helper: conditie-string -> MDI-glyph ----
+          auto glyph = [](std::string c) -> std::string {
+            if (c=="sunny" || c=="clear") return "\U000F0599";
+            if (c=="clear-night") return "\U000F0594";
+            if (c=="partlycloudy") return "\U000F0595";
+            if (c=="cloudy") return "\U000F0590";
+            if (c=="rainy" || c=="snowy-rainy") return "\U000F0597";
+            if (c=="pouring") return "\U000F0596";
+            if (c=="lightning" || c=="lightning-rainy") return "\U000F0593";
+            if (c=="snowy") return "\U000F0598";
+            if (c=="fog") return "\U000F0591";
+            if (c=="windy" || c=="windy-variant") return "\U000F059D";
+            return "\U000F0595";
+          };
+          // ---- helper: conditie -> accentkleur ----
+          auto accent = [](std::string c) -> lv_color_t {
+            if (c=="sunny"||c=="clear") return lv_color_hex(0xF5B45A);
+            if (c=="rainy"||c=="pouring") return lv_color_hex(0x5A96EB);
+            if (c=="lightning"||c=="lightning-rainy") return lv_color_hex(0x9678EB);
+            if (c=="cloudy") return lv_color_hex(0x96AAC3);
+            return lv_color_hex(0x78B4EB); // partly / default
+          };
+          // ---- helper: temperatuur -> kleur (koud blauw -> warm oranje) ----
+          auto tcol = [](float t) -> lv_color_t {
+            float x = (t + 5.0f) / 40.0f; if (x<0) x=0; if (x>1) x=1;
+            // simpele lineaire mix blauw(0x3A78D2) -> oranje(0xF59E42)
+            uint8_t r = (uint8_t)(0x3A + x*(0xF5-0x3A));
+            uint8_t g = (uint8_t)(0x78 + x*(0x9E-0x78));
+            uint8_t b = (uint8_t)(0xD2 + x*(0x42-0xD2));
+            return lv_color_make(r,g,b);
+          };
+
+          // ---- helper: UV-index -> kleur ----
+          auto uvcol = [](float u) -> lv_color_t {
+            if (u<=2) return lv_color_hex(0x4ADE80);
+            if (u<=5) return lv_color_hex(0xEAB308);
+            if (u<=7) return lv_color_hex(0xF59E42);
+            if (u<=10) return lv_color_hex(0xEF4444);
+            return lv_color_hex(0xA855F7);
+          };
+          // ---- helper: UV-index -> label ----
+          auto uvlab = [](float u) -> const char* {
+            if (u<=2) return "Laag"; if (u<=5) return "Matig";
+            if (u<=7) return "Hoog"; if (u<=10) return "Zeer hoog"; return "Extreem";
+          };
+          // ---- helper: UV-index -> zonnebrand-advies (WHO: vanaf 3 insmeren) ----
+          auto uvadv = [](float u) -> const char* {
+            if (u<3) return "insmeren niet nodig";
+            if (u<=7) return "smeer je in";
+            return "goed insmeren + schaduw";
+          };
+
+          // ===== HERO =====
+          std::string cnow = id(ha_cond_now).state;
+          lv_label_set_text(id(wx_icon), glyph(cnow).c_str());
+          lv_obj_set_style_text_color(id(wx_icon), accent(cnow), 0);
+          char buf[48];
+          snprintf(buf, sizeof(buf), "%.0f°", id(ha_temp_now).state);
+          lv_label_set_text(id(wx_temp), buf);
+          snprintf(buf, sizeof(buf), "\U000F059D %.0f km/u", id(ha_wind_now).state);
+          lv_label_set_text(id(wx_wind), buf);
+
+          // ===== UV in de zonneboog (kleur volgt niveau) =====
+          float uv = id(ha_uv).state;
+          snprintf(buf, sizeof(buf), "%.0f", uv);
+          lv_label_set_text(id(uv_val), buf);
+          lv_obj_set_style_text_color(id(uv_val), uvcol(uv), 0);
+          lv_label_set_text(id(uv_lab), uvlab(uv));
+          lv_obj_set_style_text_color(id(uv_lab), uvcol(uv), 0);
+          lv_label_set_text(id(uv_adv), uvadv(uv));
+          // advies in UV-kleur als bescherming nodig is (UV>=3), anders gedempt
+          lv_obj_set_style_text_color(id(uv_adv), uv>=3 ? uvcol(uv) : lv_color_hex(0x6B6E76), 0);
+
+          // ===== NEERSLAG-STAAFJES (18 staven) =====
+          // Voed 18 waarden 0..100 vanuit HA (bv. een sensor met JSON-attribuut,
+          // of losse sensoren). Voorbeeld met een vaste demo-reeks:
+          // static int rain[18] = {0,0,0,2,5,12,22,36,50,58,60,55,46,34,24,14,8,3};
+          // for (int i=0;i<18;i++) lv_chart_set_value_by_id(id(rain_chart), id(rain_series), i, rain[i]);
+          // lv_chart_refresh(id(rain_chart));
+
+          // ===== FORECAST: week-min/max bepalen (5 dagen) =====
+          float los[5] = { id(d0_lo).state, id(d1_lo).state, id(d2_lo).state, id(d3_lo).state, id(d4_lo).state };
+          float his[5] = { id(d0_hi).state, id(d1_hi).state, id(d2_hi).state, id(d3_hi).state, id(d4_hi).state };
+          float wmin = los[0], wmax = his[0];
+          for (int i=1;i<5;i++){ if(los[i]<wmin)wmin=los[i]; if(his[i]>wmax)wmax=his[i]; }
+          float span = (wmax-wmin); if (span<1) span=1;
+          id(wk_tmin)=wmin; id(wk_tmax)=wmax;
+
+          // arrays met widget-pointers voor de 5 rijen
+          lv_obj_t* bars[5] = { id(r0_bar), id(r1_bar), id(r2_bar), id(r3_bar), id(r4_bar) };
+          lv_obj_t* icons[5]= { id(r0_icon),id(r1_icon),id(r2_icon),id(r3_icon),id(r4_icon) };
+          lv_obj_t* los_l[5]= { id(r0_lo), id(r1_lo), id(r2_lo), id(r3_lo), id(r4_lo) };
+          lv_obj_t* his_l[5]= { id(r0_hi), id(r1_hi), id(r2_hi), id(r3_hi), id(r4_hi) };
+          std::string conds[5] = { id(d0_cond).state, id(d1_cond).state, id(d2_cond).state, id(d3_cond).state, id(d4_cond).state };
+          for (int i=0;i<5;i++){
+            int sv = (int)((los[i]-wmin)/span*100.0f);
+            int vv = (int)((his[i]-wmin)/span*100.0f);
+            if (vv<=sv) vv=sv+2;
+            lv_bar_set_start_value(bars[i], sv, LV_ANIM_OFF);
+            lv_bar_set_value(bars[i], vv, LV_ANIM_OFF);
+            // temperatuur-overgang: horizontale gradient op de balk-indicator
+            //   beginkleur = lo-temp (koud) -> eindkleur = hi-temp (warm)
+            lv_obj_set_style_bg_color(bars[i], tcol(los[i]), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_grad_color(bars[i], tcol(his[i]), LV_PART_INDICATOR);
+            lv_obj_set_style_bg_grad_dir(bars[i], LV_GRAD_DIR_HOR, LV_PART_INDICATOR);
+            lv_label_set_text(icons[i], glyph(conds[i]).c_str());
+            lv_obj_set_style_text_color(icons[i], accent(conds[i]), 0);
+            snprintf(buf, sizeof(buf), "%.0f°", los[i]); lv_label_set_text(los_l[i], buf);
+            snprintf(buf, sizeof(buf), "%.0f°", his[i]); lv_label_set_text(his_l[i], buf);
+          }
+          // wind per dag
+          lv_obj_t* winds[5]={ id(r0_wind),id(r1_wind),id(r2_wind),id(r3_wind),id(r4_wind) };
+          float dw[5]={ id(d0_wind).state,id(d1_wind).state,id(d2_wind).state,id(d3_wind).state,id(d4_wind).state };
+          for(int i=0;i<5;i++){ snprintf(buf,sizeof(buf),"%.0f",dw[i]); lv_label_set_text(winds[i],buf); }
+
+          // ===== ZON-BOOG: zonpositie (0=opkomst .. 100=ondergang) =====
+          // Bereken in HA een 'sun_progress' (0-100) en zet die op id(ha_sun_pos),
+          // of leid 'm af uit sunrise/sunset + nu. Voorbeeld:
+          //   lv_arc_set_value(id(sun_arc), (int)id(ha_sun_pos).state);
+
+  - id: refresh_clock
+    then:
+      - lambda: |-
+          static const char* dagen[7]={"zo","ma","di","wo","do","vr","za"};
+          static const char* mnd[12]={"jan","feb","mrt","apr","mei","jun","jul","aug","sep","okt","nov","dec"};
+          auto t = id(ha_time).now();
+          if (!t.is_valid()) return;
+          char buf[64];
+          snprintf(buf,sizeof(buf),"%s %d %s · %02d:%02d · UV %.0f",
+                   dagen[t.day_of_week-1], t.day_of_month, mnd[t.month-1],
+                   t.hour, t.minute, id(ha_uv).state);
+          lv_label_set_text(id(wx_status), buf);
+
+
+# =============================================================================
+#  NAV — navigeren tussen je 3 schermen
+# -----------------------------------------------------------------------------
+#  Hierboven in 'weather_page' staat de werkende implementatie:
+#    * 3 stipjes (TOP_MID) als pagina-indicator
+#    * twee onzichtbare tikzones (links 'button' -> page.previous,
+#      rechts -> page.next), elk 56px breed over de volle hoogte.
+#
+#  ZO ROL JE HET UIT OVER ALLE 3 SCHERMEN:
+#   1. Plak het PAGINA-INDICATOR-blok en de twee TIKZONE-buttons ook op je
+#      afzuigkap_page en foto_page.
+#   2. Verplaats per pagina de brede 'on'-stip (width:16, vol wit) naar de
+#      juiste positie: 1e stip = afzuigkap, 2e = foto, 3e = weer.
+#   3. LET OP volgorde: lvgl.page.next/previous loopt in de volgorde waarin de
+#      pagina's onder 'pages:' staan. Zet ze in de gewenste swipe-volgorde.
+#
+#  ALTERNATIEF — vegen i.p.v. tikken (als je touch swipe-gestures wilt):
+#      lvgl: { ..., on_swipe? }  wordt niet door alle versies ondersteund;
+#      de tikzones hierboven werken overal. Wil je toch echt vegen, gebruik dan
+#      een 'binary_sensor' op de touchscreen met een x-delta-lambda.
+#
+#  ALTERNATIEF — vanuit Home Assistant springen (bv. 'toon weer bij regen'):
+#      api:
+#        services:
+#          - service: show_weather
+#            then: [ lvgl.page.show: weather_page ]
+#      Roep daarna esphome.<naam>_show_weather aan in een HA-automatisering.
+# =============================================================================

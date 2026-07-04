@@ -1,0 +1,278 @@
+# Voeg deze blokken samen in /config/configuration.yaml.
+# Let op: heb je al template:, shell_command: of automation:, voeg dan alleen de items
+# binnen die bestaande top-level keys toe. Maak geen dubbele top-level keys.
+
+template:
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: daily
+        response_variable: fc
+    sensor:
+      - name: "Weerscherm d0 hi"
+        unique_id: weerscherm_d0_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].temperature }}"
+      - name: "Weerscherm d0 lo"
+        unique_id: weerscherm_d0_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].templow }}"
+      - name: "Weerscherm d0 cond"
+        unique_id: weerscherm_d0_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].condition }}"
+      - name: "Weerscherm d0 wind"
+        unique_id: weerscherm_d0_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[0].wind_speed }}"
+      - name: "Weerscherm d1 hi"
+        unique_id: weerscherm_d1_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].temperature }}"
+      - name: "Weerscherm d1 lo"
+        unique_id: weerscherm_d1_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].templow }}"
+      - name: "Weerscherm d1 cond"
+        unique_id: weerscherm_d1_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].condition }}"
+      - name: "Weerscherm d1 wind"
+        unique_id: weerscherm_d1_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[1].wind_speed }}"
+      - name: "Weerscherm d2 hi"
+        unique_id: weerscherm_d2_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].temperature }}"
+      - name: "Weerscherm d2 lo"
+        unique_id: weerscherm_d2_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].templow }}"
+      - name: "Weerscherm d2 cond"
+        unique_id: weerscherm_d2_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].condition }}"
+      - name: "Weerscherm d2 wind"
+        unique_id: weerscherm_d2_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[2].wind_speed }}"
+      - name: "Weerscherm d3 hi"
+        unique_id: weerscherm_d3_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].temperature }}"
+      - name: "Weerscherm d3 lo"
+        unique_id: weerscherm_d3_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].templow }}"
+      - name: "Weerscherm d3 cond"
+        unique_id: weerscherm_d3_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].condition }}"
+      - name: "Weerscherm d3 wind"
+        unique_id: weerscherm_d3_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[3].wind_speed }}"
+      - name: "Weerscherm d4 hi"
+        unique_id: weerscherm_d4_hi
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].temperature }}"
+      - name: "Weerscherm d4 lo"
+        unique_id: weerscherm_d4_lo
+        unit_of_measurement: "°C"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].templow }}"
+      - name: "Weerscherm d4 cond"
+        unique_id: weerscherm_d4_cond
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].condition }}"
+      - name: "Weerscherm d4 wind"
+        unique_id: weerscherm_d4_wind
+        unit_of_measurement: "km/h"
+        state: "{{ fc['weather.forecast_thuis'].forecast[4].wind_speed }}"
+
+  - trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/30"
+    action:
+      - action: weather.get_forecasts
+        target:
+          entity_id: weather.forecast_thuis
+        data:
+          type: hourly
+        response_variable: fc24
+    sensor:
+      - name: "Weerscherm regen 24u punten"
+        unique_id: weerscherm_regen_24u_punten
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set ns = namespace(pts=[]) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% set mm = h.precipitation | default(0) | float(0) %}
+            {% set pct = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% set pct = [pct, cond_floor] | max %}
+            {% set ns.pts = ns.pts + [ [[pct, 0] | max, 100] | min ] %}
+          {% endfor %}
+          {{ (ns.pts + [0]*24)[:24] | join(',') }}
+
+      - name: "Weerscherm regen 24u caption"
+        unique_id: weerscherm_regen_24u_caption
+        state: >
+          {% set forecast = fc24.get('weather.forecast_thuis', {}).get('forecast', []) %}
+          {% set mx = namespace(v=0) %}
+          {% for h in forecast[:24] %}
+            {% set cond = h.condition | default('') %}
+            {% if cond == 'pouring' %}{% set cond_floor = 85 %}
+            {% elif cond == 'lightning-rainy' %}{% set cond_floor = 70 %}
+            {% elif cond == 'rainy' %}{% set cond_floor = 55 %}
+            {% elif cond == 'snowy-rainy' %}{% set cond_floor = 45 %}
+            {% else %}{% set cond_floor = 0 %}{% endif %}
+            {% set mm = h.precipitation | default(0) | float(0) %}
+            {% set v = [ (mm * 25) | round(0) | int, 100] | min %}
+            {% set v = [v, cond_floor] | max %}
+            {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+          {% endfor %}
+          {% if mx.v == 0 %}droog komende 24u
+          {% elif mx.v < 35 %}kleine buienkans
+          {% elif mx.v < 70 %}buien mogelijk
+          {% else %}natte uren verwacht{% endif %}
+
+  - sensor:
+      - name: "Weerscherm regen punten"
+        unique_id: weerscherm_regen_punten
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% if raw %}
+            {% set tokens = raw.split(' ') %}
+            {% set ns = namespace(pts=[]) %}
+            {% for i in range(0, 24, 2) %}
+              {% if i < tokens|length %}
+                {% set v = tokens[i].split('|')[0]|int(0) %}
+                {% set pct = [ (v / 2.55)|round(0)|int, 100] | min %}
+                {% set ns.pts = ns.pts + [pct] %}
+              {% endif %}
+            {% endfor %}
+            {{ (ns.pts + [0]*12)[:12] | join(',') }}
+          {% else %}0,0,0,0,0,0,0,0,0,0,0,0{% endif %}
+
+      - name: "Weerscherm regen caption"
+        unique_id: weerscherm_regen_caption
+        state: >
+          {% set raw = state_attr('sensor.neerslag_buienradar_regen_data','data') %}
+          {% set mx = namespace(v=0) %}
+          {% if raw %}
+            {% for t in raw.split(' ') %}
+              {% set v = t.split('|')[0]|int(0) %}
+              {% if v > mx.v %}{% set mx.v = v %}{% endif %}
+            {% endfor %}
+          {% endif %}
+          {% if mx.v == 0 %}droog komende 2u
+          {% elif mx.v < 77 %}lichte regen mogelijk
+          {% elif mx.v < 154 %}matige regen verwacht
+          {% else %}zware regen verwacht{% endif %}
+
+      - name: "Weerscherm zon op"
+        unique_id: weerscherm_zon_op
+        state: "{{ as_timestamp(states('sensor.sun_next_rising')) | timestamp_custom('%H:%M', true) }}"
+      - name: "Weerscherm zon onder"
+        unique_id: weerscherm_zon_onder
+        state: "{{ as_timestamp(states('sensor.sun_next_setting')) | timestamp_custom('%H:%M', true) }}"
+      - name: "Weerscherm daglicht pct"
+        unique_id: weerscherm_daglicht_pct
+        unit_of_measurement: "%"
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set n = as_timestamp(now()) %}
+          {% if is_state('sun.sun','above_horizon') %}
+            {% set rise_today = r - 86400 %}
+            {% set pct = ((n - rise_today) / (s - rise_today) * 100) | round(0) | int %}
+            {{ [[pct, 0] | max, 100] | min }}
+          {% elif n < s %}0{% else %}100{% endif %}
+      - name: "Weerscherm daglicht caption"
+        unique_id: weerscherm_daglicht_caption
+        state: >
+          {% set r = as_timestamp(states('sensor.sun_next_rising')) %}
+          {% set s = as_timestamp(states('sensor.sun_next_setting')) %}
+          {% set rise_today = r - 86400 %}
+          {% set dur = (s - rise_today) if s > rise_today else (s - r + 86400) %}
+          {% set h = (dur // 3600) | int %}
+          {% set m = ((dur % 3600) // 60) | int %}
+          {{ h }}u {{ '%02d' % m }}m daglicht
+
+shell_command:
+  immich_rotate_7inch: "python3 /config/www/idotmatrix/immich_rotate_7inch.py"
+  immich_photo_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py next"
+  immich_photo_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py prev"
+  immich_photo_zoom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py zoom"
+  immich_photo_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py trash"
+  immich_photo_confirm_trash: "python3 /config/www/idotmatrix/immich_rotate_7inch.py confirm-trash"
+  buienradar_update_7inch: "python3 /config/www/idotmatrix/buienradar_radar_7inch.py"
+
+input_boolean:
+  ha_display_deurbel_actief:
+    name: "HA Display 7 deurbel actief"
+    icon: mdi:doorbell-video
+    initial: false
+
+automation:
+  # Reolink Voordeur entities uit Home Assistant:
+  # - trigger: binary_sensor.voordeur_bezoeker
+  # - snapshotbron: camera.voordeur_vloeiend
+  - alias: "HA Display 7 - Deurbel tonen"
+    id: ha_display_7_deurbel_tonen
+    mode: restart
+    trigger:
+      - trigger: state
+        entity_id: binary_sensor.voordeur_bezoeker
+        to: "on"
+    action:
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+      - repeat:
+          count: 50
+          sequence:
+            - condition: state
+              entity_id: input_boolean.ha_display_deurbel_actief
+              state: "on"
+            - action: camera.snapshot
+              target:
+                entity_id: camera.voordeur_vloeiend
+              data:
+                filename: /config/www/ha-display-doorbell.jpg
+            - delay: "00:00:01"
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.ha_display_deurbel_actief
+
+  - alias: "HA Display 7 - Immich foto roteren"
+    id: ha_display_7_immich_foto_roteren
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/1"
+    action:
+      - action: shell_command.immich_rotate_7inch
+
+  - alias: "HA Display 7 - Buienradar frames verversen"
+    id: ha_display_7_buienradar_frames_verversen
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+      - trigger: time_pattern
+        minutes: "/10"
+    action:
+      - action: shell_command.buienradar_update_7inch

@@ -1,0 +1,516 @@
+# =============================================================================
+#  SPOTIFY-SCHERM — 4" 480x480 touchscreen  ·  Variant C (Ambient)
+#  ESPHome + LVGL  ·  bedoeld om TE MERGEN in je bestaande config
+# -----------------------------------------------------------------------------
+#  Dit bestand bevat ALLEEN de Spotify-specifieke onderdelen. Voeg elk blok toe
+#  aan het gelijknamige top-level blok van je bestaande YAML (esphome:, font:,
+#  lvgl:, script:, ...). Heb je een blok nog niet, plak het dan in zijn geheel.
+#
+#  De UI toont (full-bleed):
+#   - Album-art op de volle 480x480 als achtergrond (online_image -> entity_picture)
+#   - Donkere scrim onderin zodat tekst + bediening altijd leesbaar zijn
+#   - Bovenin twee pillen: actief apparaat (links) + "nu afgespeeld"-status (rechts)
+#   - Onderin: titel + artiest/album, hartje (like), voortgangsbalk met tijden,
+#     transport (shuffle / vorige / play-pause / volgende / repeat) en volume
+#
+#  ALLE WAARDEN KOMEN UIT HOME ASSISTANT. Zoek op  >>> TODO  voor wat jij invult:
+#   1. De entity-id van je media_player (overal "media_player.spotify")
+#   2. De BASIS-URL van je HA voor de album-art (online_image, zie >>> TODO)
+#   3. Hoe je naar deze pagina navigeert vanaf je andere schermen (zie NAV)
+# =============================================================================
+
+
+# =============================================================================
+#  1) FONTS   ·  voeg toe aan je bestaande  font:  blok
+# -----------------------------------------------------------------------------
+#  We hergebruiken Montserrat (zoals de afzuigkap) en laden de MDI-media-iconen.
+#  font_brand (16) / font_status (13) komen al uit je afzuigkap-config.
+# =============================================================================
+font:
+  - file: "gfonts://Montserrat@800"
+    id: font_sp_title
+    size: 33
+  - file: "gfonts://Montserrat@600"
+    id: font_sp_artist
+    size: 15
+  - file: "gfonts://Montserrat@500"
+    id: font_sp_time
+    size: 13
+  # Media-iconen (transport + like + volume). Controleer de \U000Fxxxx-escapes
+  # tegen JOUW ESPHome-versie; werkt het niet, gebruik dan het 0xFxxxx-formaat
+  # of het echte glyph-teken.
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_sp_ctl
+    size: 26
+    glyphs:
+      - "\U000F040A"   # play
+      - "\U000F03E4"   # pause
+      - "\U000F04AD"   # skip-next
+      - "\U000F04AE"   # skip-previous
+      - "\U000F049D"   # shuffle
+      - "\U000F0456"   # repeat
+  - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
+    id: font_sp_mini
+    size: 18
+    glyphs:
+      - "\U000F02D1"   # heart  (geliked)
+      - "\U000F02D5"   # heart-outline (niet geliked)
+      - "\U000F057E"   # volume-high
+      - "\U000F04C3"   # speaker (apparaat-pill)
+      - "\U000F0301"   # google-cast / "nu afgespeeld" (of gebruik je eigen icoon)
+
+
+# =============================================================================
+#  2) ALBUM-ART   ·  voeg toe aan een  online_image:  blok (top-level)
+# -----------------------------------------------------------------------------
+#  De album-hoes komt binnen als 'entity_picture' op de media_player. Dat is een
+#  RELATIEF pad (/api/media_player_proxy/...). We zetten de volledige URL
+#  at-runtime in refresh_spotify met album_art.set_url(...).
+#
+#  >>> TODO: een geldige PLACEHOLDER-url bij start (bv. je eigen HA + een vaste
+#            afbeelding), zodat de eerste render niet leeg is. Daarna overschrijft
+#            refresh_spotify 'm met de echte hoes.
+# =============================================================================
+online_image:
+  - id: album_art
+    url: "http://homeassistant.local:8123/local/album_placeholder.png"   # >>> TODO
+    format: PNG          # entity_picture van Spotify is meestal JPEG -> zet 'JPEG' indien nodig
+    type: RGB565
+    resize: 480x480      # schaal naar het volledige scherm
+    update_interval: never
+
+
+# =============================================================================
+#  3) HOME ASSISTANT SENSOREN   ·  voeg toe aan  sensor:  /  text_sensor:
+# -----------------------------------------------------------------------------
+#  >>> TODO: vervang overal  media_player.spotify  door JOUW entity.
+# =============================================================================
+sensor:
+  # positie (sec) + duur (sec) voor de voortgangsbalk
+  - platform: homeassistant
+    id: sp_position
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: media_position
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_duration
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: media_duration
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  # volume 0.0 - 1.0
+  - platform: homeassistant
+    id: sp_volume
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: volume_level
+    on_value: { then: [ script.execute: refresh_spotify ] }
+
+text_sensor:
+  # afspeelstatus: 'playing' / 'paused' / 'idle' / 'off'
+  - platform: homeassistant
+    id: sp_state
+    entity_id: media_player.spotify          # >>> TODO  (gebruik GEEN attribute = de state zelf)
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_title
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: media_title
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_artist
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: media_artist
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_album
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: media_album_name
+  # actief apparaat (de pill linksboven). Spotify Connect zet dit soms op
+  # 'source'; anders gebruik je friendly_name van de player.
+  - platform: homeassistant
+    id: sp_device
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: source
+  # shuffle (true/false) + repeat ('off'/'all'/'one')
+  - platform: homeassistant
+    id: sp_shuffle
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: shuffle
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  - platform: homeassistant
+    id: sp_repeat
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: repeat
+    on_value: { then: [ script.execute: refresh_spotify ] }
+  # album-art-url (relatief pad). Trigger het opnieuw laden van de hoes.
+  - platform: homeassistant
+    id: sp_picture
+    entity_id: media_player.spotify          # >>> TODO
+    attribute: entity_picture
+    on_value:
+      then:
+        - lambda: |-
+            // >>> TODO: zet hier je HA-basis-URL (zonder slash op het eind)
+            std::string base = "http://homeassistant.local:8123";
+            std::string p = id(sp_picture).state;
+            if (!p.empty()) {
+              std::string full = (p.rfind("http",0)==0) ? p : base + p;
+              id(album_art).set_url(full.c_str());
+              id(album_art).update();
+            }
+
+
+# =============================================================================
+#  4) LVGL PAGINA   ·  voeg deze PAGINA toe onder  lvgl: -> pages:
+# -----------------------------------------------------------------------------
+#  Kleuren identiek aan de afzuigkap:
+#    0x08080A bg · groen accent 0x1DB954-achtig (hier 0x4ADE80 voor contrast)
+# =============================================================================
+lvgl:
+  pages:
+    - id: spotify_page
+      bg_color: 0x08080A
+      bg_opa: COVER
+      pad_all: 0
+      border_width: 0
+      widgets:
+
+        # ---------- ALBUM-ART full-bleed ----------
+        - image:
+            id: sp_cover
+            src: album_art
+            align: TOP_LEFT
+            x: 0
+            y: 0
+
+        # ---------- SCRIM (donkere gradient onderin voor leesbaarheid) ----------
+        #  LVGL kan niet naar transparant faden binnen 1 object; we stapelen een
+        #  ondoorzichtige balk onderin met verticale kleurgradient (zwart->zwart).
+        #  Voor een zachtere overgang: zet bg_opa lager of stapel 2 objecten.
+        - obj:
+            align: BOTTOM_MID
+            x: 0
+            y: 0
+            width: 480
+            height: 300
+            bg_color: 0x000000
+            bg_grad_color: 0x000000
+            bg_grad_dir: VER
+            bg_main_stop: 0
+            bg_grad_stop: 200
+            bg_opa: 78%
+            border_width: 0
+            pad_all: 0
+            radius: 0
+
+        # ---------- TOPBAR-PILLS ----------
+        - obj:
+            id: pill_device
+            align: TOP_LEFT
+            x: 24
+            y: 22
+            height: 32
+            width: 150
+            radius: 16
+            bg_color: 0x000000
+            bg_opa: 55%
+            border_width: 0
+            pad_left: 12
+            pad_right: 12
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { text: "\U000F04C3", text_font: font_sp_mini, text_color: 0xFFFFFF, align: LEFT_MID, x: 0 }
+              - label: { id: sp_device_lbl, text: "Woonkamer", text_font: font_status, text_color: 0xFFFFFF, align: LEFT_MID, x: 24 }
+        - obj:
+            id: pill_status
+            align: TOP_RIGHT
+            x: -24
+            y: 22
+            height: 32
+            width: 150
+            radius: 16
+            bg_color: 0x000000
+            bg_opa: 55%
+            border_width: 0
+            pad_left: 12
+            pad_right: 12
+            scrollbar_mode: 'OFF'
+            widgets:
+              - label: { id: sp_status_lbl, text: "nu afgespeeld", text_font: font_status, text_color: 0xFFFFFF, align: RIGHT_MID, x: 0 }
+
+        # ---------- TIKZONES links/rechts (onzichtbaar) -> vorige/volgende pagina ----------
+        #  Smal (40px) zodat ze de transport-knoppen onderin niet blokkeren.
+        - button:
+            x: 0
+            y: 60
+            width: 40
+            height: 200
+            bg_opa: TRANSP
+            border_width: 0
+            shadow_width: 0
+            on_click:
+              - lvgl.page.previous: { animation: OVER_RIGHT, time: 250ms }
+        - button:
+            align: TOP_RIGHT
+            x: 0
+            y: 60
+            width: 40
+            height: 200
+            bg_opa: TRANSP
+            border_width: 0
+            shadow_width: 0
+            on_click:
+              - lvgl.page.next: { animation: OVER_LEFT, time: 250ms }
+
+        # ---------- TITEL + ARTIEST + LIKE ----------
+        - label:
+            id: sp_title_lbl
+            text: "Midnight City"
+            text_font: font_sp_title
+            text_color: 0xFFFFFF
+            align: BOTTOM_LEFT
+            x: 26
+            y: -176
+            long_mode: DOT
+            width: 360
+        - label:
+            id: sp_artist_lbl
+            text: "M83 · Hurry Up, We're Dreaming"
+            text_font: font_sp_artist
+            text_color: 0xC8C8CE
+            align: BOTTOM_LEFT
+            x: 26
+            y: -150
+            long_mode: DOT
+            width: 380
+        - button:
+            id: sp_like_btn
+            align: BOTTOM_RIGHT
+            x: -22
+            y: -150
+            width: 40
+            height: 40
+            radius: 20
+            bg_opa: TRANSP
+            border_width: 0
+            shadow_width: 0
+            on_click:
+              - homeassistant.action:        # like/unlike via je eigen script of Spotcast
+                  action: script.spotify_toggle_like   # >>> TODO (optioneel)
+            widgets:
+              - label: { id: sp_like_lbl, text: "\U000F02D1", text_font: font_sp_mini, text_color: 0x4ADE80, align: CENTER }
+
+        # ---------- VOORTGANGSBALK + TIJDEN ----------
+        - slider:
+            id: sp_progress
+            align: BOTTOM_MID
+            x: 0
+            y: -116
+            width: 428
+            height: 6
+            min_value: 0
+            max_value: 1000
+            value: 340
+            bg_color: 0x4D4D52
+            indicator: { bg_color: 0xFFFFFF, radius: 3 }
+            knob: { bg_color: 0xFFFFFF, pad_all: 5 }
+            on_release:
+              - homeassistant.action:
+                  action: media_player.media_seek
+                  data:
+                    entity_id: media_player.spotify          # >>> TODO
+                  data_template:
+                    seek_position: "{{ pos }}"
+                  variables:
+                    pos: !lambda |-
+                      return (lv_slider_get_value(id(sp_progress)) / 1000.0) * id(sp_duration).state;
+        - label: { id: sp_pos_lbl,  text: "1:15", text_font: font_sp_time, text_color: 0xC8C8CE, align: BOTTOM_LEFT,  x: 26,  y: -96 }
+        - label: { id: sp_dur_lbl,  text: "3:38", text_font: font_sp_time, text_color: 0xC8C8CE, align: BOTTOM_RIGHT, x: -26, y: -96 }
+
+        # ---------- TRANSPORT ----------
+        - button:
+            id: sp_shuffle_btn
+            align: BOTTOM_MID
+            x: -132
+            y: -34
+            width: 44
+            height: 44
+            radius: 22
+            bg_color: 0xFFFFFF
+            bg_opa: 12%
+            border_width: 0
+            on_click:
+              - homeassistant.action:
+                  action: media_player.shuffle_set
+                  data:
+                    entity_id: media_player.spotify          # >>> TODO
+                  data_template:
+                    shuffle: "{{ sh }}"
+                  variables:
+                    sh: !lambda 'return id(sp_shuffle).state ? "false" : "true";'
+            widgets:
+              - label: { id: sp_shuffle_lbl, text: "\U000F049D", text_font: font_sp_ctl, text_color: 0x4ADE80, align: CENTER }
+        - button:
+            align: BOTTOM_MID
+            x: -68
+            y: -34
+            width: 44
+            height: 44
+            radius: 22
+            bg_color: 0xFFFFFF
+            bg_opa: 12%
+            border_width: 0
+            on_click:
+              - homeassistant.action: { action: media_player.media_previous_track, data: { entity_id: media_player.spotify } }   # >>> TODO
+            widgets:
+              - label: { text: "\U000F04AE", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER }
+        - button:
+            id: sp_play_btn
+            align: BOTTOM_MID
+            x: 0
+            y: -25
+            width: 64
+            height: 64
+            radius: 32
+            bg_color: 0x4ADE80
+            border_width: 0
+            on_click:
+              - homeassistant.action: { action: media_player.media_play_pause, data: { entity_id: media_player.spotify } }   # >>> TODO
+            widgets:
+              - label: { id: sp_play_lbl, text: "\U000F03E4", text_font: font_sp_ctl, text_color: 0x07140D, align: CENTER }
+        - button:
+            align: BOTTOM_MID
+            x: 68
+            y: -34
+            width: 44
+            height: 44
+            radius: 22
+            bg_color: 0xFFFFFF
+            bg_opa: 12%
+            border_width: 0
+            on_click:
+              - homeassistant.action: { action: media_player.media_next_track, data: { entity_id: media_player.spotify } }   # >>> TODO
+            widgets:
+              - label: { text: "\U000F04AD", text_font: font_sp_ctl, text_color: 0xFFFFFF, align: CENTER }
+        - button:
+            id: sp_repeat_btn
+            align: BOTTOM_MID
+            x: 132
+            y: -34
+            width: 44
+            height: 44
+            radius: 22
+            bg_color: 0xFFFFFF
+            bg_opa: 12%
+            border_width: 0
+            on_click:
+              - homeassistant.action:
+                  action: media_player.repeat_set
+                  data:
+                    entity_id: media_player.spotify          # >>> TODO
+                  data_template:
+                    repeat: "{{ rp }}"
+                  variables:
+                    rp: !lambda 'return id(sp_repeat).state == std::string("off") ? "all" : "off";'
+            widgets:
+              - label: { id: sp_repeat_lbl, text: "\U000F0456", text_font: font_sp_ctl, text_color: 0x9A9AA0, align: CENTER }
+
+        # ---------- VOLUME ----------
+        - label: { text: "\U000F057E", text_font: font_sp_mini, text_color: 0xC8C8CE, align: BOTTOM_LEFT, x: 26, y: -26 }
+        - slider:
+            id: sp_volume_sld
+            align: BOTTOM_MID
+            x: 8
+            y: -28
+            width: 360
+            height: 6
+            min_value: 0
+            max_value: 100
+            value: 62
+            bg_color: 0x4D4D52
+            indicator: { bg_color: 0xE6E6E6, radius: 3 }
+            knob: { bg_color: 0xFFFFFF, pad_all: 4 }
+            on_release:
+              - homeassistant.action:
+                  action: media_player.volume_set
+                  data:
+                    entity_id: media_player.spotify          # >>> TODO
+                  data_template:
+                    volume_level: "{{ v }}"
+                  variables:
+                    v: !lambda 'return lv_slider_get_value(id(sp_volume_sld)) / 100.0;'
+        - label: { id: sp_vol_lbl, text: "62", text_font: font_sp_time, text_color: 0xC8C8CE, align: BOTTOM_RIGHT, x: -26, y: -25 }
+
+
+# =============================================================================
+#  5) SCRIPT   ·  voeg toe aan je bestaande  script:  blok
+# -----------------------------------------------------------------------------
+#  refresh_spotify : leest de media_player-sensoren en werkt de widgets bij.
+#  Roep 'm ook eenmalig aan in esphome: -> on_boot:.
+# =============================================================================
+script:
+  - id: refresh_spotify
+    then:
+      - lambda: |-
+          char buf[64];
+          // ----- tekst -----
+          lv_label_set_text(id(sp_title_lbl),  id(sp_title).state.c_str());
+          lv_label_set_text(id(sp_artist_lbl), id(sp_artist).state.c_str());
+          if (!id(sp_device).state.empty())
+            lv_label_set_text(id(sp_device_lbl), id(sp_device).state.c_str());
+
+          // ----- play/pause -----
+          bool playing = (id(sp_state).state == std::string("playing"));
+          lv_label_set_text(id(sp_play_lbl), playing ? "\U000F03E4" : "\U000F040A");
+          lv_label_set_text(id(sp_status_lbl), playing ? "nu afgespeeld" : "gepauzeerd");
+
+          // ----- voortgang (sec) -> slider 0..1000 + tijdlabels -----
+          float pos = id(sp_position).state, dur = id(sp_duration).state;
+          if (dur < 1) dur = 1;
+          int sv = (int)(pos / dur * 1000.0f); if (sv < 0) sv = 0; if (sv > 1000) sv = 1000;
+          lv_slider_set_value(id(sp_progress), sv, LV_ANIM_OFF);
+          snprintf(buf, sizeof(buf), "%d:%02d", (int)pos/60, (int)pos%60); lv_label_set_text(id(sp_pos_lbl), buf);
+          snprintf(buf, sizeof(buf), "%d:%02d", (int)dur/60, (int)dur%60); lv_label_set_text(id(sp_dur_lbl), buf);
+
+          // ----- volume -----
+          int v = (int)(id(sp_volume).state * 100.0f);
+          lv_slider_set_value(id(sp_volume_sld), v, LV_ANIM_OFF);
+          snprintf(buf, sizeof(buf), "%d", v); lv_label_set_text(id(sp_vol_lbl), buf);
+
+          // ----- shuffle aan/uit (groen vs. grijs) -----
+          bool sh = id(sp_shuffle).state;
+          lv_obj_set_style_text_color(id(sp_shuffle_lbl), sh ? lv_color_hex(0x4ADE80) : lv_color_hex(0x9A9AA0), 0);
+
+          // ----- repeat off/all/one (grijs vs. groen) -----
+          bool rp = (id(sp_repeat).state != std::string("off"));
+          lv_obj_set_style_text_color(id(sp_repeat_lbl), rp ? lv_color_hex(0x4ADE80) : lv_color_hex(0x9A9AA0), 0);
+
+
+# =============================================================================
+#  NAV — navigeren tussen je schermen
+# -----------------------------------------------------------------------------
+#  Net als het weerscherm: plak het PAGINA-INDICATOR-blok (3/4 stipjes) en de
+#  twee onzichtbare TIKZONE-buttons (hierboven aanwezig) ook op deze pagina,
+#  en verplaats per pagina de brede 'on'-stip naar de juiste positie. Zet
+#  spotify_page in de gewenste swipe-volgorde onder 'pages:'.
+#
+#  TIP — automatisch naar Spotify springen zodra er muziek speelt:
+#    text_sensor sp_state -> on_value: if state == "playing":
+#       - lvgl.page.show: { id: spotify_page, animation: OVER_LEFT, time: 250ms }
+# =============================================================================
+
+
+# =============================================================================
+#  EINDCHECK
+# -----------------------------------------------------------------------------
+#  [ ] Alle  media_player.spotify  vervangen door jouw entity.
+#  [ ] HA-basis-URL ingevuld in de sp_picture-lambda én online_image placeholder.
+#  [ ] online_image 'format' klopt (Spotify levert meestal JPEG, niet PNG).
+#  [ ] MDI-glyph-escapes kloppen voor jouw ESPHome-versie.
+#  [ ] refresh_spotify in on_boot + via de sensor-on_value's.
+#  [ ] spotify_page staat in de juiste swipe-volgorde; indicator-stip verschoven.
+#  [ ] like-knop: koppel je eigen script.spotify_toggle_like of haal de knop weg.
+#  [ ] Niets valt onder de 480px-rand; tekst >=12px.
+#
+#  Bij twijfel over een widget-property: houd 'm aan tegen de actuele
+#  ESPHome-LVGL-docs; de structuur en posities hierboven zijn leidend.
+# =============================================================================

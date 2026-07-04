@@ -5,6 +5,7 @@
 
 substitutions:
   spotify_entity: media_player.spotify_tomkortekaas
+  keuken_amp_entity: media_player.keuken_amp
   spotify_position_entity: sensor.spotify_huidige_positie
   spotify_source_fallback: "Keuken Amp"
   doorbell_active_entity: input_boolean.ha_display_deurbel_actief
@@ -123,6 +124,22 @@ globals:
     restore_value: no
     initial_value: '0'
   - id: touch_swipe_last_y
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: keuken_amp_spotify_auto_shown
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: keuken_amp_media_auto_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: current_display_page
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: last_page_before_media
     type: int
     restore_value: no
     initial_value: '0'
@@ -443,7 +460,7 @@ sensor:
     internal: true
   - platform: homeassistant
     id: ha_gas
-    entity_id: sensor.gasverbruik_nu
+    entity_id: sensor.dagverbruik_gas
     internal: true
   - platform: homeassistant
     id: ha_kosten_vandaag
@@ -480,6 +497,10 @@ sensor:
   - platform: homeassistant
     id: ha_balans_inverter_temp
     entity_id: sensor.balans_batterij_temperature
+    internal: true
+  - platform: homeassistant
+    id: ha_hyundai_ev_battery
+    entity_id: sensor.ioniq_5_ev_battery_level
     internal: true
   - platform: homeassistant
     id: light_woonkamer_bri
@@ -570,20 +591,49 @@ sensor:
 text_sensor:
   - platform: homeassistant
     id: media_title
-    entity_id: ${spotify_entity}
+    entity_id: ${keuken_amp_entity}
     attribute: media_title
     internal: true
     on_value:
       - lambda: 'id(album_art_pending_url).clear();'
   - platform: homeassistant
     id: media_artist
-    entity_id: ${spotify_entity}
+    entity_id: ${keuken_amp_entity}
     attribute: media_artist
     internal: true
   - platform: homeassistant
     id: media_state
-    entity_id: ${spotify_entity}
+    entity_id: ${keuken_amp_entity}
     internal: true
+  - platform: homeassistant
+    id: keuken_amp_media_content_id
+    entity_id: ${keuken_amp_entity}
+    attribute: media_content_id
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: 'return x.rfind("spotify:", 0) == 0;'
+          then:
+            - delay: 500ms
+            - script.execute: media_show_for_keuken_amp_spotify
+  - platform: homeassistant
+    id: keuken_amp_state
+    entity_id: ${keuken_amp_entity}
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: 'return x != "playing";'
+          then:
+            - script.execute: media_restore_after_keuken_amp_stop
+            - lambda: 'id(keuken_amp_spotify_auto_shown) = false;'
+      - if:
+          condition:
+            lambda: 'return x == "playing";'
+          then:
+            - delay: 500ms
+            - script.execute: media_show_for_keuken_amp_spotify
   - platform: homeassistant
     id: media_source
     entity_id: ${spotify_entity}
@@ -608,9 +658,9 @@ text_sensor:
     entity_id: sensor.balans_batterij_device_state
     internal: true
   - platform: homeassistant
-    id: media_album_art_local
-    entity_id: ${spotify_entity}
-    attribute: entity_picture_local
+    id: media_album_art_remote
+    entity_id: ${keuken_amp_entity}
+    attribute: entity_picture
     internal: true
     on_value:
       - lambda: |-
@@ -619,9 +669,9 @@ text_sensor:
           id(album_art_pending_url) = url;
       - script.execute: album_art_load
   - platform: homeassistant
-    id: media_album_art_remote
-    entity_id: ${spotify_entity}
-    attribute: entity_picture
+    id: media_album_art_local
+    entity_id: ${keuken_amp_entity}
+    attribute: entity_picture_local
     internal: true
     on_value:
       - lambda: |-
@@ -1639,6 +1689,22 @@ binary_sensor:
     id: ha_balans_connection
     entity_id: binary_sensor.balans_batterij_connection
     internal: true
+  - platform: homeassistant
+    id: display_actief
+    entity_id: input_boolean.ha_display_7_actief
+    internal: true
+    on_state:
+      then:
+        - if:
+            condition:
+              binary_sensor.is_on: display_actief
+            then:
+              - light.turn_on:
+                  id: display_backlight
+                  brightness: 90%
+            else:
+              - light.turn_off:
+                  id: display_backlight
 
 artwork_image:
   - id: album_art
@@ -2229,7 +2295,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_energy
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lambda: 'id(current_display_page) = 0; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
                           - lvgl.widget.show: nav_rail_container
                           - lvgl.widget.show: top_status_bar
                           - lvgl.obj.update:
@@ -2312,7 +2378,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_lights
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lambda: 'id(current_display_page) = 1; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
                           - lvgl.widget.show: nav_rail_container
                           - lvgl.widget.show: top_status_bar
                           - lvgl.obj.update:
@@ -2395,7 +2461,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_media
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lambda: 'id(current_display_page) = 2; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
                           - lvgl.widget.show: nav_rail_container
                           - lvgl.widget.show: top_status_bar
                           - lvgl.obj.update:
@@ -2478,7 +2544,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_weather
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = true; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lambda: 'id(current_display_page) = 3; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = true; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
                           - script.execute: radar_frame_load
                           - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
@@ -2562,7 +2628,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_agenda
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                          - lambda: 'id(current_display_page) = 4; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
                           - lvgl.widget.show: nav_rail_container
                           - lvgl.widget.show: top_status_bar
                           - lvgl.obj.update:
@@ -2645,7 +2711,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_immich
-                          - lambda: 'id(immich_page_active) = true; id(weather_page_active) = false; id(immich_overlay_countdown) = 0;'
+                          - lambda: 'id(current_display_page) = 5; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = true; id(weather_page_active) = false; id(immich_overlay_countdown) = 0;'
                           - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.hide: immich_controls
@@ -2729,7 +2795,7 @@ lvgl:
                       on_click:
                         then:
                           - lvgl.page.show: page_recepten
-                          - lambda: 'id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                          - lambda: 'id(current_display_page) = 6; id(keuken_amp_media_auto_active) = false; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
                           - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.obj.update:
@@ -3412,7 +3478,7 @@ lvgl:
               - obj:
                   x: 96
                   y: 460
-                  width: 172
+                  width: 140
                   height: 70
                   radius: 14
                   bg_color: 0x101010
@@ -3430,15 +3496,15 @@ lvgl:
                         id: lbl_energy_price
                         x: 12
                         y: 34
-                        width: 148
+                        width: 116
                         text_font: font_roboto_16
                         text_color: 0xFFD84A
                         long_mode: DOT
                         text: "--"
               - obj:
-                  x: 274
+                  x: 244
                   y: 460
-                  width: 172
+                  width: 140
                   height: 70
                   radius: 14
                   bg_color: 0x101010
@@ -3456,7 +3522,7 @@ lvgl:
                         id: lbl_energy_cost_today
                         x: 16
                         y: 30
-                        width: 140
+                        width: 108
                         text_font: font_roboto_20
                         text_color: 0xFFFFFF
                         long_mode: DOT
@@ -3465,15 +3531,15 @@ lvgl:
                         id: lbl_energy_cost_month
                         x: 16
                         y: 50
-                        width: 140
+                        width: 108
                         text_font: font_roboto_12
                         text_color: 0xA0A0A0
                         long_mode: DOT
                         text: "MAAND --"
               - obj:
-                  x: 452
+                  x: 392
                   y: 460
-                  width: 172
+                  width: 140
                   height: 70
                   radius: 14
                   bg_color: 0x101010
@@ -3486,20 +3552,20 @@ lvgl:
                         y: 12
                         text_font: font_roboto_12
                         text_color: 0xA0A0A0
-                        text: "GAS"
+                        text: "GAS VANDAAG"
                     - label:
                         id: lbl_energy_gas
                         x: 16
                         y: 34
-                        width: 140
+                        width: 108
                         text_font: font_roboto_20
                         text_color: 0xFF2A7A
                         long_mode: DOT
                         text: "--"
               - obj:
-                  x: 630
+                  x: 540
                   y: 460
-                  width: 172
+                  width: 140
                   height: 70
                   radius: 14
                   bg_color: 0x101010
@@ -3517,15 +3583,15 @@ lvgl:
                         id: lbl_energy_inside_temp
                         x: 16
                         y: 34
-                        width: 140
+                        width: 108
                         text_font: font_roboto_20
                         text_color: 0xFF8A3A
                         long_mode: DOT
                         text: "--"
               - obj:
-                  x: 808
+                  x: 688
                   y: 460
-                  width: 172
+                  width: 140
                   height: 70
                   radius: 14
                   bg_color: 0x101010
@@ -3543,9 +3609,35 @@ lvgl:
                         id: lbl_energy_inverter_temp
                         x: 16
                         y: 34
-                        width: 140
+                        width: 108
                         text_font: font_roboto_20
                         text_color: 0xFF3B30
+                        long_mode: DOT
+                        text: "--"
+              - obj:
+                  x: 836
+                  y: 460
+                  width: 140
+                  height: 70
+                  radius: 14
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  widgets:
+                    - label:
+                        x: 16
+                        y: 12
+                        text_font: font_roboto_12
+                        text_color: 0xA0A0A0
+                        text: "IONIQ 5"
+                    - label:
+                        id: lbl_energy_hyundai_battery
+                        x: 16
+                        y: 34
+                        width: 108
+                        text_font: font_roboto_20
+                        text_color: 0x2F9BFF
                         long_mode: DOT
                         text: "--"
               # Onzichtbare tik-detector — net als Immich:
@@ -9183,7 +9275,7 @@ lvgl:
             on_click:
               then:
                 - lvgl.page.show: page_recepten
-                - lambda: 'id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                - lambda: 'id(current_display_page) = 6; id(keuken_amp_media_auto_active) = false; id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
                 - lvgl.widget.hide: nav_rail_container
                 - lvgl.widget.hide: top_status_bar
                 - lvgl.obj.update:
@@ -9200,6 +9292,102 @@ lvgl:
                   text: "terug"
 
 script:
+  - id: media_show_for_keuken_amp_spotify
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              std::string state = id(keuken_amp_state).state;
+              std::string content_id = id(keuken_amp_media_content_id).state;
+              return state == "playing" && content_id.rfind("spotify:", 0) == 0 && !id(keuken_amp_spotify_auto_shown);
+          then:
+            - lambda: |-
+                id(last_page_before_media) = id(current_display_page);
+                id(current_display_page) = 2;
+                id(keuken_amp_spotify_auto_shown) = true;
+                id(keuken_amp_media_auto_active) = true;
+                ESP_LOGI("media", "Keuken Amp Spotify playback detected; showing media page, previous page %d", id(last_page_before_media));
+            - homeassistant.action:
+                action: input_boolean.turn_on
+                data:
+                  entity_id: input_boolean.ha_display_7_actief
+            - light.turn_on:
+                id: display_backlight
+                brightness: 90%
+            - lvgl.widget.show: nav_rail_container
+            - lvgl.widget.show: top_status_bar
+            - lvgl.page.show: page_media
+
+  - id: media_restore_after_keuken_amp_stop
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return id(keuken_amp_media_auto_active) && id(keuken_amp_state).state != "playing";
+          then:
+            - lambda: |-
+                ESP_LOGI("media", "Keuken Amp playback stopped; restoring page %d", id(last_page_before_media));
+                id(keuken_amp_media_auto_active) = false;
+                id(keuken_amp_spotify_auto_shown) = false;
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 0;'
+                then:
+                  - lvgl.page.show: page_energy
+                  - lambda: 'id(current_display_page) = 0; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.show: nav_rail_container
+                  - lvgl.widget.show: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 1;'
+                then:
+                  - lvgl.page.show: page_lights
+                  - lambda: 'id(current_display_page) = 1; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.show: nav_rail_container
+                  - lvgl.widget.show: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 2;'
+                then:
+                  - lvgl.page.show: page_media
+                  - lambda: 'id(current_display_page) = 2; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.show: nav_rail_container
+                  - lvgl.widget.show: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 3;'
+                then:
+                  - lvgl.page.show: page_weather
+                  - lambda: 'id(current_display_page) = 3; id(immich_page_active) = false; id(weather_page_active) = true; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.hide: nav_rail_container
+                  - lvgl.widget.hide: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 4;'
+                then:
+                  - lvgl.page.show: page_agenda
+                  - lambda: 'id(current_display_page) = 4; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.show: nav_rail_container
+                  - lvgl.widget.show: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 5;'
+                then:
+                  - lvgl.page.show: page_immich
+                  - lambda: 'id(current_display_page) = 5; id(immich_page_active) = true; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = false;'
+                  - lvgl.widget.hide: nav_rail_container
+                  - lvgl.widget.hide: top_status_bar
+            - if:
+                condition:
+                  lambda: 'return id(last_page_before_media) == 6;'
+                then:
+                  - lvgl.page.show: page_recepten
+                  - lambda: 'id(current_display_page) = 6; id(immich_page_active) = false; id(weather_page_active) = false; id(immich_overlay_countdown) = 0; id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                  - lvgl.widget.hide: nav_rail_container
+                  - lvgl.widget.hide: top_status_bar
+
   - id: left_nav_show
     mode: restart
     then:
@@ -10724,6 +10912,7 @@ interval:
           float gas = id(ha_gas).state;
           float inside_temp = id(ha_binnen_temp).state;
           float inverter_temp = id(ha_balans_inverter_temp).state;
+          float hyundai_ev_battery = id(ha_hyundai_ev_battery).state;
           char buf[32];
           if (isnan(price)) lv_label_set_text(id(lbl_energy_price), "--");
           else {
@@ -10742,7 +10931,7 @@ interval:
           }
           if (isnan(gas)) lv_label_set_text(id(lbl_energy_gas), "--");
           else {
-            snprintf(buf, sizeof(buf), "%.3f m3/u", gas);
+            snprintf(buf, sizeof(buf), "%.2f m3", gas);
             lv_label_set_text(id(lbl_energy_gas), buf);
           }
           if (isnan(inside_temp)) lv_label_set_text(id(lbl_energy_inside_temp), "--");
@@ -10754,6 +10943,11 @@ interval:
           else {
             snprintf(buf, sizeof(buf), "%.1f\xc2\xb0" "C", inverter_temp);
             lv_label_set_text(id(lbl_energy_inverter_temp), buf);
+          }
+          if (isnan(hyundai_ev_battery)) lv_label_set_text(id(lbl_energy_hyundai_battery), "--");
+          else {
+            snprintf(buf, sizeof(buf), "%.0f%%", hyundai_ev_battery);
+            lv_label_set_text(id(lbl_energy_hyundai_battery), buf);
           }
 
   # Balans energie — flowdots op de brede route-centerlines
@@ -10841,20 +11035,3 @@ interval:
                 id(radar_frame_index)++;
                 if (id(radar_frame_index) > 8) id(radar_frame_index) = 0;
             - script.execute: radar_frame_load
-
-  # Auto-dim backlight — elke minuut
-  - interval: 60s
-    then:
-      - if:
-          condition:
-            lambda: |-
-              auto t = id(ha_time).now();
-              return t.is_valid() && (t.hour >= 22 || t.hour < 7);
-          then:
-            - light.turn_on:
-                id: display_backlight
-                brightness: 20%
-          else:
-            - light.turn_on:
-                id: display_backlight
-                brightness: 90%
