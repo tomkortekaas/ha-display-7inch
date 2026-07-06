@@ -49,6 +49,10 @@ globals:
   - id: weather_page_active
     type: bool
     initial_value: 'false'
+  - id: spotify_drawer_open
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: doorbell_art_retry_count
     type: int
     initial_value: '0'
@@ -294,6 +298,27 @@ touchscreen:
           const bool from_nav_zone = id(touch_swipe_start_x) <= 260;
           const bool from_top_edge = id(touch_swipe_start_y) <= 80;
           const bool from_top_zone = id(touch_swipe_start_y) <= 160;
+          const bool from_right_edge = id(touch_swipe_start_x) >= 904;
+          const bool horizontal_swipe = std::abs(dx) >= 90 && std::abs(dx) > std::abs(dy) * 2;
+          const bool swipe_left = dx <= -90;
+          const bool swipe_right = dx >= 90;
+          if (horizontal_swipe && from_right_edge && swipe_left) {
+            const bool spotify_drawer_allowed =
+              !id(doorbell_page_active) &&
+              !id(immich_page_active) &&
+              !id(ah_recipe_page_active) &&
+              (id(current_display_page) == 0 ||
+               id(current_display_page) == 1 ||
+               id(current_display_page) == 3);
+            if (spotify_drawer_allowed) {
+              id(spotify_drawer_open_script).execute();
+              return;
+            }
+          }
+          if (horizontal_swipe && id(spotify_drawer_open) && from_left_edge && swipe_right) {
+            id(spotify_drawer_close_script).execute();
+            return;
+          }
           if (abs_dx >= 55 && abs_dx > abs_dy) {
             if (dx > 0 && from_left_edge) id(nav_overlay_show).execute();
             else if (dx < 0 && overlay_visible && from_nav_zone) id(nav_overlay_hide).execute();
@@ -2940,6 +2965,156 @@ lvgl:
                     id(nav_overlay_hide).execute();
                   }
 
+      - obj:
+          id: spotify_drawer_container
+          x: 717
+          y: 56
+          width: 307
+          height: 544
+          bg_color: 0x070807
+          bg_opa: COVER
+          border_width: 1
+          border_color: 0x1ED760
+          radius: 0
+          pad_all: 14
+          hidden: true
+          scrollable: false
+          layout:
+            type: FLEX
+            flex_flow: COLUMN
+            flex_align_main: START
+            flex_align_cross: CENTER
+            pad_row: 12
+          widgets:
+            - image:
+                id: spotify_drawer_album
+                src: album_art
+                width: 210
+                height: 210
+            - label:
+                id: spotify_drawer_title
+                width: 270
+                long_mode: DOT
+                text: "--"
+                text_font: font_roboto_20
+                text_color: 0xFFFFFF
+            - label:
+                id: spotify_drawer_artist
+                width: 270
+                long_mode: DOT
+                text: "--"
+                text_font: font_roboto_16
+                text_color: 0x9999A3
+            - bar:
+                id: spotify_drawer_progress
+                width: 270
+                height: 5
+                min_value: 0
+                max_value: 100
+                value: 0
+                bg_color: 0x2A2A2E
+                bg_opa: COVER
+                radius: 3
+                indicator:
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                  radius: 3
+            - obj:
+                width: 270
+                height: 76
+                bg_opa: TRANSP
+                border_width: 0
+                pad_all: 0
+                scrollable: false
+                layout:
+                  type: FLEX
+                  flex_flow: ROW
+                  flex_align_main: CENTER
+                  flex_align_cross: CENTER
+                  pad_column: 12
+                widgets:
+                  - button:
+                      width: 52
+                      height: 52
+                      radius: 26
+                      bg_color: 0x1A1A1A
+                      bg_opa: COVER
+                      on_click:
+                        - homeassistant.action:
+                            action: media_player.media_previous_track
+                            data:
+                              entity_id: ${spotify_entity}
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_icon_28
+                            text_color: 0xFFFFFF
+                            text: "\U000F04AE"
+                  - button:
+                      width: 68
+                      height: 68
+                      radius: 34
+                      bg_color: 0xFFFFFF
+                      bg_opa: COVER
+                      on_click:
+                        - homeassistant.action:
+                            action: media_player.media_play_pause
+                            data:
+                              entity_id: ${spotify_entity}
+                      widgets:
+                        - label:
+                            id: spotify_drawer_play_icon
+                            align: CENTER
+                            text_font: font_icon_28
+                            text_color: 0x000000
+                            text: "\U000F040A"
+                  - button:
+                      width: 52
+                      height: 52
+                      radius: 26
+                      bg_color: 0x1A1A1A
+                      bg_opa: COVER
+                      on_click:
+                        - homeassistant.action:
+                            action: media_player.media_next_track
+                            data:
+                              entity_id: ${spotify_entity}
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_icon_28
+                            text_color: 0xFFFFFF
+                            text: "\U000F04AD"
+            - label:
+                width: 270
+                text_font: font_roboto_12
+                text_color: 0x77777F
+                text: "VOLUME"
+            - slider:
+                id: spotify_drawer_volume
+                width: 270
+                height: 28
+                min_value: 0
+                max_value: 100
+                value: 40
+                bg_color: 0x202020
+                bg_opa: COVER
+                indicator:
+                  bg_color: 0x1ED760
+                  bg_opa: COVER
+                knob:
+                  bg_color: 0xFFFFFF
+                  bg_opa: COVER
+                on_release:
+                  - homeassistant.action:
+                      action: media_player.volume_set
+                      data:
+                        entity_id: ${spotify_entity}
+                      data_template:
+                        volume_level: "{{ vol }}"
+                      variables:
+                        vol: !lambda 'return lv_slider_get_value(id(spotify_drawer_volume)) / 100.0;'
+
   pages:
     # ===========================================================
     # PAGINA 1: ENERGIE
@@ -2950,6 +3125,7 @@ lvgl:
       scrollable: false
       widgets:
         - obj:
+            id: energy_content_container
             x: 0
             y: 56
             width: 1024
@@ -3476,6 +3652,7 @@ lvgl:
                         border_width: 0
                         hidden: true
               - obj:
+                  id: energy_price_metric
                   x: 96
                   y: 460
                   width: 140
@@ -3502,10 +3679,12 @@ lvgl:
                         long_mode: DOT
                         text: "--"
               - obj:
+                  id: energy_cost_metric
                   x: 244
                   y: 460
                   width: 140
                   height: 70
+                  hidden: true
                   radius: 14
                   bg_color: 0x101010
                   bg_opa: COVER
@@ -3537,6 +3716,7 @@ lvgl:
                         long_mode: DOT
                         text: "MAAND --"
               - obj:
+                  id: energy_gas_metric
                   x: 392
                   y: 460
                   width: 140
@@ -3563,10 +3743,12 @@ lvgl:
                         long_mode: DOT
                         text: "--"
               - obj:
+                  id: energy_indoor_temp_metric
                   x: 540
                   y: 460
                   width: 140
                   height: 70
+                  hidden: true
                   radius: 14
                   bg_color: 0x101010
                   bg_opa: COVER
@@ -3589,6 +3771,7 @@ lvgl:
                         long_mode: DOT
                         text: "--"
               - obj:
+                  id: energy_hyundai_metric
                   x: 688
                   y: 460
                   width: 140
@@ -3615,6 +3798,7 @@ lvgl:
                         long_mode: DOT
                         text: "--"
               - obj:
+                  id: energy_inverter_temp_metric
                   x: 836
                   y: 460
                   width: 140
@@ -3687,6 +3871,7 @@ lvgl:
       scrollable: false
       widgets:
         - obj:
+            id: lights_content_container
             x: 88
             y: 56
             width: 936
@@ -3705,6 +3890,7 @@ lvgl:
 
               # LINKS — Verlichting card (612px)
               - obj:
+                  id: lights_main_card
                   width: 612
                   height: 512
                   bg_color: 0x101010
@@ -3752,6 +3938,7 @@ lvgl:
                                     text: "Alles uit"
                     # Licht tiles grid (2 kolommen)
                     - obj:
+                        id: lights_grid_container
                         x: 0
                         y: 52
                         width: 580
@@ -4154,6 +4341,7 @@ lvgl:
 
               # RECHTS — Scène tiles (292px)
               - obj:
+                  id: scenes_container
                   width: 292
                   height: 512
                   bg_color: 0x000000
@@ -4698,6 +4886,7 @@ lvgl:
                     - bar: { id: wx_rb11, flex_grow: 1, height: 50, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
 
               - obj:
+                  id: weather_sun_card
                   x: 720
                   y: 24
                   width: 284
@@ -4828,6 +5017,7 @@ lvgl:
                           bg_opa: COVER
 
               - obj:
+                  id: weather_forecast_container
                   x: 386
                   y: 286
                   width: 618
@@ -4844,6 +5034,7 @@ lvgl:
                         text_color: 0x6B6E76
                         text: "5 DAGEN"
                     - obj:
+                        id: weather_forecast_list
                         x: 0
                         y: 30
                         width: 618
@@ -9292,6 +9483,229 @@ lvgl:
                   text: "terug"
 
 script:
+  - id: spotify_drawer_close_script
+    mode: restart
+    then:
+      - lambda: |-
+          id(spotify_drawer_open) = false;
+      - script.execute: energy_restore_normal_layout_script
+      - script.execute: lights_restore_normal_layout_script
+      - script.execute: weather_restore_normal_layout_script
+      - lvgl.widget.hide: spotify_drawer_container
+      - if:
+          condition:
+            lambda: 'return !id(immich_page_active) && !id(ah_recipe_page_active) && !id(doorbell_page_active);'
+          then:
+            - lvgl.widget.show: nav_rail_container
+            - lvgl.widget.show: top_status_bar
+
+  - id: spotify_drawer_open_script
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !id(doorbell_page_active) &&
+                     !id(immich_page_active) &&
+                     !id(ah_recipe_page_active) &&
+                     (id(current_display_page) == 0 ||
+                      id(current_display_page) == 1 ||
+                      id(current_display_page) == 3);
+          then:
+            - lambda: |-
+                id(spotify_drawer_open) = true;
+            - lvgl.widget.hide: nav_rail_container
+            - lvgl.widget.show: top_status_bar
+            - lvgl.widget.show: spotify_drawer_container
+            - script.execute: spotify_drawer_apply_compact_layout_script
+
+  - id: restore_normal_chrome_script
+    mode: restart
+    then:
+      - lambda: |-
+          id(spotify_drawer_open) = false;
+      - script.execute: energy_restore_normal_layout_script
+      - script.execute: lights_restore_normal_layout_script
+      - script.execute: weather_restore_normal_layout_script
+      - lvgl.widget.hide: spotify_drawer_container
+      - if:
+          condition:
+            lambda: 'return !id(immich_page_active) && !id(ah_recipe_page_active) && !id(doorbell_page_active);'
+          then:
+            - lvgl.widget.show: nav_rail_container
+            - lvgl.widget.show: top_status_bar
+
+  - id: spotify_drawer_apply_compact_layout_script
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) == 0;'
+          then:
+            - script.execute: energy_compact_for_spotify_script
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) == 1;'
+          then:
+            - script.execute: lights_compact_for_spotify_script
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) == 3;'
+          then:
+            - script.execute: weather_compact_for_spotify_script
+
+  - id: energy_compact_for_spotify_script
+    mode: restart
+    then:
+      - lvgl.widget.hide: energy_cost_metric
+      - lvgl.widget.hide: energy_indoor_temp_metric
+      - lvgl.widget.hide: energy_hyundai_metric
+      - lvgl.widget.hide: energy_inverter_temp_metric
+      - lvgl.obj.update:
+          id: energy_content_container
+          width: 717
+      - lvgl.obj.update:
+          id: energy_flow_canvas
+          width: 687
+
+  - id: energy_restore_normal_layout_script
+    mode: restart
+    then:
+      - lvgl.widget.hide: energy_cost_metric
+      - lvgl.widget.hide: energy_indoor_temp_metric
+      - lvgl.widget.show: energy_hyundai_metric
+      - lvgl.widget.show: energy_inverter_temp_metric
+      - lvgl.obj.update:
+          id: energy_content_container
+          width: 1024
+      - lvgl.obj.update:
+          id: energy_flow_canvas
+          width: 1004
+
+  - id: lights_compact_for_spotify_script
+    mode: restart
+    then:
+      - lvgl.obj.update:
+          id: lights_content_container
+          x: 0
+          width: 717
+      - lvgl.obj.update:
+          id: lights_main_card
+          width: 452
+      - lvgl.obj.update:
+          id: lights_grid_container
+          width: 420
+      - lvgl.obj.update:
+          id: scenes_container
+          width: 232
+      - lambda: |-
+          lv_obj_set_flex_flow(id(lights_grid_container), LV_FLEX_FLOW_COLUMN);
+          lv_obj_set_flex_flow(id(scenes_container), LV_FLEX_FLOW_COLUMN);
+      - lvgl.obj.update:
+          id: tile_woonkamer
+          width: 420
+          height: 58
+      - lvgl.obj.update:
+          id: tile_keuken
+          width: 420
+          height: 58
+      - lvgl.obj.update:
+          id: tile_eettafel
+          width: 420
+          height: 58
+      - lvgl.obj.update:
+          id: tile_hal
+          width: 420
+          height: 58
+      - lvgl.obj.update:
+          id: tile_veranda
+          width: 420
+          height: 58
+      - lvgl.obj.update:
+          id: tile_kantoor
+          width: 420
+          height: 58
+
+  - id: lights_restore_normal_layout_script
+    mode: restart
+    then:
+      - lvgl.obj.update:
+          id: lights_content_container
+          x: 88
+          width: 936
+      - lvgl.obj.update:
+          id: lights_main_card
+          width: 612
+      - lvgl.obj.update:
+          id: lights_grid_container
+          width: 580
+      - lvgl.obj.update:
+          id: scenes_container
+          width: 292
+      - lambda: |-
+          lv_obj_set_flex_flow(id(lights_grid_container), LV_FLEX_FLOW_ROW_WRAP);
+          lv_obj_set_flex_flow(id(scenes_container), LV_FLEX_FLOW_ROW_WRAP);
+      - lvgl.obj.update:
+          id: tile_woonkamer
+          width: 278
+          height: 130
+      - lvgl.obj.update:
+          id: tile_keuken
+          width: 278
+          height: 130
+      - lvgl.obj.update:
+          id: tile_eettafel
+          width: 278
+          height: 130
+      - lvgl.obj.update:
+          id: tile_hal
+          width: 278
+          height: 130
+      - lvgl.obj.update:
+          id: tile_veranda
+          width: 278
+          height: 130
+      - lvgl.obj.update:
+          id: tile_kantoor
+          width: 278
+          height: 130
+
+  - id: weather_compact_for_spotify_script
+    mode: restart
+    then:
+      - lvgl.widget.hide: weather_sun_card
+      - lvgl.widget.hide: wx_rb6
+      - lvgl.widget.hide: wx_rb7
+      - lvgl.widget.hide: wx_rb8
+      - lvgl.widget.hide: wx_rb9
+      - lvgl.widget.hide: wx_rb10
+      - lvgl.widget.hide: wx_rb11
+      - lvgl.obj.update:
+          id: weather_forecast_container
+          x: 386
+          width: 310
+      - lvgl.obj.update:
+          id: weather_forecast_list
+          width: 310
+
+  - id: weather_restore_normal_layout_script
+    mode: restart
+    then:
+      - lvgl.widget.show: weather_sun_card
+      - lvgl.widget.show: wx_rb6
+      - lvgl.widget.show: wx_rb7
+      - lvgl.widget.show: wx_rb8
+      - lvgl.widget.show: wx_rb9
+      - lvgl.widget.show: wx_rb10
+      - lvgl.widget.show: wx_rb11
+      - lvgl.obj.update:
+          id: weather_forecast_container
+          x: 386
+          width: 618
+      - lvgl.obj.update:
+          id: weather_forecast_list
+          width: 618
+
   - id: media_show_for_keuken_amp_spotify
     mode: restart
     then:
@@ -9305,6 +9719,7 @@ script:
             - lambda: |-
                 id(last_page_before_media) = id(current_display_page);
                 id(current_display_page) = 2;
+                id(spotify_drawer_open) = false;
                 id(keuken_amp_spotify_auto_shown) = true;
                 id(keuken_amp_media_auto_active) = true;
                 ESP_LOGI("media", "Keuken Amp Spotify playback detected; showing media page, previous page %d", id(last_page_before_media));
@@ -9315,6 +9730,7 @@ script:
             - light.turn_on:
                 id: display_backlight
                 brightness: 90%
+            - script.execute: spotify_drawer_close_script
             - lvgl.widget.show: nav_rail_container
             - lvgl.widget.show: top_status_bar
             - lvgl.page.show: page_media
@@ -9415,17 +9831,23 @@ script:
   - id: nav_overlay_show
     mode: restart
     then:
-      - lambda: |-
-          if (id(immich_page_active)) {
-            id(immich_overlay_countdown) = 30;
-          }
-      - script.execute: left_nav_show
-      - script.execute: top_bar_show
       - if:
           condition:
-            lambda: 'return id(immich_page_active);'
+            lambda: 'return id(spotify_drawer_open);'
           then:
-            - lvgl.widget.show: immich_controls
+            - script.execute: spotify_drawer_close_script
+          else:
+            - lambda: |-
+                if (id(immich_page_active)) {
+                  id(immich_overlay_countdown) = 30;
+                }
+            - script.execute: left_nav_show
+            - script.execute: top_bar_show
+            - if:
+                condition:
+                  lambda: 'return id(immich_page_active);'
+                then:
+                  - lvgl.widget.show: immich_controls
 
   - id: nav_overlay_hide
     mode: restart
@@ -9469,6 +9891,9 @@ script:
           id(album_art_retry_count) = 0;
       - lvgl.image.update:
           id: img_album
+          src: album_art
+      - lvgl.image.update:
+          id: spotify_drawer_album
           src: album_art
       - lvgl.widget.show: img_album
       - lvgl.widget.hide: lbl_album_fallback
@@ -9541,12 +9966,14 @@ script:
     then:
       - lambda: |-
           id(doorbell_page_active) = true;
+          id(spotify_drawer_open) = false;
           id(immich_page_active) = false;
           id(weather_page_active) = false;
           id(immich_overlay_countdown) = 0;
           id(doorbell_art_retry_count) = 0;
-      - lvgl.widget.show: nav_rail_container
-      - lvgl.widget.show: top_status_bar
+      - script.execute: spotify_drawer_close_script
+      - lvgl.widget.hide: nav_rail_container
+      - lvgl.widget.hide: top_status_bar
       - lvgl.page.show: page_doorbell
       - lvgl.label.update:
           id: lbl_doorbell_status
@@ -10416,7 +10843,21 @@ interval:
               return std::string("\xe2\x80\x94");
             return s;
       - lvgl.label.update:
+          id: spotify_drawer_title
+          text: !lambda |-
+            std::string s = id(media_title).state;
+            if (s.empty() || s == "None" || s == "none")
+              return std::string("\xe2\x80\x94");
+            return s;
+      - lvgl.label.update:
           id: lbl_track_artiest
+          text: !lambda |-
+            std::string s = id(media_artist).state;
+            if (s.empty() || s == "None" || s == "none")
+              return std::string("\xe2\x80\x94");
+            return s;
+      - lvgl.label.update:
+          id: spotify_drawer_artist
           text: !lambda |-
             std::string s = id(media_artist).state;
             if (s.empty() || s == "None" || s == "none")
@@ -10434,8 +10875,20 @@ interval:
           text: !lambda |-
             return id(media_state).state == "playing"
               ? std::string("\U000F03E4") : std::string("\U000F040A");
+      - lvgl.label.update:
+          id: spotify_drawer_play_icon
+          text: !lambda |-
+            return id(media_state).state == "playing"
+              ? std::string("\U000F03E4") : std::string("\U000F040A");
       - lvgl.bar.update:
           id: bar_media_progress
+          value: !lambda |-
+            float pos = id(media_positie).state;
+            float dur = id(media_duur).state;
+            if (isnan(pos) || isnan(dur) || dur <= 0) return 0;
+            return (int)std::min((pos / dur) * 100.0f, 100.0f);
+      - lvgl.bar.update:
+          id: spotify_drawer_progress
           value: !lambda |-
             float pos = id(media_positie).state;
             float dur = id(media_duur).state;
@@ -10466,6 +10919,12 @@ interval:
             return std::string(buf);
       - lvgl.slider.update:
           id: slider_volume
+          value: !lambda |-
+            float v = id(media_volume).state;
+            if (isnan(v)) return 50;
+            return (int)(v * 100.0f);
+      - lvgl.slider.update:
+          id: spotify_drawer_volume
           value: !lambda |-
             float v = id(media_volume).state;
             if (isnan(v)) return 50;

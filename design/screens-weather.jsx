@@ -1,9 +1,10 @@
 // Weather screen — current + hourly + daily forecast
 
-function WeatherScreen({ data, accents }) {
+function WeatherScreen({ data, accents, spotifyDrawerOpen = false }) {
   const { weather } = data;
+  const hourly = spotifyDrawerOpen ? weather.hourly.slice(0, 3) : weather.hourly;
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 14, height: "100%" }}>
+    <div style={{ display: "grid", gridTemplateColumns: spotifyDrawerOpen ? "1fr" : "1.1fr 1fr", gap: 14, height: "100%" }}>
       {/* Now */}
       <div className="card" style={{ padding: 22, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div>
@@ -42,8 +43,8 @@ function WeatherScreen({ data, accents }) {
       <div style={{ display: "grid", gridTemplateRows: "auto 1fr", gap: 14 }}>
         <div className="card" style={{ padding: 14 }}>
           <div className="card-title">Vandaag · per uur</div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 6 }}>
-            {weather.hourly.map((h, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${hourly.length}, 1fr)`, gap: 6 }}>
+            {hourly.map((h, i) => (
               <div key={i} style={{
                 background: "var(--card-2)",
                 borderRadius: 10,
@@ -67,7 +68,7 @@ function WeatherScreen({ data, accents }) {
             {weather.daily.map((d, i) => (
               <div key={i} style={{
                 display: "grid",
-                gridTemplateColumns: "60px 28px 1fr auto",
+                gridTemplateColumns: spotifyDrawerOpen ? "58px 24px 1fr auto" : "60px 28px 1fr auto",
                 gap: 10,
                 alignItems: "center",
                 padding: "6px 10px",

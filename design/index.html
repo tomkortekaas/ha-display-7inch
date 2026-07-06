@@ -122,6 +122,18 @@
   .nav { grid-area: nav; }
   .status { grid-area: status; }
   .main { grid-area: main; overflow: hidden; position: relative; }
+  .app.spotify-drawer-open {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "status"
+      "main";
+  }
+  .app.spotify-drawer-open .nav {
+    display: none;
+  }
+  .app.spotify-drawer-open .screen-view.active {
+    padding-right: 326px;
+  }
 
   /* ---- Side dock nav ---- */
   .nav {
@@ -224,6 +236,95 @@
     transition: opacity 0.25s ease;
   }
   .screen-view.active { opacity: 1; pointer-events: auto; }
+
+  .spotify-drawer {
+    position: absolute;
+    right: 0;
+    top: 56px;
+    bottom: 0;
+    width: 307px;
+    background: #070807;
+    border-left: 1px solid rgba(30,215,96,.45);
+    z-index: 20;
+    padding: 18px 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 13px;
+    align-items: center;
+    box-shadow: -18px 0 28px rgba(0,0,0,.38);
+  }
+  .spotify-drawer-art {
+    width: 210px;
+    height: 210px;
+    border-radius: 8px;
+    background:
+      radial-gradient(circle at 32% 24%, rgba(46,227,106,.42), transparent 34%),
+      linear-gradient(135deg, #1d2930, #101112 58%, #2b1d24);
+    display: grid;
+    place-items: center;
+    color: rgba(255,255,255,.82);
+  }
+  .spotify-drawer-art svg {
+    width: 64px;
+    height: 64px;
+  }
+  .spotify-drawer-title,
+  .spotify-drawer-artist {
+    width: 270px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .spotify-drawer-title {
+    font-size: 20px;
+    font-weight: 800;
+  }
+  .spotify-drawer-artist {
+    color: #9999a3;
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .spotify-drawer-progress {
+    width: 270px;
+    height: 5px;
+    border-radius: 3px;
+    background: #2a2a2e;
+    overflow: hidden;
+  }
+  .spotify-drawer-progress span {
+    display: block;
+    height: 100%;
+    background: #fff;
+  }
+  .spotify-drawer-controls {
+    width: 270px;
+    height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .spotify-drawer-controls button {
+    width: 52px;
+    height: 52px;
+    border-radius: 50%;
+    border: 0;
+    background: #1a1a1a;
+    color: #fff;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+  }
+  .spotify-drawer-controls button:nth-child(2) {
+    width: 68px;
+    height: 68px;
+    background: #fff;
+    color: #000;
+  }
+  .spotify-drawer-controls svg {
+    width: 26px;
+    height: 26px;
+  }
 
   /* Common */
   .card {

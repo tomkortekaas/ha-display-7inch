@@ -43,6 +43,8 @@ function App() {
   const [t, setTweak] = useTweaks(DEFAULTS);
   const [screen, setScreen] = useState(t.screen || "energy");
   const [showCode, setShowCode] = useState(false);
+  const [spotifyDrawerOpen, setSpotifyDrawerOpen] = useState(false);
+  const swipeStartRef = useRef(null);
 
   // Simulated state
   const [data, setData] = useState({
@@ -149,6 +151,33 @@ function App() {
   const now = useClock();
 
   const activeScreen = SCREENS.find((s) => s.id === screen) || SCREENS[0];
+  const spotifyDrawerCompatible = ["energy", "climate", "lights", "weather"].includes(screen);
+
+  useEffect(() => {
+    if (!spotifyDrawerCompatible) setSpotifyDrawerOpen(false);
+  }, [spotifyDrawerCompatible]);
+
+  const handlePointerDown = (event) => {
+    swipeStartRef.current = { x: event.clientX, y: event.clientY };
+  };
+  const handlePointerUp = (event) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (!start) return;
+    const screenRect = event.currentTarget.getBoundingClientRect();
+    const startX = start.x - screenRect.left;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    const horizontal = Math.abs(dx) >= 70 && Math.abs(dx) > Math.abs(dy) * 2;
+    if (!horizontal) return;
+    if (spotifyDrawerCompatible && startX >= screenRect.width - 120 && dx < 0) {
+      setSpotifyDrawerOpen(true);
+      return;
+    }
+    if (spotifyDrawerOpen && startX <= 120 && dx > 0) {
+      setSpotifyDrawerOpen(false);
+    }
+  };
   // Update CSS var for nav accent
   useEffect(() => {
     document.documentElement.style.setProperty("--accent-power", accents.power);
@@ -163,7 +192,11 @@ function App() {
     <div className="device">
       <div className="device-bezel" style={t.showBezel ? {} : { background: "transparent", boxShadow: "none", padding: 0 }}>
         <div className="screen" style={{ fontSize: `${t.fontScale * 16}px` }}>
-          <div className="app">
+          <div
+            className={"app" + (spotifyDrawerOpen ? " spotify-drawer-open" : "")}
+            onPointerDown={handlePointerDown}
+            onPointerUp={handlePointerUp}
+          >
             {/* Nav */}
             <div className="nav">
               <div className="nav-logo">H</div>
@@ -213,15 +246,16 @@ function App() {
             <div className="main">
               {SCREENS.map((s) => (
                 <div key={s.id} className={"screen-view" + (screen === s.id ? " active" : "")}>
-                  {s.id === "energy" && <EnergyScreen data={data} setData={setData} accents={accents} />}
-                  {s.id === "climate" && <ClimateScreen data={data} setData={setData} accents={accents} />}
-                  {s.id === "lights" && <LightsScreen data={data} setData={setData} accents={accents} />}
+                  {s.id === "energy" && <EnergyScreen data={data} setData={setData} accents={accents} spotifyDrawerOpen={spotifyDrawerOpen} />}
+                  {s.id === "climate" && <ClimateScreen data={data} setData={setData} accents={accents} spotifyDrawerOpen={spotifyDrawerOpen} />}
+                  {s.id === "lights" && <LightsScreen data={data} setData={setData} accents={accents} spotifyDrawerOpen={spotifyDrawerOpen} />}
                   {s.id === "spotify" && <SpotifyScreen data={data} setData={setData} accents={accents} />}
                   {s.id === "camera" && <CameraScreen data={data} setData={setData} accents={accents} />}
-                  {s.id === "weather" && <WeatherScreen data={data} accents={accents} />}
+                  {s.id === "weather" && <WeatherScreen data={data} accents={accents} spotifyDrawerOpen={spotifyDrawerOpen} />}
                 </div>
               ))}
             </div>
+            <SpotifyDrawer data={data} accents={accents} open={spotifyDrawerOpen} setData={setData} />
           </div>
         </div>
       </div>
@@ -266,6 +300,38 @@ function App() {
         </TweakSection>
       </TweaksPanel>
     </div>
+  );
+}
+
+function SpotifyDrawer({ data, accents, open, setData }) {
+  if (!open) return null;
+  const { player } = data;
+  const progress = player.duration > 0 ? Math.min(100, (player.position / player.duration) * 100) : 0;
+  return (
+    <aside className="spotify-drawer">
+      <div className="spotify-drawer-art">
+        <Icon.music />
+      </div>
+      <div className="spotify-drawer-title">{player.track}</div>
+      <div className="spotify-drawer-artist">{player.artist}</div>
+      <div className="spotify-drawer-progress">
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className="spotify-drawer-controls">
+        <button><Icon.skipBack /></button>
+        <button onClick={() => setData((d) => ({ ...d, player: { ...d.player, playing: !d.player.playing } }))}>
+          {player.playing ? <Icon.pause /> : <Icon.play />}
+        </button>
+        <button><Icon.skipFwd /></button>
+      </div>
+      <Slider
+        value={player.volume}
+        onChange={(volume) => setData((d) => ({ ...d, player: { ...d.player, volume } }))}
+        color={accents.solar}
+        suffix="%"
+        height={26}
+      />
+    </aside>
   );
 }
 

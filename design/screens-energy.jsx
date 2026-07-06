@@ -2,7 +2,7 @@
 // Inspired by energy-monitor displays: three primary ring metrics + side bars
 
 function EnergyScreen({ data, setData, accents }) {
-  const { power, water, gas, gridImport, gridExport, solar, cost, temp, dynamicPrice } = data;
+  const { power, water, gas, gridImport, gridExport, solar, dynamicPrice } = data;
   return (
     <div style={{ display: "grid", gridTemplateColumns: "1.45fr 1fr 0.9fr", gap: 14, height: "100%" }}>
       {/* Hero ring: current power */}
@@ -70,15 +70,6 @@ function EnergyScreen({ data, setData, accents }) {
       <div className="card" style={{ display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 18 }}>
         <div className="card-title">Vandaag</div>
         <BarMetric
-          icon={<Icon.bolt />}
-          value={cost.toFixed(2).split(".")[0]}
-          sub={cost.toFixed(2).split(".")[1]}
-          unit="€"
-          pct={(cost / 25) * 100}
-          color={accents.cost}
-          label="Energiekosten"
-        />
-        <BarMetric
           icon={<Icon.sun />}
           value={solar}
           unit="kWh"
@@ -93,14 +84,6 @@ function EnergyScreen({ data, setData, accents }) {
           pct={(dynamicPrice / 0.5) * 100}
           color={accents.heat}
           label="Dynamische prijs"
-        />
-        <BarMetric
-          icon={<Icon.home />}
-          value={temp.toFixed(1)}
-          unit="°C"
-          pct={((temp - 15) / 10) * 100}
-          color={accents.water}
-          label="Binnen"
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 // Lights screen — rooms with dimmers + scene buttons
 
-function LightsScreen({ data, setData, accents }) {
+function LightsScreen({ data, setData, accents, spotifyDrawerOpen = false }) {
   const { lights, scenes } = data;
   const setLight = (idx, patch) => {
     setData((d) => ({
@@ -13,7 +13,7 @@ function LightsScreen({ data, setData, accents }) {
   };
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "1.8fr 1fr", gap: 14, height: "100%" }}>
+    <div style={{ display: "grid", gridTemplateColumns: spotifyDrawerOpen ? "1.55fr 0.85fr" : "1.8fr 1fr", gap: 14, height: "100%" }}>
       <div className="card" style={{ padding: 18, overflow: "hidden", display: "flex", flexDirection: "column" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div>
@@ -30,20 +30,21 @@ function LightsScreen({ data, setData, accents }) {
             Alles uit
           </button>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, overflowY: "auto", paddingRight: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: spotifyDrawerOpen ? "1fr" : "1fr 1fr", gap: 10, overflowY: "auto", paddingRight: 4 }}>
           {lights.map((l, i) => (
             <div key={l.id}
               style={{
                 background: l.on ? `linear-gradient(135deg, ${l.color}22 0%, var(--card-2) 60%)` : "var(--card-2)",
                 border: "1px solid " + (l.on ? `${l.color}55` : "var(--line)"),
                 borderRadius: 14,
-                padding: 12,
+                padding: spotifyDrawerOpen ? 10 : 12,
                 display: "flex",
-                flexDirection: "column",
-                gap: 10,
+                flexDirection: spotifyDrawerOpen ? "row" : "column",
+                alignItems: spotifyDrawerOpen ? "center" : "stretch",
+                gap: spotifyDrawerOpen ? 12 : 10,
                 transition: "all 0.25s ease",
               }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flex: spotifyDrawerOpen ? "1 1 auto" : "initial" }}>
                 <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   <div style={{
                     width: 36, height: 36, borderRadius: 10,
@@ -67,7 +68,7 @@ function LightsScreen({ data, setData, accents }) {
                 onChange={(v) => setLight(i, { brightness: v, on: v > 0 })}
                 color={l.color}
                 suffix="%"
-                height={28}
+                height={spotifyDrawerOpen ? 24 : 28}
               />
             </div>
           ))}
@@ -77,7 +78,7 @@ function LightsScreen({ data, setData, accents }) {
       {/* Scenes */}
       <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column" }}>
         <div className="card-title">Scènes</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, flex: 1, gridAutoRows: "1fr" }}>
+        <div style={{ display: "grid", gridTemplateColumns: spotifyDrawerOpen ? "1fr" : "1fr 1fr", gap: 10, flex: 1, gridAutoRows: "1fr" }}>
           {scenes.map((s) => {
             const active = data.activeScene === s.id;
             return (
