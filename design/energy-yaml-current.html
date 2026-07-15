@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Energy Bottom Row Mockups</title>
+<style>
+  :root {
+    --screen: #000;
+    --panel: #101010;
+    --panel-2: #151515;
+    --line: #24242a;
+    --track: #1a1a1d;
+    --muted: #8d8d96;
+    --soft: #5a5a62;
+    --text: #fff;
+    --pv: #ffad3b;
+    --grid: #2f9bff;
+    --house: #2ee36a;
+    --battery: #ff3b30;
+    --gas: #ff2a7a;
+    --price: #ffd84a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background: #d9d9de;
+    font-family: Montserrat, Inter, system-ui, sans-serif;
+    color: var(--text);
+    overflow: auto;
+  }
+  .page {
+    width: max-content;
+    margin: 36px auto;
+    display: grid;
+    gap: 26px;
+  }
+  .board {
+    display: grid;
+    gap: 8px;
+  }
+  .board-title {
+    color: #35353a;
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: .04em;
+  }
+  .screen {
+    position: relative;
+    width: 1024px;
+    height: 600px;
+    background: var(--screen);
+    overflow: hidden;
+    box-shadow: 0 28px 80px rgba(0,0,0,.28);
+  }
+  .status {
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 56px;
+    background: #050506;
+    border-bottom: 1px solid #202026;
+    display: flex;
+    align-items: center;
+    padding: 0 18px;
+    gap: 18px;
+  }
+  .time { font-size: 27px; font-weight: 850; }
+  .date { color: var(--muted); font-size: 15px; font-weight: 650; }
+  .chips { margin-left: auto; display: flex; gap: 16px; align-items: center; color: var(--muted); font-size: 14px; font-weight: 750; }
+  .chip strong { color: #fff; }
+  .content {
+    position: absolute;
+    left: 0;
+    top: 56px;
+    width: 1024px;
+    height: 544px;
+  }
+  .flow {
+    position: absolute;
+    left: 10px;
+    top: 0;
+    width: 1004px;
+    height: 448px;
+    border-radius: 18px;
+    background: var(--panel);
+  }
+  .heading {
+    position: absolute;
+    width: 180px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: .08em;
+  }
+  .heading.house, .heading.battery { width: 92px; }
+  .core {
+    position: absolute;
+    left: 424px;
+    top: 186px;
+    width: 104px;
+    height: 66px;
+    border-radius: 14px;
+    background: #000;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 4px;
+  }
+  .core b { font-size: 20px; font-weight: 850; }
+  .core span { width: 92px; text-align: center; color: var(--muted); font-size: 10px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .route { position: absolute; border-radius: 2px; background: #303030; }
+  .route.active { box-shadow: 0 0 10px currentColor; background: currentColor; }
+  .route.pv { color: var(--pv); }
+  .route.grid { color: var(--grid); }
+  .route.house { color: var(--house); }
+  .route.battery { color: var(--battery); }
+  .ring {
+    position: absolute;
+    width: 180px;
+    height: 180px;
+    display: grid;
+    place-items: center;
+  }
+  .ring svg { position: absolute; inset: 0; transform: rotate(135deg); }
+  .ring .inner {
+    position: relative;
+    width: 126px;
+    height: 126px;
+    display: grid;
+    place-items: center;
+    align-content: center;
+    gap: 5px;
+    text-align: center;
+  }
+  .icon { font-size: 28px; line-height: 1; }
+  .value { font-size: 28px; line-height: 1; font-weight: 850; letter-spacing: -.03em; }
+  .state { width: 128px; color: currentColor; font-size: 12px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .soc { color: var(--muted); font-size: 12px; font-weight: 700; }
+  .bottom {
+    position: absolute;
+    left: 10px;
+    top: 460px;
+    width: 1004px;
+    height: 70px;
+  }
+  .metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    height: 70px;
+  }
+  .metric {
+    border-radius: 14px;
+    background: var(--panel);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Variant A */
+  .quiet-card {
+    padding: 11px 13px;
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+  .quiet-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+  .quiet-value {
+    align-self: center;
+    font-size: 22px;
+    line-height: 1;
+    font-weight: 850;
+    color: var(--text);
+  }
+  .quiet-line {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--track);
+    overflow: hidden;
+  }
+  .quiet-fill {
+    height: 100%;
+    width: var(--pct);
+    max-width: 100%;
+    border-radius: inherit;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .quiet-marker {
+    position: absolute;
+    top: -2px;
+    left: var(--pct);
+    width: 4px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--accent);
+    box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
+  }
+
+  /* Variant B */
+  .soft-pill {
+    padding: 10px;
+    display: grid;
+    align-content: center;
+    gap: 7px;
+  }
+  .pill-track {
+    position: relative;
+    height: 42px;
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--accent) 12%, #17171a);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.045);
+    overflow: hidden;
+  }
+  .pill-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: var(--pct);
+    max-width: 100%;
+    background: color-mix(in srgb, var(--accent) 34%, transparent);
+  }
+  .pill-text {
+    position: relative;
+    z-index: 1;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    padding: 0 13px;
+    gap: 10px;
+    text-shadow: 0 1px 5px rgba(0,0,0,.55);
+  }
+  .pill-label { color: rgba(255,255,255,.66); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
+  .pill-value { margin-left: auto; color: #fff; font-size: 21px; font-weight: 850; white-space: nowrap; }
+  .soft-caption {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4px;
+    color: #62626a;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+  }
+
+  /* Variant C */
+  .strip {
+    height: 70px;
+    border-radius: 16px;
+    background: var(--panel);
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    overflow: hidden;
+  }
+  .strip-item {
+    position: relative;
+    padding: 12px 15px 10px;
+    border-right: 1px solid var(--line);
+    display: grid;
+    grid-template-rows: auto 1fr auto;
+  }
+  .strip-item:last-child { border-right: 0; }
+  .strip-label { color: var(--muted); font-size: 11px; font-weight: 850; text-transform: uppercase; letter-spacing: .08em; }
+  .strip-value { align-self: center; color: #fff; font-size: 22px; font-weight: 850; }
+  .strip-line { height: 3px; border-radius: 2px; background: #242428; overflow: hidden; }
+  .strip-fill { height: 100%; width: var(--pct); max-width: 100%; background: var(--accent); }
+  .strip-marker {
+    position: absolute;
+    left: calc(15px + (100% - 30px) * var(--pos));
+    bottom: 9px;
+    width: 4px;
+    height: 8px;
+    border-radius: 2px;
+    background: var(--accent);
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+    <section class="board">
+      <div class="board-title">A · Rustige kaarten met meterlijn</div>
+      <div class="screen">
+        <div class="status"><div class="time">17:53</div><div class="date">Maandag 13 jul</div><div class="chips"><div class="chip"><strong>14°</strong> Amsterdam</div><div class="chip"><strong>445 W</strong></div><div class="chip"><strong style="color:#2ee36a">●</strong> HA</div></div></div>
+        <div class="content">
+          <div class="flow">
+            <div class="heading" style="left:118px;top:8px">ZONNEPANELEN</div><div class="heading" style="left:682px;top:8px">NETAANSLUITING</div><div class="heading house" style="left:162px;top:416px">HUIS</div><div class="heading battery" style="left:726px;top:416px">BATTERIJ</div>
+            <div class="route pv active" style="left:207px;top:208px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:216px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:224px;width:4px;height:8px"></div>
+            <div class="route grid active" style="left:532px;top:153px;width:150px;height:4px"></div><div class="route grid active" style="left:532px;top:153px;width:4px;height:33px"></div><div class="route grid active" style="left:520px;top:186px;width:16px;height:4px"></div>
+            <div class="route house active" style="left:298px;top:282px;width:118px;height:4px"></div><div class="route house active" style="left:416px;top:252px;width:4px;height:34px"></div><div class="route house active" style="left:416px;top:252px;width:8px;height:4px"></div>
+            <div class="route battery active" style="left:528px;top:252px;width:8px;height:4px"></div><div class="route battery active" style="left:532px;top:252px;width:4px;height:34px"></div><div class="route battery active" style="left:532px;top:282px;width:150px;height:4px"></div>
+            <div class="core"><b>BALANS</b><span>OMVORMER · A...</span></div>
+            <div class="ring" style="left:118px;top:28px;color:var(--pv)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="145 515"/></svg><div class="inner"><div class="icon">☀</div><div class="value">1.8 kW</div><div class="state">PV</div></div></div>
+            <div class="ring" style="left:682px;top:28px;color:var(--grid)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="90 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">0.7 kW</div><div class="state">IMPORT</div></div></div>
+            <div class="ring" style="left:118px;top:232px;color:var(--house)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="250 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">2.4 kW</div><div class="state">VERBRUIK</div></div></div>
+            <div class="ring" style="left:682px;top:232px;color:var(--battery)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="130 515"/></svg><div class="inner"><div class="icon">▰</div><div class="value">0.9 kW</div><div class="state">ONTLADEN</div><div class="soc">64% SOC</div></div></div>
+          </div>
+          <div class="bottom metric-row">
+            <div class="metric quiet-card" style="--accent:var(--price);--pct:57%"><div class="quiet-top"><span>Prijs</span><span></span></div><div class="quiet-value">€0.287</div><div class="quiet-line"><div class="quiet-fill"></div></div></div>
+            <div class="metric quiet-card" style="--accent:var(--gas);--pct:70%"><div class="quiet-top"><span>Gas</span><span></span></div><div class="quiet-value">8.4 m3</div><div class="quiet-line"><div class="quiet-fill"></div></div></div>
+            <div class="metric quiet-card" style="--accent:var(--grid);--pct:42%"><div class="quiet-top"><span>Hyundai</span><span>SOC</span></div><div class="quiet-value">42%</div><div class="quiet-line"><div class="quiet-fill"></div></div></div>
+            <div class="metric quiet-card" style="--accent:var(--battery);--pct:64%"><div class="quiet-top"><span>Omv temp</span><span></span></div><div class="quiet-value">31.8°C</div><div class="quiet-line"><div class="quiet-fill"></div></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="board-title">B · Zachte gevulde pills</div>
+      <div class="screen">
+        <div class="status"><div class="time">17:53</div><div class="date">Maandag 13 jul</div><div class="chips"><div class="chip"><strong>14°</strong> Amsterdam</div><div class="chip"><strong>445 W</strong></div><div class="chip"><strong style="color:#2ee36a">●</strong> HA</div></div></div>
+        <div class="content">
+          <div class="flow">
+            <div class="heading" style="left:118px;top:8px">ZONNEPANELEN</div><div class="heading" style="left:682px;top:8px">NETAANSLUITING</div><div class="heading house" style="left:162px;top:416px">HUIS</div><div class="heading battery" style="left:726px;top:416px">BATTERIJ</div>
+            <div class="route pv active" style="left:207px;top:208px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:216px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:224px;width:4px;height:8px"></div><div class="route grid active" style="left:532px;top:153px;width:150px;height:4px"></div><div class="route grid active" style="left:532px;top:153px;width:4px;height:33px"></div><div class="route grid active" style="left:520px;top:186px;width:16px;height:4px"></div><div class="route house active" style="left:298px;top:282px;width:118px;height:4px"></div><div class="route house active" style="left:416px;top:252px;width:4px;height:34px"></div><div class="route house active" style="left:416px;top:252px;width:8px;height:4px"></div><div class="route battery active" style="left:528px;top:252px;width:8px;height:4px"></div><div class="route battery active" style="left:532px;top:252px;width:4px;height:34px"></div><div class="route battery active" style="left:532px;top:282px;width:150px;height:4px"></div>
+            <div class="core"><b>BALANS</b><span>OMVORMER · A...</span></div>
+            <div class="ring" style="left:118px;top:28px;color:var(--pv)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="145 515"/></svg><div class="inner"><div class="icon">☀</div><div class="value">1.8 kW</div><div class="state">PV</div></div></div><div class="ring" style="left:682px;top:28px;color:var(--grid)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="90 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">0.7 kW</div><div class="state">IMPORT</div></div></div><div class="ring" style="left:118px;top:232px;color:var(--house)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="250 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">2.4 kW</div><div class="state">VERBRUIK</div></div></div><div class="ring" style="left:682px;top:232px;color:var(--battery)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="130 515"/></svg><div class="inner"><div class="icon">▰</div><div class="value">0.9 kW</div><div class="state">ONTLADEN</div><div class="soc">64% SOC</div></div></div>
+          </div>
+          <div class="bottom metric-row">
+            <div class="metric soft-pill" style="--accent:var(--price);--pct:48%"><div class="pill-track"><div class="pill-fill"></div><div class="pill-text"><span class="pill-label">Prijs</span><span class="pill-value">€0.287</span></div></div><div class="soft-caption"><span>laag</span><span>hoog</span></div></div>
+            <div class="metric soft-pill" style="--accent:var(--gas);--pct:70%"><div class="pill-track"><div class="pill-fill"></div><div class="pill-text"><span class="pill-label">Gas</span><span class="pill-value">8.4 m3</span></div></div><div class="soft-caption"><span>70%</span><span>dag</span></div></div>
+            <div class="metric soft-pill" style="--accent:var(--grid);--pct:42%"><div class="pill-track"><div class="pill-fill"></div><div class="pill-text"><span class="pill-label">Hyundai</span><span class="pill-value">42%</span></div></div><div class="soft-caption"><span>0</span><span>100</span></div></div>
+            <div class="metric soft-pill" style="--accent:var(--battery);--pct:47%"><div class="pill-track"><div class="pill-fill"></div><div class="pill-text"><span class="pill-label">Omv temp</span><span class="pill-value">31.8°</span></div></div><div class="soft-caption"><span>koel</span><span>warm</span></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="board">
+      <div class="board-title">C · Eén doorlopende statusstrip</div>
+      <div class="screen">
+        <div class="status"><div class="time">17:53</div><div class="date">Maandag 13 jul</div><div class="chips"><div class="chip"><strong>14°</strong> Amsterdam</div><div class="chip"><strong>445 W</strong></div><div class="chip"><strong style="color:#2ee36a">●</strong> HA</div></div></div>
+        <div class="content">
+          <div class="flow">
+            <div class="heading" style="left:118px;top:8px">ZONNEPANELEN</div><div class="heading" style="left:682px;top:8px">NETAANSLUITING</div><div class="heading house" style="left:162px;top:416px">HUIS</div><div class="heading battery" style="left:726px;top:416px">BATTERIJ</div>
+            <div class="route pv active" style="left:207px;top:208px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:216px;width:4px;height:8px"></div><div class="route pv active" style="left:207px;top:224px;width:4px;height:8px"></div><div class="route grid active" style="left:532px;top:153px;width:150px;height:4px"></div><div class="route grid active" style="left:532px;top:153px;width:4px;height:33px"></div><div class="route grid active" style="left:520px;top:186px;width:16px;height:4px"></div><div class="route house active" style="left:298px;top:282px;width:118px;height:4px"></div><div class="route house active" style="left:416px;top:252px;width:4px;height:34px"></div><div class="route house active" style="left:416px;top:252px;width:8px;height:4px"></div><div class="route battery active" style="left:528px;top:252px;width:8px;height:4px"></div><div class="route battery active" style="left:532px;top:252px;width:4px;height:34px"></div><div class="route battery active" style="left:532px;top:282px;width:150px;height:4px"></div>
+            <div class="core"><b>BALANS</b><span>OMVORMER · A...</span></div>
+            <div class="ring" style="left:118px;top:28px;color:var(--pv)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="145 515"/></svg><div class="inner"><div class="icon">☀</div><div class="value">1.8 kW</div><div class="state">PV</div></div></div><div class="ring" style="left:682px;top:28px;color:var(--grid)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="90 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">0.7 kW</div><div class="state">IMPORT</div></div></div><div class="ring" style="left:118px;top:232px;color:var(--house)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="250 515"/></svg><div class="inner"><div class="icon">⌂</div><div class="value">2.4 kW</div><div class="state">VERBRUIK</div></div></div><div class="ring" style="left:682px;top:232px;color:var(--battery)"><svg viewBox="0 0 180 180"><circle cx="90" cy="90" r="82" fill="none" stroke="var(--track)" stroke-width="15" stroke-linecap="round" stroke-dasharray="386 515"/><circle cx="90" cy="90" r="82" fill="none" stroke="currentColor" stroke-width="15" stroke-linecap="round" stroke-dasharray="130 515"/></svg><div class="inner"><div class="icon">▰</div><div class="value">0.9 kW</div><div class="state">ONTLADEN</div><div class="soc">64% SOC</div></div></div>
+          </div>
+          <div class="bottom strip">
+            <div class="strip-item" style="--accent:var(--price);--pos:.48"><div class="strip-label">Prijs</div><div class="strip-value">€0.287</div><div class="strip-line"></div><div class="strip-marker"></div></div>
+            <div class="strip-item" style="--accent:var(--gas);--pct:70%"><div class="strip-label">Gas</div><div class="strip-value">8.4 m3</div><div class="strip-line"><div class="strip-fill"></div></div></div>
+            <div class="strip-item" style="--accent:var(--grid);--pct:42%"><div class="strip-label">Hyundai</div><div class="strip-value">42%</div><div class="strip-line"><div class="strip-fill"></div></div></div>
+            <div class="strip-item" style="--accent:var(--battery);--pos:.47"><div class="strip-label">Omv temp</div><div class="strip-value">31.8°</div><div class="strip-line"></div><div class="strip-marker"></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</body>
+</html>

@@ -4,3 +4,4 @@ secrets*.yaml
 __pycache__/
 *.pyc
 .superpowers/
+.playwright-mcp/

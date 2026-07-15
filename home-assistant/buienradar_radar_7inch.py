@@ -25,10 +25,32 @@ STILL_URL = (
 OUT_DIR = Path("/config/www/ha-display-radar")
 FRAME_COUNT = 9
 
+# Doelformaat op het display (zie img_buienradar in ha-display-7.yaml).
+# Vroeger schaalde het ESP32 de 268x402 bron zelf op (~1.8x, interpolatie op
+# elke decode) en sneed daarna bij naar dit formaat. Dat opschalen bleek de
+# echte oorzaak van de blauwe flits bij elke radarverversing — niet de timing.
+# Nu doet Home Assistant (PIL) het schalen+bijsnijden vooraf, zodat het ESP32
+# alleen nog een 1:1 decode van een al-passend plaatje hoeft te doen.
+TARGET_WIDTH = 240
+TARGET_HEIGHT = 225
+# Verticale crop-offset binnen de op breedte geschaalde bron (zelfde framing
+# als de vorige on-device resize_mode: COVER met offset 0,-67).
+CROP_TOP = 67
+
+
+def fit_for_display(image: Image.Image) -> Image.Image:
+    scale = TARGET_WIDTH / image.width
+    scaled_height = round(image.height * scale)
+    scaled = image.resize((TARGET_WIDTH, scaled_height), Image.LANCZOS)
+    top = min(CROP_TOP, max(0, scaled_height - TARGET_HEIGHT))
+    return scaled.crop((0, top, TARGET_WIDTH, top + TARGET_HEIGHT))
+
 
 def atomic_save_jpeg(image: Image.Image, path: Path) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
-    image.convert("RGB").save(tmp, format="JPEG", quality=88, optimize=True)
+    fit_for_display(image).convert("RGB").save(
+        tmp, format="JPEG", quality=88, optimize=True
+    )
     os.replace(tmp, path)
 
 
