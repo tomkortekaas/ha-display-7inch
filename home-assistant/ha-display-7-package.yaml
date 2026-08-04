@@ -71,6 +71,243 @@ input_select:
       - Favorieten
       - Eigen recepten
     initial: Eerder toegevoegd aan mandje
+  idotmatrix_timer_status:
+    name: iDotMatrix timer status
+    options: [idle, running, paused, alarming]
+    initial: idle
+
+input_number:
+  idotmatrix_timer_minuten:
+    name: iDotMatrix timer minuten
+    min: 0
+    max: 99
+    step: 1
+    mode: box
+
+timer:
+  idotmatrix_timer:
+    name: iDotMatrix timer
+    duration: "00:05:00"
+    restore: false
+
+script:
+  idotmatrix_timer_start:
+    alias: "iDotMatrix timer starten"
+    mode: single
+    fields:
+      minutes:
+        name: Minuten
+        description: Aantal hele minuten voor de keukentimer
+        required: true
+        selector:
+          number:
+            min: 1
+            max: 99
+            step: 1
+            mode: box
+    sequence:
+      - variables:
+          timer_minutes: "{{ minutes | int(0) }}"
+      - condition: template
+        value_template: >-
+          {{ 1 <= timer_minutes <= 99 and minutes | float(0) == timer_minutes }}
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.idotmatrix_actief
+      - action: idotmatrix.set_face
+        data:
+          face:
+            layers: []
+      - delay: "00:00:01"
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 1
+          minutes: "{{ timer_minutes }}"
+          seconds: 0
+      - action: timer.start
+        target:
+          entity_id: timer.idotmatrix_timer
+        data:
+          duration: "{{ '00:%02d:00' | format(timer_minutes) }}"
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.idotmatrix_timer_minuten
+        data:
+          value: "{{ timer_minutes }}"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: running
+
+  idotmatrix_timer_pause:
+    alias: "iDotMatrix timer pauzeren"
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_select.idotmatrix_timer_status
+        state: running
+      - action: timer.pause
+        target:
+          entity_id: timer.idotmatrix_timer
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 2
+          minutes: 0
+          seconds: 0
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: paused
+
+  idotmatrix_timer_resume:
+    alias: "iDotMatrix timer hervatten"
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_select.idotmatrix_timer_status
+        state: paused
+      - variables:
+          remaining: >-
+            {{ state_attr('timer.idotmatrix_timer', 'remaining')
+               | default('00:00:00', true) | string }}
+      - variables:
+          remaining_parts: "{{ remaining.split(':') }}"
+          remaining_seconds: >-
+            {{ (remaining_parts[0] | int(0)) * 3600
+               + (remaining_parts[1] | int(0)) * 60
+               + (remaining_parts[2] | float(0) | int) }}
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 3
+          minutes: "{{ (remaining_seconds | int(0)) // 60 }}"
+          seconds: "{{ (remaining_seconds | int(0)) % 60 }}"
+      - action: timer.start
+        target:
+          entity_id: timer.idotmatrix_timer
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: running
+
+  idotmatrix_timer_add_minute:
+    alias: "iDotMatrix timer één minuut verlengen"
+    mode: single
+    sequence:
+      - condition: template
+        value_template: >-
+          {{ states('input_select.idotmatrix_timer_status') in ['running', 'paused'] }}
+      - variables:
+          original_status: "{{ states('input_select.idotmatrix_timer_status') }}"
+          remaining: >-
+            {{ state_attr('timer.idotmatrix_timer', 'remaining')
+               | default('00:00:00', true) | string }}
+      - variables:
+          remaining_parts: "{{ remaining.split(':') }}"
+          remaining_seconds: >-
+            {{ (remaining_parts[0] | int(0)) * 3600
+               + (remaining_parts[1] | int(0)) * 60
+               + (remaining_parts[2] | float(0) | int) }}
+      - variables:
+          new_remaining_seconds: "{{ [(remaining_seconds | int(0)) + 60, 5940] | min }}"
+      - action: timer.start
+        target:
+          entity_id: timer.idotmatrix_timer
+        data:
+          duration: >-
+            {{ '%02d:%02d:%02d' | format(
+                 (new_remaining_seconds | int(0)) // 3600,
+                 ((new_remaining_seconds | int(0)) % 3600) // 60,
+                 (new_remaining_seconds | int(0)) % 60) }}
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 3
+          minutes: "{{ (new_remaining_seconds | int(0)) // 60 }}"
+          seconds: "{{ (new_remaining_seconds | int(0)) % 60 }}"
+      - if:
+          - condition: template
+            value_template: "{{ original_status == 'paused' }}"
+        then:
+          - action: timer.pause
+            target:
+              entity_id: timer.idotmatrix_timer
+          - action: idotmatrix.set_countdown
+            data:
+              mode: 2
+              minutes: 0
+              seconds: 0
+          - action: input_select.select_option
+            target:
+              entity_id: input_select.idotmatrix_timer_status
+            data:
+              option: paused
+
+  idotmatrix_timer_stop:
+    alias: "iDotMatrix timer stoppen"
+    mode: single
+    sequence:
+      - condition: template
+        value_template: >-
+          {{ states('input_select.idotmatrix_timer_status') in ['running', 'paused'] }}
+      - action: timer.cancel
+        target:
+          entity_id: timer.idotmatrix_timer
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 0
+          minutes: 0
+          seconds: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.idotmatrix_timer_minuten
+        data:
+          value: 0
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: idle
+      - action: automation.turn_on
+        target:
+          entity_id: automation.idot_rotatie
+      - delay:
+          milliseconds: 1500
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.idotmatrix_actief
+
+  idotmatrix_timer_acknowledge:
+    alias: "iDotMatrix timeralarm uitzetten"
+    mode: single
+    sequence:
+      - condition: state
+        entity_id: input_select.idotmatrix_timer_status
+        state: alarming
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: idle
+      - action: idotmatrix.set_countdown
+        data:
+          mode: 0
+          minutes: 0
+          seconds: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.idotmatrix_timer_minuten
+        data:
+          value: 0
+      - action: automation.turn_on
+        target:
+          entity_id: automation.idot_rotatie
+      - delay:
+          milliseconds: 1500
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.idotmatrix_actief
 
 template:
   # Familie-agenda voor het 7" display.
@@ -1509,3 +1746,43 @@ automation:
         minutes: "/1"
     action:
       - action: shell_command.immich_rotate_7inch
+
+  - alias: "iDotMatrix timer afgelopen"
+    id: idotmatrix_timer_finished
+    mode: single
+    trigger:
+      - trigger: event
+        event_type: timer.finished
+        event_data:
+          entity_id: timer.idotmatrix_timer
+    action:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: alarming
+
+  - alias: "iDotMatrix timer alarmgong"
+    id: idotmatrix_timer_alarm
+    mode: restart
+    trigger:
+      - trigger: state
+        entity_id: input_select.idotmatrix_timer_status
+        to: alarming
+    action:
+      - repeat:
+          sequence:
+            - condition: state
+              entity_id: input_select.idotmatrix_timer_status
+              state: alarming
+            - action: reolink.play_chime
+              continue_on_error: true
+              target:
+                device_id: 271cbe4bff5083fb97aabac7f63f9f66
+              data:
+                ringtone: goodday
+            - delay: "00:00:03"
+          while:
+            - condition: state
+              entity_id: input_select.idotmatrix_timer_status
+              state: alarming
