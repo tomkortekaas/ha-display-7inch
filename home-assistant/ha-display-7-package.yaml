@@ -111,6 +111,9 @@ script:
       - condition: template
         value_template: >-
           {{ 1 <= timer_minutes <= 99 and minutes | float(0) == timer_minutes }}
+      - condition: state
+        entity_id: input_select.idotmatrix_timer_status
+        state: idle
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.idotmatrix_actief
