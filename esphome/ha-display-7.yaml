@@ -204,6 +204,10 @@ globals:
     type: float
     restore_value: no
     initial_value: '0.0'
+  - id: timer_input_minutes
+    type: int
+    restore_value: yes
+    initial_value: '0'
 
 external_components:
   - source:
@@ -708,6 +712,19 @@ sensor:
 # Text sensors — Media + Lichten
 # ---------------------------------------------------------------
 text_sensor:
+  - platform: homeassistant
+    id: ha_idot_timer_status
+    entity_id: input_select.idotmatrix_timer_status
+    internal: true
+    on_value:
+      - script.execute: timer_ui_refresh
+  - platform: homeassistant
+    id: ha_idot_timer_remaining
+    entity_id: timer.idotmatrix_timer
+    attribute: remaining
+    internal: true
+    on_value:
+      - script.execute: timer_ui_refresh
   - platform: homeassistant
     id: media_title
     entity_id: ${keuken_amp_entity}
@@ -9059,6 +9076,94 @@ lvgl:
                   text: "terug"
 
 script:
+  - id: timer_digit_append
+    parameters:
+      digit: int
+    then:
+      - lambda: |-
+          if (digit < 0 || digit > 9) return;
+          int current = id(timer_input_minutes);
+          if (current < 0) current = 0;
+          if (current > 99) current = 99;
+          id(timer_input_minutes) = std::min(99, current * 10 + digit);
+      - script.execute: timer_ui_refresh
+
+  - id: timer_input_clear
+    then:
+      - lambda: 'id(timer_input_minutes) = 0;'
+      - script.execute: timer_ui_refresh
+
+  - id: timer_start_command
+    then:
+      - if:
+          condition:
+            lambda: 'return id(timer_input_minutes) > 0;'
+          then:
+            - homeassistant.action:
+                action: script.idotmatrix_timer_start
+                data_template:
+                  minutes: "{{ minutes }}"
+                variables:
+                  minutes: !lambda |-
+                    int minutes = id(timer_input_minutes);
+                    if (minutes < 0) return 0;
+                    return std::min(99, minutes);
+
+  - id: timer_pause_resume_command
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ha_idot_timer_status).state == "running";'
+          then:
+            - homeassistant.action:
+                action: script.idotmatrix_timer_pause
+          else:
+            - if:
+                condition:
+                  lambda: 'return id(ha_idot_timer_status).state == "paused";'
+                then:
+                  - homeassistant.action:
+                      action: script.idotmatrix_timer_resume
+
+  - id: timer_add_minute_command
+    then:
+      - homeassistant.action:
+          action: script.idotmatrix_timer_add_minute
+
+  - id: timer_stop_command
+    then:
+      - homeassistant.action:
+          action: script.idotmatrix_timer_stop
+
+  - id: timer_acknowledge_command
+    then:
+      - homeassistant.action:
+          action: script.idotmatrix_timer_acknowledge
+
+  # Task 4 extends this single refresh point with LVGL widget updates.
+  - id: timer_ui_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(timer_input_minutes) < 0) id(timer_input_minutes) = 0;
+          if (id(timer_input_minutes) > 99) id(timer_input_minutes) = 99;
+          const std::string raw = id(ha_idot_timer_remaining).state;
+          int remaining_seconds = 0;
+          if (raw != "unknown" && raw != "unavailable") {
+            int hours = 0;
+            int minutes = 0;
+            float seconds = 0.0f;
+            char trailing = '\0';
+            const int fields = sscanf(raw.c_str(), "%d:%d:%f%c", &hours, &minutes, &seconds, &trailing);
+            if (fields == 3 && hours >= 0 && minutes >= 0 && minutes < 60 &&
+                seconds >= 0.0f && seconds < 60.0f) {
+              remaining_seconds = hours * 3600 + minutes * 60 + static_cast<int>(seconds);
+            }
+          }
+          ESP_LOGD("timer", "Status=%s, remaining=%ds, input=%dmin",
+                   id(ha_idot_timer_status).state.c_str(), remaining_seconds,
+                   id(timer_input_minutes));
+
   # Nav rail — kleurt de strip+knop van page_index actief, de rest inactief.
   # Vervangt de 6x14-regelige lvgl.obj.update-reeks die vroeger in elke
   # nav-knop on_click stond (identiek op index en actieve kleur na).
