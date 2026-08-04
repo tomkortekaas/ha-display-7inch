@@ -208,6 +208,10 @@ globals:
     type: int
     restore_value: yes
     initial_value: '0'
+  - id: timer_input_from_preset
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 external_components:
   - source:
@@ -452,7 +456,7 @@ font:
     id: font_num_76
     size: 76
     bpp: 4
-    glyphs: "0123456789.-+°C"
+    glyphs: "0123456789:.-+°C"
   - file: "gfonts://Montserrat@600"
     id: font_roboto_12
     size: 12
@@ -510,6 +514,7 @@ font:
       - "\U000F00DD"   # mdi-brightness-4
       - "\U000F00E0"   # mdi-brightness-7
       - "\U000F0425"   # mdi-power
+      - "\U000F0150"   # mdi-clock-outline
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_48
     size: 48
@@ -2175,7 +2180,7 @@ lvgl:
             # Energie — actief (accentstrip links)
             - obj:
                 x: 0
-                y: 72
+                y: 64
                 width: 88
                 height: 64
                 bg_color: 0x101010
@@ -2215,7 +2220,7 @@ lvgl:
             # Lichten — inactief
             - obj:
                 x: 0
-                y: 148
+                y: 136
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -2255,7 +2260,7 @@ lvgl:
             # Weer — inactief
             - obj:
                 x: 0
-                y: 224
+                y: 208
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -2301,7 +2306,7 @@ lvgl:
             # Agenda — inactief
             - obj:
                 x: 0
-                y: 300
+                y: 280
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -2341,7 +2346,7 @@ lvgl:
             # Immich — inactief
             - obj:
                 x: 0
-                y: 376
+                y: 352
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -2381,7 +2386,7 @@ lvgl:
             # Recepten — inactief
             - obj:
                 x: 0
-                y: 452
+                y: 424
                 width: 88
                 height: 64
                 bg_color: 0x050505
@@ -2418,6 +2423,46 @@ lvgl:
                             text_font: font_roboto_16
                             text_color: 0xA0A0A0
                             text: "R"
+            # Timer — inactief
+            - obj:
+                x: 0
+                y: 496
+                width: 88
+                height: 64
+                bg_color: 0x050505
+                bg_opa: COVER
+                border_width: 0
+                pad_all: 0
+                widgets:
+                  - obj:
+                      id: nav_strip_timer
+                      x: 0
+                      y: 4
+                      width: 3
+                      height: 56
+                      bg_color: 0x050505
+                      bg_opa: COVER
+                      border_width: 0
+                  - button:
+                      id: nav_timer
+                      x: 16
+                      y: 4
+                      width: 56
+                      height: 56
+                      radius: 10
+                      bg_color: 0x1a1a1a
+                      bg_opa: COVER
+                      on_click:
+                        then:
+                          - script.execute:
+                              id: goto_page
+                              page_index: 6
+                      widgets:
+                        - label:
+                            align: CENTER
+                            text_font: font_icon_28
+                            text_color: 0xA0A0A0
+                            text: "\U000F0150"  # mdi-clock-outline
             # Onderkant — versie label
             - label:
                 align: BOTTOM_MID
@@ -8924,6 +8969,501 @@ lvgl:
 
 
     # ===========================================================
+    # PAGINA 7: KEUKENTIMER
+    # ===========================================================
+    - id: page_timer
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            x: 0
+            y: 0
+            width: 1024
+            height: 600
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute: nav_overlay_show
+            widgets:
+              - label:
+                  x: 32
+                  y: 22
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: "Keukentimer"
+
+              # Normale tijdkaart; bij alarm maakt deze plaats voor de alarmkaart.
+              - obj:
+                  id: timer_time_card
+                  x: 32
+                  y: 76
+                  width: 336
+                  height: 460
+                  radius: 18
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x252525
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label:
+                        x: 24
+                        y: 34
+                        text_font: font_roboto_16
+                        text_color: 0x2EE36A
+                        text: "IDOT TIMER"
+                    - label:
+                        id: lbl_timer_time
+                        align: TOP_MID
+                        y: 104
+                        width: 304
+                        text_align: CENTER
+                        text_font: font_num_76
+                        text_color: 0xFFFFFF
+                        text: "00:00"
+                    - obj:
+                        align: TOP_MID
+                        y: 224
+                        width: 280
+                        height: 1
+                        bg_color: 0x303030
+                        bg_opa: COVER
+                        border_width: 0
+                    - label:
+                        id: lbl_timer_state
+                        align: TOP_MID
+                        y: 260
+                        width: 288
+                        text_align: CENTER
+                        text_font: font_roboto_20
+                        text_color: 0xA0A0A0
+                        text: "Klaar om te starten"
+                    - label:
+                        align: BOTTOM_MID
+                        y: -36
+                        width: 288
+                        text_align: CENTER
+                        text_font: font_roboto_16
+                        text_color: 0x666666
+                        text: "Minuten invoeren · seconden tellen af"
+
+              # Invoer voor idle: presets, 3x4-keypad en starten.
+              - obj:
+                  id: timer_idle_controls
+                  x: 400
+                  y: 76
+                  width: 592
+                  height: 460
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - button:
+                        id: btn_timer_preset_5
+                        x: 0
+                        y: 0
+                        width: 128
+                        height: 52
+                        radius: 10
+                        bg_color: 0x151515
+                        border_width: 1
+                        border_color: 0x303030
+                        on_click:
+                          then:
+                            - lambda: 'id(timer_input_minutes) = 5; id(timer_input_from_preset) = true;'
+                            - script.execute: timer_ui_refresh
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "5 min"
+                    - button:
+                        id: btn_timer_preset_10
+                        x: 144
+                        y: 0
+                        width: 128
+                        height: 52
+                        radius: 10
+                        bg_color: 0x151515
+                        border_width: 1
+                        border_color: 0x303030
+                        on_click:
+                          then:
+                            - lambda: 'id(timer_input_minutes) = 10; id(timer_input_from_preset) = true;'
+                            - script.execute: timer_ui_refresh
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "10 min"
+                    - button:
+                        id: btn_timer_preset_15
+                        x: 288
+                        y: 0
+                        width: 128
+                        height: 52
+                        radius: 10
+                        bg_color: 0x151515
+                        border_width: 1
+                        border_color: 0x303030
+                        on_click:
+                          then:
+                            - lambda: 'id(timer_input_minutes) = 15; id(timer_input_from_preset) = true;'
+                            - script.execute: timer_ui_refresh
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "15 min"
+                    - button:
+                        id: btn_timer_preset_20
+                        x: 432
+                        y: 0
+                        width: 128
+                        height: 52
+                        radius: 10
+                        bg_color: 0x151515
+                        border_width: 1
+                        border_color: 0x303030
+                        on_click:
+                          then:
+                            - lambda: 'id(timer_input_minutes) = 20; id(timer_input_from_preset) = true;'
+                            - script.execute: timer_ui_refresh
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFFFFFF
+                              text: "20 min"
+
+                    - button:
+                        id: btn_timer_digit_1
+                        x: 50
+                        y: 70
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 1
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "1" }
+                    - button:
+                        id: btn_timer_digit_2
+                        x: 204
+                        y: 70
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 2
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "2" }
+                    - button:
+                        id: btn_timer_digit_3
+                        x: 358
+                        y: 70
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 3
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "3" }
+                    - button:
+                        id: btn_timer_digit_4
+                        x: 50
+                        y: 132
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 4
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "4" }
+                    - button:
+                        id: btn_timer_digit_5
+                        x: 204
+                        y: 132
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 5
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "5" }
+                    - button:
+                        id: btn_timer_digit_6
+                        x: 358
+                        y: 132
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 6
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "6" }
+                    - button:
+                        id: btn_timer_digit_7
+                        x: 50
+                        y: 194
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 7
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "7" }
+                    - button:
+                        id: btn_timer_digit_8
+                        x: 204
+                        y: 194
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 8
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "8" }
+                    - button:
+                        id: btn_timer_digit_9
+                        x: 358
+                        y: 194
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 9
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "9" }
+                    - button:
+                        id: btn_timer_clear
+                        x: 50
+                        y: 256
+                        width: 138
+                        height: 54
+                        radius: 10
+                        bg_color: 0x282020
+                        on_click:
+                          then:
+                            - script.execute: timer_input_clear
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_16, text_color: 0xFF8A80, text: "Wis" }
+                    - button:
+                        id: btn_timer_digit_0
+                        x: 204
+                        y: 256
+                        width: 138
+                        height: 54
+                        radius: 10
+                        on_click:
+                          then:
+                            - script.execute:
+                                id: timer_digit_append
+                                digit: 0
+                        widgets:
+                          - label: { align: CENTER, text_font: font_roboto_20, text_color: 0xFFFFFF, text: "0" }
+                    - button:
+                        id: btn_timer_backspace
+                        x: 358
+                        y: 256
+                        width: 138
+                        height: 54
+                        radius: 10
+                        bg_color: 0x202428
+                        on_click:
+                          then:
+                            - lambda: 'id(timer_input_minutes) /= 10; id(timer_input_from_preset) = false;'
+                            - script.execute: timer_ui_refresh
+                        widgets:
+                          - label: { align: CENTER, text_font: font_icon_28, text_color: 0xB8C7D9, text: "\U000F004D" }
+                    - button:
+                        id: btn_timer_start
+                        x: 50
+                        y: 330
+                        width: 446
+                        height: 66
+                        radius: 12
+                        bg_color: 0x2EE36A
+                        on_click:
+                          then:
+                            - script.execute: timer_start_command
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_20
+                              text_color: 0x07130A
+                              text: "Start op iDot"
+
+              # Lopend of gepauzeerd: alleen de drie timercommando's.
+              - obj:
+                  id: timer_active_controls
+                  x: 400
+                  y: 178
+                  width: 592
+                  height: 220
+                  hidden: true
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x252525
+                  radius: 18
+                  pad_all: 16
+                  scrollable: false
+                  widgets:
+                    - label:
+                        x: 16
+                        y: 12
+                        text_font: font_roboto_16
+                        text_color: 0xA0A0A0
+                        text: "BEDIENING"
+                    - button:
+                        id: btn_timer_pause_resume
+                        x: 16
+                        y: 64
+                        width: 176
+                        height: 72
+                        radius: 12
+                        bg_color: 0x2EE36A
+                        on_click:
+                          then:
+                            - script.execute: timer_pause_resume_command
+                        widgets:
+                          - label:
+                              id: lbl_timer_pause_resume
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0x07130A
+                              text: "Pauzeren"
+                    - button:
+                        id: btn_timer_add_minute
+                        x: 208
+                        y: 64
+                        width: 176
+                        height: 72
+                        radius: 12
+                        bg_color: 0x1F2D22
+                        border_width: 1
+                        border_color: 0x2EE36A
+                        on_click:
+                          then:
+                            - script.execute: timer_add_minute_command
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0x2EE36A
+                              text: "+1 minuut"
+                    - button:
+                        id: btn_timer_stop
+                        x: 400
+                        y: 64
+                        width: 144
+                        height: 72
+                        radius: 12
+                        bg_color: 0x322020
+                        border_width: 1
+                        border_color: 0xA64040
+                        on_click:
+                          then:
+                            - script.execute: timer_stop_command
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_16
+                              text_color: 0xFF8A80
+                              text: "Stoppen"
+
+              # Alarm neemt de normale tijdkaart en alle normale bediening over.
+              - obj:
+                  id: timer_alarm_card
+                  x: 180
+                  y: 104
+                  width: 664
+                  height: 404
+                  hidden: true
+                  radius: 22
+                  bg_color: 0xB3261E
+                  bg_opa: COVER
+                  border_width: 4
+                  border_color: 0xFFD54F
+                  pad_all: 0
+                  scrollable: false
+                  widgets:
+                    - label:
+                        align: TOP_MID
+                        y: 38
+                        text_font: font_roboto_28
+                        text_color: 0xFFFFFF
+                        text: "TIMER AFGELOPEN"
+                    - label:
+                        id: lbl_timer_alarm_time
+                        align: TOP_MID
+                        y: 102
+                        width: 600
+                        text_align: CENTER
+                        text_font: font_num_76
+                        text_color: 0xFFFFFF
+                        text: "00:00"
+                    - button:
+                        id: btn_timer_alarm_off
+                        align: BOTTOM_MID
+                        y: -42
+                        width: 560
+                        height: 86
+                        radius: 14
+                        bg_color: 0xFFD54F
+                        border_width: 0
+                        on_click:
+                          then:
+                            - script.execute: timer_acknowledge_command
+                        widgets:
+                          - label:
+                              align: CENTER
+                              text_font: font_roboto_28
+                              text_color: 0x2A0906
+                              text: "ALARM UIT"
+
+    # ===========================================================
     # RECEPT DETAIL
     # ===========================================================
     - id: page_recipe_detail
@@ -9082,7 +9622,8 @@ script:
     then:
       - lambda: |-
           if (digit < 0 || digit > 9) return;
-          int current = id(timer_input_minutes);
+          int current = id(timer_input_from_preset) ? 0 : id(timer_input_minutes);
+          id(timer_input_from_preset) = false;
           if (current < 0) current = 0;
           if (current > 99) current = 99;
           id(timer_input_minutes) = std::min(99, current * 10 + digit);
@@ -9090,7 +9631,7 @@ script:
 
   - id: timer_input_clear
     then:
-      - lambda: 'id(timer_input_minutes) = 0;'
+      - lambda: 'id(timer_input_minutes) = 0; id(timer_input_from_preset) = false;'
       - script.execute: timer_ui_refresh
 
   - id: timer_start_command
@@ -9140,7 +9681,6 @@ script:
       - homeassistant.action:
           action: script.idotmatrix_timer_acknowledge
 
-  # Task 4 extends this single refresh point with LVGL widget updates.
   - id: timer_ui_refresh
     mode: restart
     then:
@@ -9160,6 +9700,44 @@ script:
               remaining_seconds = hours * 3600 + minutes * 60 + static_cast<int>(seconds);
             }
           }
+          const std::string status = id(ha_idot_timer_status).state;
+          const bool running = status == "running";
+          const bool paused = status == "paused";
+          const bool alarming = status == "alarming";
+          const bool idle = status == "idle" || (!running && !paused && !alarming);
+
+          // Idle toont de lokaal gekozen hele minuten. Home Assistant blijft voor
+          // running/paused de bron van waarheid voor de resterende tijd.
+          int display_seconds = (running || paused) ? remaining_seconds : id(timer_input_minutes) * 60;
+          if (alarming) display_seconds = 0;
+          if (display_seconds < 0) display_seconds = 0;
+          const int display_minutes = display_seconds / 60;
+          const int display_remainder = display_seconds % 60;
+          char time_text[16];
+          snprintf(time_text, sizeof(time_text), "%02d:%02d", display_minutes, display_remainder);
+          lv_label_set_text(id(lbl_timer_time), time_text);
+          lv_label_set_text(id(lbl_timer_alarm_time), "00:00");
+
+          if (running) {
+            lv_label_set_text(id(lbl_timer_state), "Timer loopt");
+            lv_label_set_text(id(lbl_timer_pause_resume), "Pauzeren");
+          } else if (paused) {
+            lv_label_set_text(id(lbl_timer_state), "Timer gepauzeerd");
+            lv_label_set_text(id(lbl_timer_pause_resume), "Hervatten");
+          } else if (status == "unknown" || status == "unavailable" || status.empty()) {
+            lv_label_set_text(id(lbl_timer_state), "Home Assistant niet beschikbaar");
+          } else {
+            lv_label_set_text(id(lbl_timer_state), "Klaar om te starten");
+          }
+
+          auto set_hidden = [](lv_obj_t *widget, bool hidden) {
+            if (hidden) lv_obj_add_flag(widget, LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_clear_flag(widget, LV_OBJ_FLAG_HIDDEN);
+          };
+          set_hidden(id(timer_time_card), alarming);
+          set_hidden(id(timer_idle_controls), !idle || alarming);
+          set_hidden(id(timer_active_controls), !(running || paused) || alarming);
+          set_hidden(id(timer_alarm_card), !alarming);
           ESP_LOGD("timer", "Status=%s, remaining=%ds, input=%dmin",
                    id(ha_idot_timer_status).state.c_str(), remaining_seconds,
                    id(timer_input_minutes));
@@ -9172,23 +9750,25 @@ script:
       page_index: int
     then:
       - lambda: |-
-          static const lv_color_t active_colors[6] = {
+          static const lv_color_t active_colors[7] = {
             lv_color_hex(0x2EE36A),  // 0 Energie
             lv_color_hex(0x2EE36A),  // 1 Lichten
             lv_color_hex(0x2EE36A),  // 2 Weer
             lv_color_hex(0x34D0FF),  // 3 Agenda
             lv_color_hex(0x2EE36A),  // 4 Immich
             lv_color_hex(0xFF9020),  // 5 Recepten
+            lv_color_hex(0x2EE36A),  // 6 Timer
           };
-          lv_obj_t *strips[6] = {
+          lv_obj_t *strips[7] = {
             id(nav_strip_energie), id(nav_strip_lichten), id(nav_strip_weather),
-            id(nav_strip_agenda), id(nav_strip_immich), id(nav_strip_recepten)
+            id(nav_strip_agenda), id(nav_strip_immich), id(nav_strip_recepten),
+            id(nav_strip_timer)
           };
-          lv_obj_t *buttons[6] = {
+          lv_obj_t *buttons[7] = {
             id(nav_energie), id(nav_lichten), id(nav_weather),
-            id(nav_agenda), id(nav_immich), id(nav_recepten)
+            id(nav_agenda), id(nav_immich), id(nav_recepten), id(nav_timer)
           };
-          for (int i = 0; i < 6; i++) {
+          for (int i = 0; i < 7; i++) {
             bool active = (i == page_index);
             lv_obj_set_style_bg_color(strips[i], active ? active_colors[i] : lv_color_hex(0x050505), LV_PART_MAIN);
             lv_obj_set_style_bg_color(buttons[i], active ? lv_color_hex(0x202020) : lv_color_hex(0x1a1a1a), LV_PART_MAIN);
@@ -9242,6 +9822,12 @@ script:
             lambda: 'return page_index == 5;'
           then:
             - lvgl.page.show: page_recepten
+      - if:
+          condition:
+            lambda: 'return page_index == 6;'
+          then:
+            - lvgl.page.show: page_timer
+            - script.execute: timer_ui_refresh
       - lvgl.widget.hide: nav_rail_container
       - lvgl.widget.hide: top_status_bar
       - script.execute:
