@@ -1,0 +1,8 @@
+async def async_set_countdown(call):
+    mode = int(call.data["mode"])
+    minutes = int(call.data.get("minutes", 0))
+    seconds = int(call.data.get("seconds", 0))
+    for entry_id in hass.data[DOMAIN]:
+        await hass.data[DOMAIN][entry_id].async_set_countdown(mode, minutes, seconds)
+
+hass.services.async_register(DOMAIN, "set_countdown", async_set_countdown)

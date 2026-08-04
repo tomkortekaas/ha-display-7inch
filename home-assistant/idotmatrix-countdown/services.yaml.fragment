@@ -1,0 +1,31 @@
+set_countdown:
+  name: Set countdown
+  description: Set the native iDotMatrix countdown mode and duration.
+  fields:
+    mode:
+      name: Mode
+      description: 0 disables, 1 starts, 2 pauses, and 3 restarts the countdown.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 3
+          mode: box
+    minutes:
+      name: Minutes
+      description: Countdown minutes.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 99
+          mode: box
+    seconds:
+      name: Seconds
+      description: Countdown seconds.
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 59
+          mode: box

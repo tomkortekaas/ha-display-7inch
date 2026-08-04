@@ -1,0 +1,7 @@
+from .client.modules.countdown import Countdown
+
+async def async_set_countdown(self, mode: int, minutes: int, seconds: int) -> None:
+    """Send a native countdown command to the display."""
+    countdown = Countdown()
+    countdown.conn = self.conn
+    await countdown.setMode(mode, minutes, seconds)
