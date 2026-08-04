@@ -3,196 +3,200 @@
 set -euo pipefail
 
 root_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+deploy_script="$root_dir/deploy-to-ha.sh"
 tmp_dir="$(mktemp -d)"
-server_pid=""
-cleanup() {
-  if [[ -n "$server_pid" ]]; then
-    kill "$server_pid" 2>/dev/null || true
-    wait "$server_pid" 2>/dev/null || true
-  fi
-  rm -rf "$tmp_dir"
-}
-trap cleanup EXIT
+trap 'rm -rf "$tmp_dir"' EXIT
 
 fake_bin="$tmp_dir/bin"
-mkdir -p "$fake_bin"
+remote_bin="$tmp_dir/remote-bin"
+remote_fixture="$tmp_dir/remote-fixture"
+mkdir -p "$fake_bin" "$remote_bin" \
+  "$remote_fixture/config/custom_components/idotmatrix" \
+  "$remote_fixture/config/.storage"
 
-for command_name in ssh scp; do
-  command_path="$fake_bin/$command_name"
-  cat >"$command_path" <<'SH'
+cat >"$remote_fixture/config/custom_components/idotmatrix/__init__.py" <<'PY'
+hass.services.async_register(DOMAIN, "set_countdown", async_set_countdown)
+PY
+cat >"$remote_fixture/config/custom_components/idotmatrix/coordinator.py" <<'PY'
+async def async_set_countdown(self, mode, minutes, seconds):
+    await countdown.setMode(mode, minutes, seconds)
+PY
+cat >"$remote_fixture/config/custom_components/idotmatrix/services.yaml" <<'YAML'
+set_countdown:
+  mode:
+  minutes:
+  seconds:
+YAML
+cat >"$remote_fixture/config/.storage/core.config_entries" <<'JSON'
+{"data":{"entries":[{"domain":"idotmatrix","disabled_by":null}]}}
+JSON
+cat >"$remote_fixture/config/.storage/core.config_entries.missing" <<'JSON'
+{"data":{"entries":[]}}
+JSON
+
+cat >"$remote_bin/ha" <<'SH'
 #!/usr/bin/env bash
-printf '%s\n' "$0 $*" >>"$DEPLOY_COMMAND_LOG"
+if [[ "$*" == "--raw-json core stats" ]]; then
+  [[ "$SSH_PREFLIGHT_MODE" == "runtime_failure" ]] && exit 1
+  printf '%s\n' '{"result":"ok","data":{"cpu_percent":1.0}}'
+elif [[ "$*" == "core logs" ]]; then
+  if [[ "$SSH_PREFLIGHT_MODE" == "setup_error" ]]; then
+    printf '%s\n' "ERROR Setup failed for custom integration 'idotmatrix'"
+  else
+    printf '%s\n' 'Home Assistant initialized'
+  fi
+else
+  exit 2
+fi
+SH
+chmod +x "$remote_bin/ha"
+
+cat >"$remote_bin/sudo" <<'SH'
+#!/usr/bin/env bash
+[[ "${1:-}" == "-n" ]] && shift
+if [[ "${1:-}" == "grep" ]]; then
+  [[ "$SSH_PREFLIGHT_MODE" == "missing_marker" ]] && exit 1
+  args=("$@")
+  last_index=$((${#args[@]} - 1))
+  target="${args[$last_index]}"
+  args[$last_index]="$DEPLOY_REMOTE_FIXTURE$target"
+  exec "${args[@]}"
+fi
+if [[ "${1:-}" == "docker" && "${2:-}" == "exec" ]]; then
+  code="${6:-}"
+  entries_file=core.config_entries
+  [[ "$SSH_PREFLIGHT_MODE" == "missing_entry" ]] && \
+    entries_file=core.config_entries.missing
+  mapped_path="$DEPLOY_REMOTE_FIXTURE/config/.storage/$entries_file"
+  code="${code//\/config\/.storage\/core.config_entries/$mapped_path}"
+  exec python3 -c "$code"
+fi
+exit 2
+SH
+chmod +x "$remote_bin/sudo"
+
+cat >"$fake_bin/ssh" <<'SH'
+#!/usr/bin/env bash
+payload="$(cat)"
+printf 'ssh %s\n' "$*" >>"$DEPLOY_COMMAND_LOG"
+if [[ -n "$payload" ]]; then
+  printf '%s\n' "$payload" >>"$DEPLOY_SSH_STDIN_LOG"
+fi
+if [[ "$*" == *"hassio@test-ha"* ]]; then
+  PATH="$DEPLOY_REMOTE_BIN:$PATH" \
+    SSH_PREFLIGHT_MODE="$SSH_PREFLIGHT_MODE" \
+    DEPLOY_REMOTE_FIXTURE="$DEPLOY_REMOTE_FIXTURE" \
+    /bin/bash -s <<<"$payload"
+  exit $?
+fi
 exit 0
 SH
-  chmod +x "$command_path"
-done
+chmod +x "$fake_bin/ssh"
 
-cat >"$tmp_dir/services_server.py" <<'PY'
-import http.server
-import json
-import pathlib
-import sys
-
-mode = sys.argv[1]
-port_file = pathlib.Path(sys.argv[2])
-
-
-class Handler(http.server.BaseHTTPRequestHandler):
-    def do_GET(self):
-        if mode == "unauthorized" or self.headers.get("Authorization") != "Bearer test-token":
-            self.send_response(401)
-            self.end_headers()
-            return
-        if mode == "malformed":
-            body = b"not-json"
-        elif mode == "absent":
-            body = json.dumps([
-                {"domain": "idotmatrix", "services": {"set_face": {"name": "Set face"}}}
-            ]).encode()
-        else:
-            body = json.dumps([
-                {"domain": "idotmatrix", "services": {"set_countdown": {"name": "Set countdown"}}}
-            ]).encode()
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def log_message(self, *_args):
-        pass
-
-
-server = http.server.HTTPServer(("127.0.0.1", 0), Handler)
-port_file.write_text(str(server.server_address[1]))
-server.handle_request()
-PY
-
-start_services_server() {
-  local mode="$1"
-  local port_file="$tmp_dir/server.port"
-  rm -f "$port_file"
-  python3 "$tmp_dir/services_server.py" "$mode" "$port_file" &
-  server_pid=$!
-  for _attempt in 1 2 3 4 5 6 7 8 9 10; do
-    [[ -s "$port_file" ]] && break
-    sleep 0.1
-  done
-  [[ -s "$port_file" ]] || {
-    echo "FAIL: fixture HTTP server did not start" >&2
-    exit 1
-  }
-  HA_SERVICES_TEST_URL="http://127.0.0.1:$(cat "$port_file")/api/services"
-}
+cat >"$fake_bin/scp" <<'SH'
+#!/usr/bin/env bash
+printf 'scp %s\n' "$*" >>"$DEPLOY_COMMAND_LOG"
+exit 0
+SH
+chmod +x "$fake_bin/scp"
 
 run_deploy() {
-  local services_url="$1"
+  local preflight_mode="$1"
   local output_file="$2"
   DEPLOY_COMMAND_LOG="$tmp_dir/commands.log" \
-    HA_ACCESS_TOKEN="test-token" \
-    HA_SERVICES_URL="$services_url" \
+    DEPLOY_SSH_STDIN_LOG="$tmp_dir/ssh-stdin.log" \
+    SSH_PREFLIGHT_MODE="$preflight_mode" \
+    DEPLOY_REMOTE_BIN="$remote_bin" \
+    DEPLOY_REMOTE_FIXTURE="$remote_fixture" \
     PATH="$fake_bin:$PATH" \
-    bash "$root_dir/deploy-to-ha.sh" test-ha test-swipe >"$output_file" 2>&1
+    bash "$deploy_script" test-ha test-swipe >"$output_file" 2>&1
 }
 
 assert_no_ota_guidance() {
   local output_file="$1"
   if grep -Fq 'esphome run esphome/ha-display-7.yaml --device ha-display-7.local' \
     "$output_file"; then
-    echo "FAIL: OTA guidance must not be offered after a failed service preflight" >&2
+    echo "FAIL: OTA guidance must not be offered after a failed SSH preflight" >&2
     exit 1
   fi
 }
 
-: >"$tmp_dir/commands.log"
-if DEPLOY_COMMAND_LOG="$tmp_dir/commands.log" PATH="$fake_bin:$PATH" \
-  bash "$root_dir/deploy-to-ha.sh" test-ha test-swipe >"$tmp_dir/no-token.out" 2>&1; then
-  echo "FAIL: deployment must stop when authenticated service discovery is unavailable" >&2
+# The deployment path must never construct or transmit a bearer-authenticated plain
+# HTTP service-registry request. This catches the original credential-exposure bug.
+if grep -Eq 'HA_ACCESS_TOKEN|HA_SERVICES_URL|Authorization|Bearer|/api/services|http://.*:8123' \
+  "$deploy_script"; then
+  echo "FAIL: deploy script must not contain a token-based HTTP service preflight" >&2
   exit 1
 fi
-grep -Fq 'idotmatrix.set_countdown kan niet veilig worden gecontroleerd' "$tmp_dir/no-token.out" || {
-  echo "FAIL: missing-token output must report an unverifiable service" >&2
-  exit 1
-}
-assert_no_ota_guidance "$tmp_dir/no-token.out"
-[[ ! -s "$tmp_dir/commands.log" ]] || {
-  echo "FAIL: deployment commands must not run without an authenticated preflight" >&2
-  exit 1
-}
 
-start_services_server absent
-if run_deploy "$HA_SERVICES_TEST_URL" "$tmp_dir/missing.out"; then
-  echo "FAIL: deployment must stop when idotmatrix.set_countdown is absent" >&2
+for failure_mode in runtime_failure setup_error missing_entry missing_marker; do
+  : >"$tmp_dir/commands.log"
+  : >"$tmp_dir/ssh-stdin.log"
+  if run_deploy "$failure_mode" "$tmp_dir/$failure_mode.out"; then
+    echo "FAIL: deployment must stop for SSH preflight mode $failure_mode" >&2
+    exit 1
+  fi
+  grep -Fq 'PREFLIGHT MISLUKT: idotmatrix.set_countdown kon via SSH niet veilig worden bevestigd' \
+    "$tmp_dir/$failure_mode.out" || {
+      echo "FAIL: SSH preflight failure must explicitly name idotmatrix.set_countdown" >&2
+      exit 1
+    }
+  assert_no_ota_guidance "$tmp_dir/$failure_mode.out"
+  if grep -Eq '^(scp|ssh root@test-swipe)' "$tmp_dir/commands.log"; then
+    echo "FAIL: no deployment command may run after SSH failure mode $failure_mode" >&2
+    exit 1
+  fi
+done
+
+: >"$tmp_dir/commands.log"
+: >"$tmp_dir/ssh-stdin.log"
+if ! run_deploy success "$tmp_dir/success.out"; then
+  sed -n '1,120p' "$tmp_dir/success.out" >&2
+  echo "FAIL: valid remote runtime and component fixtures must pass preflight" >&2
   exit 1
 fi
-wait "$server_pid"
-server_pid=""
-grep -Fq 'PREFLIGHT MISLUKT: Home Assistant-service idotmatrix.set_countdown ontbreekt' \
-  "$tmp_dir/missing.out" || {
-    echo "FAIL: absent-service output must name idotmatrix.set_countdown explicitly" >&2
+
+first_command="$(sed -n '1p' "$tmp_dir/commands.log")"
+[[ "$first_command" == *"hassio@test-ha"* && "$first_command" == *"bash -lc"* ]] || {
+  echo "FAIL: encrypted hassio SSH preflight must be the first external command" >&2
+  exit 1
+}
+grep -Fq 'ha --raw-json core stats' "$tmp_dir/ssh-stdin.log" || {
+  echo "FAIL: SSH preflight must prove the Home Assistant Core container is running" >&2
+  exit 1
+}
+grep -Fq 'ha core logs' "$tmp_dir/ssh-stdin.log" || {
+  echo "FAIL: SSH preflight must reject safe mode and iDotMatrix setup errors" >&2
+  exit 1
+}
+grep -Fq '/config/.storage/core.config_entries' "$tmp_dir/ssh-stdin.log" || {
+  echo "FAIL: SSH preflight must require an enabled iDotMatrix config entry" >&2
+  exit 1
+}
+grep -Fq 'component_dir=/config/custom_components/idotmatrix' \
+  "$tmp_dir/ssh-stdin.log" || {
+    echo "FAIL: SSH preflight must target the installed iDotMatrix component" >&2
     exit 1
   }
-assert_no_ota_guidance "$tmp_dir/missing.out"
-[[ ! -s "$tmp_dir/commands.log" ]] || {
-  echo "FAIL: deployment commands must not run after an absent-service preflight" >&2
-  exit 1
-}
-
-: >"$tmp_dir/commands.log"
-start_services_server unauthorized
-if run_deploy "$HA_SERVICES_TEST_URL" "$tmp_dir/unauthorized.out"; then
-  echo "FAIL: deployment must stop when service discovery is unauthorized" >&2
-  exit 1
-fi
-wait "$server_pid"
-server_pid=""
-grep -Fq 'idotmatrix.set_countdown kon niet worden gecontroleerd' \
-  "$tmp_dir/unauthorized.out" || {
-    echo "FAIL: unauthorized output must report an unverifiable service" >&2
+for required_file in __init__.py coordinator.py services.yaml; do
+  grep -Fq "$required_file" "$tmp_dir/ssh-stdin.log" || {
+    echo "FAIL: SSH preflight must inspect $required_file" >&2
     exit 1
   }
-if grep -Fq 'idotmatrix.set_countdown ontbreekt' "$tmp_dir/unauthorized.out"; then
-  echo "FAIL: unauthorized discovery must not claim the service is absent" >&2
+done
+if grep -Eq 'Authorization|Bearer|HA_ACCESS_TOKEN|http://|/api/services' \
+  "$tmp_dir/commands.log" "$tmp_dir/ssh-stdin.log"; then
+  echo "FAIL: SSH preflight must not transmit a token or make a plain HTTP request" >&2
   exit 1
 fi
-assert_no_ota_guidance "$tmp_dir/unauthorized.out"
-[[ ! -s "$tmp_dir/commands.log" ]] || {
-  echo "FAIL: deployment commands must not run after unauthorized discovery" >&2
-  exit 1
-}
-
-: >"$tmp_dir/commands.log"
-start_services_server malformed
-if run_deploy "$HA_SERVICES_TEST_URL" "$tmp_dir/malformed.out"; then
-  echo "FAIL: deployment must stop when service discovery returns invalid JSON" >&2
-  exit 1
-fi
-wait "$server_pid"
-server_pid=""
-grep -Fq 'idotmatrix.set_countdown kon niet worden gecontroleerd' \
-  "$tmp_dir/malformed.out" || {
-    echo "FAIL: malformed discovery output must report an unverifiable service" >&2
-    exit 1
-  }
-assert_no_ota_guidance "$tmp_dir/malformed.out"
-[[ ! -s "$tmp_dir/commands.log" ]] || {
-  echo "FAIL: deployment commands must not run after malformed discovery" >&2
-  exit 1
-}
-
-: >"$tmp_dir/commands.log"
-start_services_server present
-run_deploy "$HA_SERVICES_TEST_URL" "$tmp_dir/present.out"
-wait "$server_pid"
-server_pid=""
-grep -Fq 'Preflight geslaagd: idotmatrix.set_countdown is beschikbaar' \
-  "$tmp_dir/present.out" || {
-    echo "FAIL: successful preflight must be reported" >&2
+grep -Fq 'Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd' \
+  "$tmp_dir/success.out" || {
+    echo "FAIL: successful SSH preflight must be reported" >&2
     exit 1
   }
 grep -Fq 'esphome run esphome/ha-display-7.yaml --device ha-display-7.local' \
-  "$tmp_dir/present.out" || {
-    echo "FAIL: successful preflight must print the configured OTA command" >&2
+  "$tmp_dir/success.out" || {
+    echo "FAIL: successful SSH preflight must print the configured OTA command" >&2
     exit 1
   }
 if grep -Fq '/config/custom_components/idotmatrix' "$tmp_dir/commands.log"; then
@@ -201,8 +205,8 @@ if grep -Fq '/config/custom_components/idotmatrix' "$tmp_dir/commands.log"; then
 fi
 grep -Fq 'home-assistant/ha-display-7-package.yaml root@test-ha:/config/packages/ha_display_7.yaml' \
   "$tmp_dir/commands.log" || {
-  echo "FAIL: deployment must copy the timer package to /config/packages/ha_display_7.yaml" >&2
-  exit 1
-}
+    echo "FAIL: deployment must copy the timer package to /config/packages/ha_display_7.yaml" >&2
+    exit 1
+  }
 
-echo "PASS: deploy script gates OTA on authenticated countdown-service discovery and preserves custom-component Python"
+echo "PASS: deploy script gates deployment through token-free SSH countdown preflight"

@@ -7,58 +7,63 @@ set -euo pipefail
 HA_HOST="${1:-192.168.1.178}"
 SWIPE_HOST="${2:-192.168.1.237}"
 HA_USER="${HA_USER:-root}"
+HA_SSH_USER="${HA_SSH_USER:-hassio}"
 SWIPE_USER="${SWIPE_USER:-root}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # De countdown-service leeft in een lokaal aangepaste custom component. Die Python-
 # bestanden worden bewust nooit vanuit deze repository overschreven. Controleer de
-# daadwerkelijk geregistreerde HA-service voordat er bestanden worden uitgerold of
-# een ESPHome OTA-commando wordt aangeboden.
+# actieve Core-container en de exact geïnstalleerde registratie/methode/schema via de
+# versleutelde SSH-verbinding. Er verlaat geen HA bearer-token deze machine.
 preflight_countdown_service() {
-  local services_url="${HA_SERVICES_URL:-http://${HA_HOST}:8123/api/services}"
+  if ssh -o BatchMode=yes -o ConnectTimeout=10 \
+    "${HA_SSH_USER}@${HA_HOST}" 'bash -lc "bash -s"' <<'REMOTE'
+set -euo pipefail
 
-  if [[ -z "${HA_ACCESS_TOKEN:-}" ]]; then
-    echo "✗ PREFLIGHT MISLUKT: HA_ACCESS_TOKEN ontbreekt; idotmatrix.set_countdown kan niet veilig worden gecontroleerd." >&2
-    return 1
-  fi
+# `core stats` faalt wanneer de Core-container niet draait. De buitenste login-shell
+# levert uitsluitend de lokale Supervisor-context; er wordt geen HA access-token
+# ontvangen of vanaf de Mac verstuurd.
+ha --raw-json core stats | grep -q '"result":"ok"'
 
-  local preflight_status
-  if HA_SERVICES_URL="$services_url" python3 <<'PY'
+# Een geïnstalleerd bestand alleen bewijst geen succesvolle runtime-setup. Blokkeer
+# daarom safe mode en iedere iDotMatrix setup-/dependencyfout uit de huidige Core-log.
+core_logs="$(ha core logs)"
+if printf '%s\n' "$core_logs" | grep -Eiq \
+  "starting home assistant in safe mode|setup failed for custom integration ['\"]idotmatrix|error (setting up|while setting up) entry .*idotmatrix|error setting up integration idotmatrix|unable to set up dependencies.*idotmatrix"; then
+  exit 1
+fi
+
+# Vereis daarnaast minstens één ingeschakelde iDotMatrix config-entry in de actieve
+# Core-configuratie. Dit is read-only en blijft volledig op de HA-host.
+sudo -n docker exec homeassistant python3 -c '
 import json
-import os
-import sys
-import urllib.request
-
-request = urllib.request.Request(
-    os.environ["HA_SERVICES_URL"],
-    headers={"Authorization": f"Bearer {os.environ['HA_ACCESS_TOKEN']}"},
+with open("/config/.storage/core.config_entries", encoding="utf-8") as source:
+    entries = json.load(source)["data"]["entries"]
+assert any(
+    entry.get("domain") == "idotmatrix" and entry.get("disabled_by") is None
+    for entry in entries
 )
-try:
-    with urllib.request.urlopen(request, timeout=10) as response:
-        services = json.load(response)
-except Exception as error:
-    print(f"Servicecontrole kon Home Assistant niet uitlezen: {error}", file=sys.stderr)
-    raise SystemExit(3)
+'
 
-available = any(
-    domain.get("domain") == "idotmatrix"
-    and "set_countdown" in domain.get("services", {})
-    for domain in services
-)
-raise SystemExit(0 if available else 2)
-PY
+component_dir=/config/custom_components/idotmatrix
+sudo -n grep -Fq \
+  'hass.services.async_register(DOMAIN, "set_countdown", async_set_countdown)' \
+  "$component_dir/__init__.py"
+sudo -n grep -Fq 'async def async_set_countdown(' \
+  "$component_dir/coordinator.py"
+sudo -n grep -Fq 'await countdown.setMode(mode, minutes, seconds)' \
+  "$component_dir/coordinator.py"
+sudo -n grep -Eq '^set_countdown:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^  mode:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^  minutes:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^  seconds:$' "$component_dir/services.yaml"
+REMOTE
   then
-    echo "✓ Preflight geslaagd: idotmatrix.set_countdown is beschikbaar"
+    echo "✓ Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd"
     return 0
-  else
-    preflight_status=$?
   fi
 
-  if [[ "$preflight_status" -eq 2 ]]; then
-    echo "✗ PREFLIGHT MISLUKT: Home Assistant-service idotmatrix.set_countdown ontbreekt; installeer/controleer de custom-componentpatch handmatig vóór OTA." >&2
-  else
-    echo "✗ PREFLIGHT MISLUKT: idotmatrix.set_countdown kon niet worden gecontroleerd; deployment en OTA zijn geblokkeerd." >&2
-  fi
+  echo "✗ PREFLIGHT MISLUKT: idotmatrix.set_countdown kon via SSH niet veilig worden bevestigd; deployment en OTA zijn geblokkeerd." >&2
   return 1
 }
 
