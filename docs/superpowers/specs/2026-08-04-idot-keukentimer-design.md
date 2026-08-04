@@ -85,21 +85,20 @@ status te wijzigen.
 
 ## Architectuur en gegevensstroom
 
-### 7-inch webinterface
+### ESPHome/LVGL-interface
 
-De bestaande webinterface krijgt de Timer-tegel en een apart timerscherm. De browser
-praat niet rechtstreeks met Home Assistant en bevat geen Home Assistant-token.
+De bestaande ESPHome/LVGL-interface krijgt de Timer-tegel en een zevende LVGL-pagina.
+De tegel staat in dezelfde uitschuifbare navigatierail als Recepten. De rail wordt
+verticaal compacter gemaakt zodat Timer direct onder Recepten past en alle aanraakvlakken
+minimaal 44 pixels hoog blijven.
 
-Het timerscherm gebruikt serverroutes voor de opdrachten `start`, `pause`, `resume`,
-`add-minute`, `stop` en `acknowledge`. Een statusroute levert minimaal status,
-resterende seconden en ingestelde duur. Tijdens een zichtbaar timerscherm wordt deze
-status periodiek opgehaald, zodat de weergave ook na navigatie of een herlaadbeurt klopt.
+Het timerscherm gebruikt de bestaande ESPHome native API voor de opdrachten `start`,
+`pause`, `resume`, `add-minute`, `stop` en `acknowledge`. Daarvoor zijn geen webserver,
+browser of Home Assistant-token nodig. Home Assistant-sensoren voor status en resterende
+tijd worden als interne ESPHome-sensoren gespiegeld en werken de LVGL-labels en zichtbare
+bedieningen bij.
 
-### Serverkoppeling
-
-De server van het 7-inch scherm bewaart het Home Assistant-token uitsluitend aan de
-serverkant en vertaalt de UI-opdrachten naar Home Assistant-services. De server valideert
-de actie en duur, maar bewaart zelf geen gezaghebbende timerstatus.
+De Recipe Hub en de Photo Swipe-server worden voor deze functie niet gewijzigd.
 
 ### Home Assistant
 
@@ -136,7 +135,7 @@ heeft geaccepteerd.
   succesvol gepresenteerd.
 - Mislukt één gongoproep, dan blijft `alarming` actief en probeert de lus het bij de
   volgende cyclus opnieuw.
-- Na herstart van de webinterface wordt de toestand uit Home Assistant hersteld.
+- Na herstart van het display wordt de toestand uit Home Assistant hersteld.
 - Na herstart van Home Assistant wordt een niet-herstelbare lopende timer veilig naar
   `idle` teruggebracht; er mag geen verborgen alarm- of gonglus achterblijven.
 
@@ -152,4 +151,3 @@ heeft geaccepteerd.
 8. Bij afloop blijft de gong herhalen en blijft iDot `00:00` tonen.
 9. Alleen **Alarm uit** stopt de gonglus en hervat de iDot-rotatie.
 10. Een mislukte Home Assistant- of iDot-opdracht wordt zichtbaar afgehandeld.
-
