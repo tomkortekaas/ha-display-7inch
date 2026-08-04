@@ -23,9 +23,10 @@ async def async_set_countdown(self, mode, minutes, seconds):
 PY
 cat >"$remote_fixture/config/custom_components/idotmatrix/services.yaml" <<'YAML'
 set_countdown:
-  mode:
-  minutes:
-  seconds:
+  fields:
+    mode:
+    minutes:
+    seconds:
 YAML
 cat >"$remote_fixture/config/.storage/core.config_entries" <<'JSON'
 {"data":{"entries":[{"domain":"idotmatrix","disabled_by":null}]}}
@@ -51,6 +52,74 @@ fi
 SH
 chmod +x "$remote_bin/ha"
 
+cat >"$remote_bin/curl" <<'SH'
+#!/usr/bin/env bash
+output_file=
+write_out=
+header=
+url=
+while (($#)); do
+  case "$1" in
+    --silent|--show-error)
+      shift
+      ;;
+    --output)
+      output_file="$2"
+      shift 2
+      ;;
+    --write-out)
+      write_out="$2"
+      shift 2
+      ;;
+    --header)
+      header="$2"
+      shift 2
+      ;;
+    *)
+      url="$1"
+      shift
+      ;;
+  esac
+done
+
+[[ -n "$output_file" && "$write_out" == '%{http_code}' ]] || exit 2
+[[ "$header" == "Authorization: Bearer $SUPERVISOR_TOKEN" ]] || exit 3
+[[ "$url" == 'http://supervisor/core/api/services' ]] || exit 4
+printf '%s\n' "$output_file" >>"$DEPLOY_REMOTE_TEMP_LOG"
+
+case "$SSH_PREFLIGHT_MODE" in
+  non_200)
+    printf '%s\n' '{"message":"Service unavailable"}' >"$output_file"
+    printf '503'
+    ;;
+  service_absent)
+    printf '%s\n' '[{"domain":"idotmatrix","services":{"other_service":{"fields":{}}}}]' >"$output_file"
+    printf '200'
+    ;;
+  domain_absent)
+    printf '%s\n' '[{"domain":"light","services":{}}]' >"$output_file"
+    printf '200'
+    ;;
+  field_absent|optimized_field_absent)
+    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":{"mode":{},"minutes":{}}}}}]' >"$output_file"
+    printf '200'
+    ;;
+  malformed_fields)
+    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":["mode","minutes","seconds"]}}}]' >"$output_file"
+    printf '200'
+    ;;
+  malformed_json)
+    printf '%s\n' 'not-json' >"$output_file"
+    printf '200'
+    ;;
+  *)
+    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":{"mode":{},"minutes":{},"seconds":{}}}}}]' >"$output_file"
+    printf '200'
+    ;;
+esac
+SH
+chmod +x "$remote_bin/curl"
+
 cat >"$remote_bin/sudo" <<'SH'
 #!/usr/bin/env bash
 [[ "${1:-}" == "-n" ]] && shift
@@ -63,7 +132,18 @@ if [[ "${1:-}" == "grep" ]]; then
   exec "${args[@]}"
 fi
 if [[ "${1:-}" == "docker" && "${2:-}" == "exec" ]]; then
-  code="${6:-}"
+  args=("$@")
+  code=
+  for ((index = 0; index < ${#args[@]}; index++)); do
+    if [[ "${args[$index]}" == "-c" ]]; then
+      code="${args[$((index + 1))]}"
+      break
+    fi
+  done
+  [[ -n "$code" ]] || exit 2
+  if [[ " $* " == *" -i "* ]]; then
+    exec python3 -c "$code"
+  fi
   entries_file=core.config_entries
   [[ "$SSH_PREFLIGHT_MODE" == "missing_entry" ]] && \
     entries_file=core.config_entries.missing
@@ -86,6 +166,9 @@ if [[ "$*" == *"hassio@test-ha"* ]]; then
   PATH="$DEPLOY_REMOTE_BIN:$PATH" \
     SSH_PREFLIGHT_MODE="$SSH_PREFLIGHT_MODE" \
     DEPLOY_REMOTE_FIXTURE="$DEPLOY_REMOTE_FIXTURE" \
+    DEPLOY_REMOTE_TEMP_LOG="$DEPLOY_REMOTE_TEMP_LOG" \
+    SUPERVISOR_TOKEN='remote-fixture-secret' \
+    PYTHONOPTIMIZE="$([[ "$SSH_PREFLIGHT_MODE" == optimized_field_absent ]] && printf 1 || printf 0)" \
     /bin/bash -s <<<"$payload"
   exit $?
 fi
@@ -105,6 +188,7 @@ run_deploy() {
   local output_file="$2"
   DEPLOY_COMMAND_LOG="$tmp_dir/commands.log" \
     DEPLOY_SSH_STDIN_LOG="$tmp_dir/ssh-stdin.log" \
+    DEPLOY_REMOTE_TEMP_LOG="$tmp_dir/remote-temp.log" \
     SSH_PREFLIGHT_MODE="$preflight_mode" \
     DEPLOY_REMOTE_BIN="$remote_bin" \
     DEPLOY_REMOTE_FIXTURE="$remote_fixture" \
@@ -121,17 +205,28 @@ assert_no_ota_guidance() {
   fi
 }
 
-# The deployment path must never construct or transmit a bearer-authenticated plain
-# HTTP service-registry request. This catches the original credential-exposure bug.
-if grep -Eq 'HA_ACCESS_TOKEN|HA_SERVICES_URL|Authorization|Bearer|/api/services|http://.*:8123' \
+assert_remote_temps_cleaned() {
+  while IFS= read -r response_file; do
+    [[ ! -e "$response_file" ]] || {
+      echo "FAIL: remote registry response temp file was not cleaned up" >&2
+      exit 1
+    }
+  done <"$tmp_dir/remote-temp.log"
+}
+
+# The Mac must not source or transmit a Home Assistant bearer token. The only
+# authenticated HTTP request is allowed inside the quoted SSH payload, where the
+# remote login shell supplies its own Supervisor token.
+if grep -Eq 'HA_ACCESS_TOKEN|HA_SERVICES_URL|homeassistant:8123|http://[^/]*:8123' \
   "$deploy_script"; then
-  echo "FAIL: deploy script must not contain a token-based HTTP service preflight" >&2
+  echo "FAIL: deploy script must not contain a Mac-side HA token or direct Core request" >&2
   exit 1
 fi
 
-for failure_mode in runtime_failure setup_error missing_entry missing_marker; do
+for failure_mode in non_200 domain_absent service_absent field_absent optimized_field_absent malformed_fields malformed_json runtime_failure setup_error missing_entry missing_marker; do
   : >"$tmp_dir/commands.log"
   : >"$tmp_dir/ssh-stdin.log"
+  : >"$tmp_dir/remote-temp.log"
   if run_deploy "$failure_mode" "$tmp_dir/$failure_mode.out"; then
     echo "FAIL: deployment must stop for SSH preflight mode $failure_mode" >&2
     exit 1
@@ -140,8 +235,9 @@ for failure_mode in runtime_failure setup_error missing_entry missing_marker; do
     "$tmp_dir/$failure_mode.out" || {
       echo "FAIL: SSH preflight failure must explicitly name idotmatrix.set_countdown" >&2
       exit 1
-    }
+  }
   assert_no_ota_guidance "$tmp_dir/$failure_mode.out"
+  assert_remote_temps_cleaned
   if grep -Eq '^(scp|ssh root@test-swipe)' "$tmp_dir/commands.log"; then
     echo "FAIL: no deployment command may run after SSH failure mode $failure_mode" >&2
     exit 1
@@ -150,6 +246,7 @@ done
 
 : >"$tmp_dir/commands.log"
 : >"$tmp_dir/ssh-stdin.log"
+: >"$tmp_dir/remote-temp.log"
 if ! run_deploy success "$tmp_dir/success.out"; then
   sed -n '1,120p' "$tmp_dir/success.out" >&2
   echo "FAIL: valid remote runtime and component fixtures must pass preflight" >&2
@@ -165,6 +262,28 @@ grep -Fq 'ha --raw-json core stats' "$tmp_dir/ssh-stdin.log" || {
   echo "FAIL: SSH preflight must prove the Home Assistant Core container is running" >&2
   exit 1
 }
+grep -Fq 'http://supervisor/core/api/services' "$tmp_dir/ssh-stdin.log" || {
+  echo "FAIL: SSH preflight must query the live service registry through the Supervisor proxy" >&2
+  exit 1
+}
+grep -Fq 'Authorization: Bearer $SUPERVISOR_TOKEN' "$tmp_dir/ssh-stdin.log" || {
+  echo "FAIL: Supervisor token must expand only in the remote login shell" >&2
+  exit 1
+}
+grep -Fq 'if not isinstance(fields, dict) or not all(' \
+  "$tmp_dir/ssh-stdin.log" || {
+    echo "FAIL: live registry validation must require a field map with all countdown fields" >&2
+    exit 1
+  }
+grep -Fq 'field in fields for field in ("mode", "minutes", "seconds")' \
+  "$tmp_dir/ssh-stdin.log" || {
+    echo "FAIL: live registry validation must require all countdown service fields" >&2
+    exit 1
+  }
+if grep -Eq '^[[:space:]]*assert[[:space:]]' "$tmp_dir/ssh-stdin.log"; then
+  echo "FAIL: remote validation must not rely on optimizable Python assertions" >&2
+  exit 1
+fi
 grep -Fq 'ha core logs' "$tmp_dir/ssh-stdin.log" || {
   echo "FAIL: SSH preflight must reject safe mode and iDotMatrix setup errors" >&2
   exit 1
@@ -184,11 +303,20 @@ for required_file in __init__.py coordinator.py services.yaml; do
     exit 1
   }
 done
-if grep -Eq 'Authorization|Bearer|HA_ACCESS_TOKEN|http://|/api/services' \
-  "$tmp_dir/commands.log" "$tmp_dir/ssh-stdin.log"; then
-  echo "FAIL: SSH preflight must not transmit a token or make a plain HTTP request" >&2
+if grep -Eq 'Authorization|Bearer|SUPERVISOR_TOKEN|remote-fixture-secret|http://' \
+  "$tmp_dir/commands.log"; then
+  echo "FAIL: SSH arguments must not expose the remote token or registry request" >&2
   exit 1
 fi
+if grep -Fq 'remote-fixture-secret' "$tmp_dir/ssh-stdin.log" "$tmp_dir/success.out"; then
+  echo "FAIL: the expanded Supervisor token must never be logged or returned to the Mac" >&2
+  exit 1
+fi
+if grep -Eq 'homeassistant:8123|http://[^/]*:8123' "$tmp_dir/ssh-stdin.log"; then
+  echo "FAIL: SSH preflight must not bypass the Supervisor proxy" >&2
+  exit 1
+fi
+assert_remote_temps_cleaned
 grep -Fq 'Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd' \
   "$tmp_dir/success.out" || {
     echo "FAIL: successful SSH preflight must be reported" >&2
@@ -209,4 +337,4 @@ grep -Fq 'home-assistant/ha-display-7-package.yaml root@test-ha:/config/packages
     exit 1
   }
 
-echo "PASS: deploy script gates deployment through token-free SSH countdown preflight"
+echo "PASS: deploy script gates deployment through an SSH-confined live countdown registry preflight"

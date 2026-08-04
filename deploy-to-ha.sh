@@ -13,17 +13,60 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # De countdown-service leeft in een lokaal aangepaste custom component. Die Python-
 # bestanden worden bewust nooit vanuit deze repository overschreven. Controleer de
-# actieve Core-container en de exact geïnstalleerde registratie/methode/schema via de
-# versleutelde SSH-verbinding. Er verlaat geen HA bearer-token deze machine.
+# actieve Core-container en de live service registry via de versleutelde SSH-
+# verbinding. Het Supervisor-token bestaat en expandeert alleen in de login-shell
+# op de HA-host; de Mac leest, interpoleert of logt het niet.
 preflight_countdown_service() {
   if ssh -o BatchMode=yes -o ConnectTimeout=10 \
     "${HA_SSH_USER}@${HA_HOST}" 'bash -lc "bash -s"' <<'REMOTE'
 set -euo pipefail
 
 # `core stats` faalt wanneer de Core-container niet draait. De buitenste login-shell
-# levert uitsluitend de lokale Supervisor-context; er wordt geen HA access-token
-# ontvangen of vanaf de Mac verstuurd.
+# levert uitsluitend op de HA-host de lokale Supervisor-context.
 ha --raw-json core stats | grep -q '"result":"ok"'
+
+# Vraag de werkelijk geregistreerde services op via de lokale Supervisor Core API-
+# proxy. De quoted heredoc voorkomt expansie op de Mac. Bewaar de response tijdelijk
+# met private rechten en ruim hem op bij succes, fouten en interrupts.
+[[ -n "${SUPERVISOR_TOKEN:-}" ]]
+umask 077
+services_response="$(mktemp /tmp/idotmatrix-services.XXXXXX)"
+cleanup_services_response() {
+  rm -f "$services_response"
+}
+trap cleanup_services_response EXIT HUP INT TERM
+
+services_status="$(
+  curl --silent --show-error \
+    --output "$services_response" \
+    --write-out '%{http_code}' \
+    --header "Authorization: Bearer $SUPERVISOR_TOKEN" \
+    http://supervisor/core/api/services
+)"
+[[ "$services_status" == "200" ]]
+
+# HA OS heeft niet gegarandeerd Python op de host. Parse daarom read-only in de
+# Core-container en voer de tijdelijke hostresponse uitsluitend via stdin aan.
+sudo -n docker exec -i homeassistant python3 -c '
+import json
+import sys
+
+domains = json.load(sys.stdin)
+idotmatrix = next(
+    (domain for domain in domains if domain.get("domain") == "idotmatrix"),
+    None,
+)
+if idotmatrix is None:
+    raise SystemExit(1)
+service = idotmatrix.get("services", {}).get("set_countdown")
+if service is None:
+    raise SystemExit(1)
+fields = service.get("fields", {})
+if not isinstance(fields, dict) or not all(
+    field in fields for field in ("mode", "minutes", "seconds")
+):
+    raise SystemExit(1)
+' <"$services_response"
 
 # Een geïnstalleerd bestand alleen bewijst geen succesvolle runtime-setup. Blokkeer
 # daarom safe mode en iedere iDotMatrix setup-/dependencyfout uit de huidige Core-log.
@@ -39,10 +82,11 @@ sudo -n docker exec homeassistant python3 -c '
 import json
 with open("/config/.storage/core.config_entries", encoding="utf-8") as source:
     entries = json.load(source)["data"]["entries"]
-assert any(
+if not any(
     entry.get("domain") == "idotmatrix" and entry.get("disabled_by") is None
     for entry in entries
-)
+):
+    raise SystemExit(1)
 '
 
 component_dir=/config/custom_components/idotmatrix
@@ -54,9 +98,10 @@ sudo -n grep -Fq 'async def async_set_countdown(' \
 sudo -n grep -Fq 'await countdown.setMode(mode, minutes, seconds)' \
   "$component_dir/coordinator.py"
 sudo -n grep -Eq '^set_countdown:$' "$component_dir/services.yaml"
-sudo -n grep -Eq '^  mode:$' "$component_dir/services.yaml"
-sudo -n grep -Eq '^  minutes:$' "$component_dir/services.yaml"
-sudo -n grep -Eq '^  seconds:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^  fields:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^    mode:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^    minutes:$' "$component_dir/services.yaml"
+sudo -n grep -Eq '^    seconds:$' "$component_dir/services.yaml"
 REMOTE
   then
     echo "✓ Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd"
