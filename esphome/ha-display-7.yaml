@@ -208,10 +208,34 @@ globals:
     type: int
     restore_value: yes
     initial_value: '0'
+  - id: timer_input_seconds
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: timer_selected_field
+    type: int
+    restore_value: no
+    initial_value: '0'
   - id: timer_input_from_preset
     type: bool
     restore_value: no
     initial_value: 'false'
+  - id: timer_display_seconds
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: timer_finish_timestamp
+    type: int64_t
+    restore_value: no
+    initial_value: '0'
+  - id: timer_add_minute_pending
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: timer_add_minute_pending_ticks
+    type: int
+    restore_value: no
+    initial_value: '0'
 
 external_components:
   - source:
@@ -729,6 +753,23 @@ text_sensor:
     attribute: remaining
     internal: true
     on_value:
+      - lambda: |-
+          if (id(ha_idot_timer_status).state == "paused") {
+            id(timer_add_minute_pending) = false;
+            id(timer_add_minute_pending_ticks) = 0;
+          }
+      - script.execute: timer_ui_refresh
+  - platform: homeassistant
+    id: ha_idot_timer_finishes_at
+    entity_id: timer.idotmatrix_timer
+    attribute: finishes_at
+    internal: true
+    on_value:
+      - lambda: |-
+          if (id(ha_idot_timer_status).state == "running") {
+            id(timer_add_minute_pending) = false;
+            id(timer_add_minute_pending_ticks) = 0;
+          }
       - script.execute: timer_ui_refresh
   - platform: homeassistant
     id: media_title
@@ -9014,6 +9055,7 @@ lvgl:
                   border_color: 0x252525
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   widgets:
                     - label:
                         x: 24
@@ -9030,6 +9072,83 @@ lvgl:
                         text_font: font_num_76
                         text_color: 0xFFFFFF
                         text: "00:00"
+                        hidden: true
+                    - obj:
+                        id: timer_input_fields
+                        align: TOP_MID
+                        y: 78
+                        width: 288
+                        height: 132
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        hidden: true
+                        widgets:
+                          - button:
+                              id: btn_timer_field_minutes
+                              x: 0
+                              y: 0
+                              width: 128
+                              height: 120
+                              radius: 12
+                              bg_color: 0x14251A
+                              border_width: 2
+                              border_color: 0x2EE36A
+                              on_click:
+                                then:
+                                  - lambda: 'id(timer_selected_field) = 0;'
+                                  - script.execute: timer_ui_refresh
+                              widgets:
+                                - label:
+                                    align: TOP_MID
+                                    y: 14
+                                    text_font: font_roboto_12
+                                    text_color: 0x8A8A93
+                                    text: "MINUTEN"
+                                - label:
+                                    id: lbl_timer_input_minutes
+                                    align: BOTTOM_MID
+                                    y: -14
+                                    text_font: font_roboto_36
+                                    text_color: 0xFFFFFF
+                                    text: "00"
+                          - label:
+                              x: 132
+                              y: 50
+                              width: 24
+                              text_align: CENTER
+                              text_font: font_roboto_28
+                              text_color: 0x666666
+                              text: ":"
+                          - button:
+                              id: btn_timer_field_seconds
+                              x: 160
+                              y: 0
+                              width: 128
+                              height: 120
+                              radius: 12
+                              bg_color: 0x151515
+                              border_width: 2
+                              border_color: 0x303030
+                              on_click:
+                                then:
+                                  - lambda: 'id(timer_selected_field) = 1;'
+                                  - script.execute: timer_ui_refresh
+                              widgets:
+                                - label:
+                                    align: TOP_MID
+                                    y: 14
+                                    text_font: font_roboto_12
+                                    text_color: 0x8A8A93
+                                    text: "SECONDEN"
+                                - label:
+                                    id: lbl_timer_input_seconds
+                                    align: BOTTOM_MID
+                                    y: -14
+                                    text_font: font_roboto_36
+                                    text_color: 0xFFFFFF
+                                    text: "00"
                     - obj:
                         align: TOP_MID
                         y: 224
@@ -9054,7 +9173,7 @@ lvgl:
                         text_align: CENTER
                         text_font: font_roboto_16
                         text_color: 0x666666
-                        text: "Minuten invoeren · seconden tellen af"
+                        text: "Minuten en seconden · iDot is leidend"
 
               # Invoer voor idle: presets, 3x4-keypad en starten.
               - obj:
@@ -9067,6 +9186,7 @@ lvgl:
                   border_width: 0
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   widgets:
                     - button:
                         id: btn_timer_preset_5
@@ -9080,7 +9200,7 @@ lvgl:
                         border_color: 0x303030
                         on_click:
                           then:
-                            - lambda: 'id(timer_input_minutes) = 5; id(timer_input_from_preset) = true;'
+                            - lambda: 'id(timer_input_minutes) = 5; id(timer_input_seconds) = 0; id(timer_selected_field) = 0; id(timer_input_from_preset) = true;'
                             - script.execute: timer_ui_refresh
                         widgets:
                           - label:
@@ -9100,7 +9220,7 @@ lvgl:
                         border_color: 0x303030
                         on_click:
                           then:
-                            - lambda: 'id(timer_input_minutes) = 10; id(timer_input_from_preset) = true;'
+                            - lambda: 'id(timer_input_minutes) = 10; id(timer_input_seconds) = 0; id(timer_selected_field) = 0; id(timer_input_from_preset) = true;'
                             - script.execute: timer_ui_refresh
                         widgets:
                           - label:
@@ -9120,7 +9240,7 @@ lvgl:
                         border_color: 0x303030
                         on_click:
                           then:
-                            - lambda: 'id(timer_input_minutes) = 15; id(timer_input_from_preset) = true;'
+                            - lambda: 'id(timer_input_minutes) = 15; id(timer_input_seconds) = 0; id(timer_selected_field) = 0; id(timer_input_from_preset) = true;'
                             - script.execute: timer_ui_refresh
                         widgets:
                           - label:
@@ -9140,7 +9260,7 @@ lvgl:
                         border_color: 0x303030
                         on_click:
                           then:
-                            - lambda: 'id(timer_input_minutes) = 20; id(timer_input_from_preset) = true;'
+                            - lambda: 'id(timer_input_minutes) = 20; id(timer_input_seconds) = 0; id(timer_selected_field) = 0; id(timer_input_from_preset) = true;'
                             - script.execute: timer_ui_refresh
                         widgets:
                           - label:
@@ -9312,7 +9432,10 @@ lvgl:
                         bg_color: 0x202428
                         on_click:
                           then:
-                            - lambda: 'id(timer_input_minutes) /= 10; id(timer_input_from_preset) = false;'
+                            - lambda: |-
+                                if (id(timer_selected_field) == 1) id(timer_input_seconds) /= 10;
+                                else id(timer_input_minutes) /= 10;
+                                id(timer_input_from_preset) = false;
                             - script.execute: timer_ui_refresh
                         widgets:
                           - label: { align: CENTER, text_font: font_icon_28, text_color: 0xB8C7D9, text: "\U000F004D" }
@@ -9412,6 +9535,29 @@ lvgl:
                               text_font: font_roboto_16
                               text_color: 0xFF8A80
                               text: "Stoppen"
+
+              # Bij ontbrekende HA-status blijven alle timeracties expliciet verborgen.
+              - obj:
+                  id: timer_unavailable_card
+                  x: 400
+                  y: 178
+                  width: 592
+                  height: 220
+                  bg_color: 0x101010
+                  bg_opa: COVER
+                  border_width: 1
+                  border_color: 0x303030
+                  radius: 18
+                  pad_all: 16
+                  scrollable: false
+                  widgets:
+                    - label:
+                        align: CENTER
+                        width: 520
+                        text_align: CENTER
+                        text_font: font_roboto_20
+                        text_color: 0xA0A0A0
+                        text: "Home Assistant niet beschikbaar"
 
               # Alarm neemt de normale tijdkaart en alle normale bediening over.
               - obj:
@@ -9622,33 +9768,52 @@ script:
     then:
       - lambda: |-
           if (digit < 0 || digit > 9) return;
-          int current = id(timer_input_from_preset) ? 0 : id(timer_input_minutes);
+          if (id(timer_selected_field) == 1) {
+            int current = id(timer_input_seconds);
+            if (current < 0) current = 0;
+            if (current > 59) current = 59;
+            id(timer_input_seconds) = std::min(59, current * 10 + digit);
+          } else {
+            int current = id(timer_input_from_preset) ? 0 : id(timer_input_minutes);
+            if (current < 0) current = 0;
+            if (current > 99) current = 99;
+            id(timer_input_minutes) = std::min(99, current * 10 + digit);
+          }
           id(timer_input_from_preset) = false;
-          if (current < 0) current = 0;
-          if (current > 99) current = 99;
-          id(timer_input_minutes) = std::min(99, current * 10 + digit);
       - script.execute: timer_ui_refresh
 
   - id: timer_input_clear
     then:
-      - lambda: 'id(timer_input_minutes) = 0; id(timer_input_from_preset) = false;'
+      - lambda: |-
+          if (id(timer_selected_field) == 1) id(timer_input_seconds) = 0;
+          else id(timer_input_minutes) = 0;
+          id(timer_input_from_preset) = false;
       - script.execute: timer_ui_refresh
 
   - id: timer_start_command
     then:
       - if:
           condition:
-            lambda: 'return id(timer_input_minutes) > 0;'
+            lambda: |-
+              const int minutes = std::max(0, std::min(99, id(timer_input_minutes)));
+              const int seconds = std::max(0, std::min(59, id(timer_input_seconds)));
+              return minutes * 60 + seconds > 0;
           then:
             - homeassistant.action:
                 action: script.idotmatrix_timer_start
                 data_template:
                   minutes: "{{ minutes }}"
+                  seconds: "{{ seconds }}"
                 variables:
                   minutes: !lambda |-
                     int minutes = id(timer_input_minutes);
                     if (minutes < 0) return 0;
                     return std::min(99, minutes);
+                  seconds: !lambda |-
+                    int seconds = id(timer_input_seconds);
+                    if (seconds < 0) return 0;
+                    return std::min(59, seconds);
+            - script.execute: timer_ui_refresh
 
   - id: timer_pause_resume_command
     then:
@@ -9668,6 +9833,20 @@ script:
 
   - id: timer_add_minute_command
     then:
+      - lambda: |-
+          const std::string status = id(ha_idot_timer_status).state;
+          if (status == "running" || status == "paused") {
+            const int current = std::max(0, std::min(5999, id(timer_display_seconds)));
+            const int optimistic = std::min(5999, current + 60);
+            const int added_seconds = optimistic - current;
+            id(timer_display_seconds) = optimistic;
+            if (status == "running" && id(timer_finish_timestamp) > 0) {
+              id(timer_finish_timestamp) += added_seconds;
+            }
+            id(timer_add_minute_pending) = true;
+            id(timer_add_minute_pending_ticks) = 0;
+          }
+      - script.execute: timer_display_tick
       - homeassistant.action:
           action: script.idotmatrix_timer_add_minute
 
@@ -9681,12 +9860,51 @@ script:
       - homeassistant.action:
           action: script.idotmatrix_timer_acknowledge
 
+  - id: timer_display_tick
+    mode: restart
+    then:
+      - lambda: |-
+          const std::string status = id(ha_idot_timer_status).state;
+          const bool running = status == "running";
+          const bool paused = status == "paused";
+          if (!running && !paused) return;
+
+          if (id(timer_add_minute_pending) && ++id(timer_add_minute_pending_ticks) >= 5) {
+            id(timer_add_minute_pending) = false;
+            id(timer_add_minute_pending_ticks) = 0;
+            id(timer_ui_refresh).execute();
+            return;
+          }
+
+          if (running && id(timer_finish_timestamp) > 0) {
+            const auto now = id(ha_time).now();
+            if (now.is_valid()) {
+              int64_t remaining = id(timer_finish_timestamp) - now.timestamp;
+              if (remaining < 0) remaining = 0;
+              if (remaining > 2147483647LL) remaining = 2147483647LL;
+              id(timer_display_seconds) = static_cast<int>(remaining);
+            }
+          }
+
+          // Paused keeps timer_display_seconds fixed until HA publishes a new
+          // remaining value. Running is derived from the absolute finish anchor.
+          const int display_seconds = std::max(0, id(timer_display_seconds));
+          const int display_minutes = display_seconds / 60;
+          const int display_remainder = display_seconds % 60;
+          char time_text[16];
+          snprintf(time_text, sizeof(time_text), "%02d:%02d", display_minutes, display_remainder);
+          lv_label_set_text(id(lbl_timer_time), time_text);
+
   - id: timer_ui_refresh
     mode: restart
     then:
       - lambda: |-
           if (id(timer_input_minutes) < 0) id(timer_input_minutes) = 0;
           if (id(timer_input_minutes) > 99) id(timer_input_minutes) = 99;
+          if (id(timer_input_seconds) < 0) id(timer_input_seconds) = 0;
+          if (id(timer_input_seconds) > 59) id(timer_input_seconds) = 59;
+          if (id(timer_selected_field) != 1) id(timer_selected_field) = 0;
+
           const std::string raw = id(ha_idot_timer_remaining).state;
           int remaining_seconds = 0;
           if (raw != "unknown" && raw != "unavailable") {
@@ -9700,17 +9918,101 @@ script:
               remaining_seconds = hours * 3600 + minutes * 60 + static_cast<int>(seconds);
             }
           }
+
+          // HA serializes finishes_at as ISO 8601. ESPTime::strptime supports
+          // the date/time prefix; parse the suffix separately so comparisons to
+          // ha_time.now().timestamp always happen in UTC, independent of DST.
+          int64_t finish_timestamp = 0;
+          const std::string finish_raw = id(ha_idot_timer_finishes_at).state;
+          if (finish_raw != "unknown" && finish_raw != "unavailable" &&
+              finish_raw.size() >= 19) {
+            std::string normalized = finish_raw.substr(0, 19);
+            if (normalized[10] == 'T') normalized[10] = ' ';
+            ESPTime finish_time{};
+            if (normalized[10] == ' ' && ESPTime::strptime(normalized, finish_time) &&
+                finish_time.fields_in_range(false, false)) {
+              const size_t zone_pos = finish_raw.find_first_of("Zz+-", 19);
+              bool zone_valid = true;
+              if (zone_pos == std::string::npos) {
+                zone_valid = finish_raw.size() == 19;
+                if (zone_valid) finish_time.recalc_timestamp_local();
+              } else {
+                if (zone_pos > 19) {
+                  zone_valid = finish_raw[19] == '.' && zone_pos > 20;
+                  for (size_t i = 20; zone_valid && i < zone_pos; i++) {
+                    zone_valid = finish_raw[i] >= '0' && finish_raw[i] <= '9';
+                  }
+                }
+                if (zone_valid) finish_time.recalc_timestamp_utc(false);
+                if (zone_valid && (finish_raw[zone_pos] == 'Z' || finish_raw[zone_pos] == 'z')) {
+                  zone_valid = zone_pos + 1 == finish_raw.size();
+                } else if (zone_valid) {
+                  zone_valid = finish_raw.size() == zone_pos + 6 &&
+                               finish_raw[zone_pos + 1] >= '0' && finish_raw[zone_pos + 1] <= '9' &&
+                               finish_raw[zone_pos + 2] >= '0' && finish_raw[zone_pos + 2] <= '9' &&
+                               finish_raw[zone_pos + 3] == ':' &&
+                               finish_raw[zone_pos + 4] >= '0' && finish_raw[zone_pos + 4] <= '9' &&
+                               finish_raw[zone_pos + 5] >= '0' && finish_raw[zone_pos + 5] <= '9';
+                  if (zone_valid) {
+                    const int offset_hours = (finish_raw[zone_pos + 1] - '0') * 10 +
+                                             (finish_raw[zone_pos + 2] - '0');
+                    const int offset_minutes = (finish_raw[zone_pos + 4] - '0') * 10 +
+                                               (finish_raw[zone_pos + 5] - '0');
+                    zone_valid = offset_hours <= 23 && offset_minutes <= 59;
+                    if (zone_valid) {
+                      const int offset_seconds = offset_hours * 3600 + offset_minutes * 60;
+                      if (finish_raw[zone_pos] == '+') finish_time.timestamp -= offset_seconds;
+                      else finish_time.timestamp += offset_seconds;
+                    }
+                  }
+                }
+              }
+              if (zone_valid && finish_time.timestamp > 0) {
+                finish_timestamp = static_cast<int64_t>(finish_time.timestamp);
+              }
+            }
+          }
+
           const std::string status = id(ha_idot_timer_status).state;
           const bool running = status == "running";
           const bool paused = status == "paused";
           const bool alarming = status == "alarming";
-          const bool idle = status == "idle" || (!running && !paused && !alarming);
+          const bool idle = status == "idle";
+          const bool unavailable = status.empty() || status == "unknown" || status == "unavailable" ||
+                                   (!idle && !running && !paused && !alarming);
 
-          // Idle toont de lokaal gekozen hele minuten. Home Assistant blijft voor
-          // running/paused de bron van waarheid voor de resterende tijd.
-          int display_seconds = (running || paused) ? remaining_seconds : id(timer_input_minutes) * 60;
-          if (alarming) display_seconds = 0;
-          if (display_seconds < 0) display_seconds = 0;
+          if (running) {
+            if (!id(timer_add_minute_pending)) {
+              id(timer_finish_timestamp) = finish_timestamp;
+              const auto now = id(ha_time).now();
+              if (finish_timestamp > 0 && now.is_valid()) {
+                int64_t anchored = finish_timestamp - now.timestamp;
+                if (anchored < 0) anchored = 0;
+                if (anchored > 2147483647LL) anchored = 2147483647LL;
+                id(timer_display_seconds) = static_cast<int>(anchored);
+              } else {
+                id(timer_display_seconds) = remaining_seconds;
+              }
+            }
+          } else if (paused) {
+            if (!id(timer_add_minute_pending)) {
+              id(timer_finish_timestamp) = 0;
+              id(timer_display_seconds) = remaining_seconds;
+            }
+          } else if (idle) {
+            id(timer_add_minute_pending) = false;
+            id(timer_add_minute_pending_ticks) = 0;
+            id(timer_finish_timestamp) = 0;
+            id(timer_display_seconds) = id(timer_input_minutes) * 60 + id(timer_input_seconds);
+          } else {
+            id(timer_add_minute_pending) = false;
+            id(timer_add_minute_pending_ticks) = 0;
+            id(timer_finish_timestamp) = 0;
+            id(timer_display_seconds) = 0;
+          }
+
+          int display_seconds = std::max(0, id(timer_display_seconds));
+          if (alarming || unavailable) display_seconds = 0;
           const int display_minutes = display_seconds / 60;
           const int display_remainder = display_seconds % 60;
           char time_text[16];
@@ -9718,13 +10020,28 @@ script:
           lv_label_set_text(id(lbl_timer_time), time_text);
           lv_label_set_text(id(lbl_timer_alarm_time), "00:00");
 
+          char input_text[4];
+          snprintf(input_text, sizeof(input_text), "%02d", id(timer_input_minutes));
+          lv_label_set_text(id(lbl_timer_input_minutes), input_text);
+          snprintf(input_text, sizeof(input_text), "%02d", id(timer_input_seconds));
+          lv_label_set_text(id(lbl_timer_input_seconds), input_text);
+          const bool minutes_selected = id(timer_selected_field) == 0;
+          lv_obj_set_style_border_color(id(btn_timer_field_minutes),
+              lv_color_hex(minutes_selected ? 0x2EE36A : 0x303030), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(btn_timer_field_minutes),
+              lv_color_hex(minutes_selected ? 0x14251A : 0x151515), LV_PART_MAIN);
+          lv_obj_set_style_border_color(id(btn_timer_field_seconds),
+              lv_color_hex(minutes_selected ? 0x303030 : 0x2EE36A), LV_PART_MAIN);
+          lv_obj_set_style_bg_color(id(btn_timer_field_seconds),
+              lv_color_hex(minutes_selected ? 0x151515 : 0x14251A), LV_PART_MAIN);
+
           if (running) {
             lv_label_set_text(id(lbl_timer_state), "Timer loopt");
             lv_label_set_text(id(lbl_timer_pause_resume), "Pauzeren");
           } else if (paused) {
             lv_label_set_text(id(lbl_timer_state), "Timer gepauzeerd");
             lv_label_set_text(id(lbl_timer_pause_resume), "Hervatten");
-          } else if (status == "unknown" || status == "unavailable" || status.empty()) {
+          } else if (unavailable) {
             lv_label_set_text(id(lbl_timer_state), "Home Assistant niet beschikbaar");
           } else {
             lv_label_set_text(id(lbl_timer_state), "Klaar om te starten");
@@ -9734,13 +10051,17 @@ script:
             if (hidden) lv_obj_add_flag(widget, LV_OBJ_FLAG_HIDDEN);
             else lv_obj_clear_flag(widget, LV_OBJ_FLAG_HIDDEN);
           };
-          set_hidden(id(timer_time_card), alarming);
-          set_hidden(id(timer_idle_controls), !idle || alarming);
-          set_hidden(id(timer_active_controls), !(running || paused) || alarming);
+          set_hidden(id(timer_time_card), alarming || unavailable);
+          set_hidden(id(timer_input_fields), !idle);
+          set_hidden(id(lbl_timer_time), idle);
+          set_hidden(id(timer_idle_controls), !idle);
+          set_hidden(id(timer_active_controls), !(running || paused));
           set_hidden(id(timer_alarm_card), !alarming);
-          ESP_LOGD("timer", "Status=%s, remaining=%ds, input=%dmin",
+          set_hidden(id(timer_unavailable_card), !unavailable);
+          ESP_LOGD("timer", "Status=%s, remaining=%ds, input=%d:%02d, finish=%lld",
                    id(ha_idot_timer_status).state.c_str(), remaining_seconds,
-                   id(timer_input_minutes));
+                   id(timer_input_minutes), id(timer_input_seconds),
+                   static_cast<long long>(id(timer_finish_timestamp)));
 
   # Nav rail — kleurt de strip+knop van page_index actief, de rest inactief.
   # Vervangt de 6x14-regelige lvgl.obj.update-reeks die vroeger in elke
@@ -10662,6 +10983,11 @@ script:
 # Interval updates — NOOIT on_value gebruiken voor LVGL
 # ---------------------------------------------------------------
 interval:
+  # Alleen het zichtbare getal tikt lokaal; status/alarm blijven HA-authoritatief.
+  - interval: 1s
+    then:
+      - script.execute: timer_display_tick
+
   # Recipe thumbnails één voor één downloaden — parallelle downloads (HA stuurt
   # alle 24 image-sensoren in een burst) verzadigen PSRAM-bandbreedte en geven
   # DSI-underrun (blauw scherm). De on_value handlers zetten alleen een pending-bit;
