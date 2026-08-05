@@ -344,3 +344,118 @@ git add deploy-to-ha.sh
 git commit -m "chore: deploy and verify iDot kitchen timer"
 ```
 
+---
+
+### Task 6: Seconds-Aware Home Assistant Timer And iDot Resync
+
+**Files:**
+- Modify: `home-assistant/ha-display-7-package.yaml`
+- Modify: `tests/check_idot_kitchen_timer_package.sh`
+
+**Interfaces:**
+- Consumes: the live `idotmatrix.set_countdown(mode, minutes, seconds)` service and existing timer state machine.
+- Produces: `script.idotmatrix_timer_start` fields `minutes: int` and `seconds: int`, valid total duration 1–5,999 seconds, and a +1 action that sends a fresh native countdown start.
+
+- [ ] **Step 1: Add failing node-scoped YAML tests**
+
+Require the Start script to accept both fields, normalize total seconds, reject `00:00`, and send matching minutes/seconds to both `timer.start` and `idotmatrix.set_countdown`. Require Add Minute to calculate against `finishes_at` while running, use fixed `remaining` while paused, add exactly 60 seconds, and send native `mode: 1` rather than `mode: 3`.
+
+Run: `bash tests/check_idot_kitchen_timer_package.sh`
+
+Expected: FAIL because Start has no seconds field and Add Minute uses stale `remaining` plus native mode 3.
+
+- [ ] **Step 2: Make Start seconds-aware**
+
+Add optional integer field `seconds` defaulting to zero. Calculate `total_seconds = minutes * 60 + seconds`, require `1 <= total_seconds <= 5999`, and derive normalized native minutes/seconds. Start the HA timer with exact `HH:MM:SS` and send native mode 1 with the same duration.
+
+- [ ] **Step 3: Fix Add Minute at the source**
+
+For `running`, calculate current seconds from `finishes_at - now()`; for `paused`, parse `remaining`. Add 60 seconds and cap at 5,999. Restart the HA timer with that duration and send native mode 1 with the normalized duration. If the original status was paused, immediately pause both timers again and keep status `paused`.
+
+- [ ] **Step 4: Validate, deploy, and silently verify**
+
+Run the package test, all shell tests, and `git diff --check`. Deploy the package, run `ha core check`, reload scripts, then silently test a 90-second start and +1 minute; stop well before expiry. Verify HA changes by exactly 60 seconds and ends `idle`. Do not test the gong.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add home-assistant/ha-display-7-package.yaml tests/check_idot_kitchen_timer_package.sh
+git commit -m "fix: support seconds and resync extended iDot timers"
+```
+
+---
+
+### Task 7: Seconds Input And Live 7-Inch Countdown
+
+**Files:**
+- Modify: `esphome/ha-display-7.yaml`
+- Modify: `tests/check_idot_timer_bindings.sh`
+- Modify: `tests/check_idot_timer_page.sh`
+
+**Interfaces:**
+- Consumes: Task 6 Start fields and HA timer attributes `remaining` and `finishes_at`.
+- Produces: globals `timer_input_minutes`, `timer_input_seconds`, selected input field, a `finishes_at` binding, and one-second local display refresh.
+
+- [ ] **Step 1: Add failing structural and logic tests**
+
+Require separate 0–99 minutes and 0–59 seconds globals, selectable minute/second field buttons, keypad routing to the selected field, Start payload with both fields, `finishes_at` binding, a one-second refresh interval, explicit unknown/unavailable controls-off behavior, and visible `MM:SS` updates for running and paused states.
+
+Run: `bash tests/check_idot_timer_bindings.sh && bash tests/check_idot_timer_page.sh`
+
+Expected: FAIL.
+
+- [ ] **Step 2: Split idle input into minutes and seconds**
+
+Add `timer_input_seconds` and a selected-field enum/global. Clamp minutes to 0–99 and seconds to 0–59. Presets set minutes and reset seconds to zero. Digit, clear, and backspace actions operate only on the selected field. Render two clearly labelled, tappable fields and visually highlight the selected field.
+
+- [ ] **Step 3: Pass exact duration to Home Assistant**
+
+Update `timer_start_command` to reject only total duration zero and call `script.idotmatrix_timer_start` with both minutes and seconds. After Start and each preset/input change, call the centralized UI refresh.
+
+- [ ] **Step 4: Add a locally ticking display clock**
+
+Bind `timer.idotmatrix_timer` attribute `finishes_at`. While status is `running`, calculate remaining seconds from parsed `finishes_at` minus `id(ha_time).now().timestamp` on a one-second interval. While `paused`, display the fixed parsed `remaining`. New HA attribute/status updates re-anchor the calculation. Unknown/unavailable state hides all action groups and shows only the unavailable message.
+
+- [ ] **Step 5: Strengthen +1 feedback**
+
+On +1 click, optimistically add 60 seconds to the local displayed remaining value, then call the HA script. The next HA update re-anchors it. Do not mutate the HA state machine locally.
+
+- [ ] **Step 6: Validate and commit**
+
+Run all shell tests, ESPHome config validation and full compile, plus `git diff --check`.
+
+```bash
+git add esphome/ha-display-7.yaml tests/check_idot_timer_bindings.sh tests/check_idot_timer_page.sh
+git commit -m "feat: add seconds input and live timer display"
+```
+
+---
+
+### Task 8: OTA And Silent Physical Verification
+
+**Files:**
+- Verify: `esphome/ha-display-7.yaml`
+- Verify: `home-assistant/ha-display-7-package.yaml`
+
+**Interfaces:**
+- Consumes: Tasks 6–7.
+- Produces: deployed seconds-aware timer with synchronized iDot and 7-inch displays.
+
+- [ ] **Step 1: Run all gates**
+
+Run the secure deployment preflight, all shell tests, HA config validation, ESPHome validation and compile. Expected: all PASS.
+
+- [ ] **Step 2: Deploy and flash OTA**
+
+Deploy only changed package/YAML artifacts, reload Home Assistant scripts, flash `ha-display-7.local`, and verify reconnect.
+
+- [ ] **Step 3: Perform silent physical checks**
+
+1. Enter `00:10`; verify both displays visibly count every second, then stop before zero.
+2. Enter `01:30`; verify both displays start at 01:30.
+3. Press +1; verify both displays jump to approximately 02:30 and continue counting.
+4. Pause for five seconds; verify both displays remain fixed, then resume.
+5. Leave and return to Timer; verify the live time remains synchronized.
+6. Stop and verify status `idle` and normal iDot rotation resumed.
+
+The already-confirmed gong/alarm behavior is unchanged and is not repeated during quiet hours.
