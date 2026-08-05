@@ -48,8 +48,13 @@ if ! rg -U -q 'action: input_boolean\.turn_off\n                data:\n         
   exit 1
 fi
 
-if ! rg -U -q 'id: spotify_drawer_input_spotify_btn[\s\S]*action: media_player\.media_play\n[[:space:]]+data:\n[[:space:]]+entity_id: \$\{spotify_entity\}' <<<"$drawer_body"; then
-  echo "FAIL: Spotify source button does not resume the Spotify player" >&2
+if ! rg -U -q 'id: keuken_amp_previous_content_id\n[[:space:]]+entity_id: input_text\.keuken_amp_vorige_bron' "$yaml"; then
+  echo "FAIL: display does not read back the saved Spotify content ID" >&2
+  exit 1
+fi
+
+if ! rg -U -q 'id: spotify_drawer_input_spotify_btn[\s\S]*action: media_player\.play_media\n[[:space:]]+data:\n[[:space:]]+entity_id: \$\{keuken_amp_entity\}[\s\S]*media_content_id: "\{\{ content_id \}\}"[\s\S]*content_id: !lambda.*keuken_amp_previous_content_id' <<<"$drawer_body"; then
+  echo "FAIL: Spotify source button does not replay the saved Spotify content ID on Keuken Amp" >&2
   exit 1
 fi
 

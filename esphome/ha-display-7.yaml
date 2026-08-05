@@ -800,6 +800,10 @@ text_sensor:
             - delay: 500ms
             - script.execute: media_show_for_keuken_amp_spotify
   - platform: homeassistant
+    id: keuken_amp_previous_content_id
+    entity_id: input_text.keuken_amp_vorige_bron
+    internal: true
+  - platform: homeassistant
     id: keuken_amp_state
     entity_id: ${keuken_amp_entity}
     internal: true
@@ -2711,9 +2715,14 @@ lvgl:
                       shadow_width: 0
                       on_click:
                         - homeassistant.action:
-                            action: media_player.media_play
+                            action: media_player.play_media
                             data:
-                              entity_id: ${spotify_entity}
+                              entity_id: ${keuken_amp_entity}
+                              media_content_type: music
+                            data_template:
+                              media_content_id: "{{ content_id }}"
+                            variables:
+                              content_id: !lambda 'return id(keuken_amp_previous_content_id).state;'
                         - homeassistant.action:
                             action: input_boolean.turn_off
                             data:
