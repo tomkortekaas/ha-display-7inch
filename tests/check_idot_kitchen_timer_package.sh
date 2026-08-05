@@ -59,6 +59,31 @@ start_sequence = start_script.fetch("sequence")
 first_side_effect_index = start_sequence.index { |step| step.key?("action") }
 check(!first_side_effect_index.nil?, "start script has no side effects")
 
+input_guard_index = start_sequence.index do |step|
+  template = step.fetch("value_template", "")
+  step["condition"] == "template" &&
+    template.include?("minutes is defined") &&
+    template.include?("minutes is number") &&
+    template.include?("minutes is not boolean") &&
+    template.include?("minutes | float == minutes | int") &&
+    template.include?("seconds if seconds is defined else 0") &&
+    template.include?("raw_seconds is number") &&
+    template.include?("raw_seconds is not boolean") &&
+    template.include?("raw_seconds | float == raw_seconds | int")
+end
+check(!input_guard_index.nil?,
+      "start script has no strict numeric-integral input guard")
+
+normalization_variables_index = start_sequence.index do |step|
+  variables = step["variables"]
+  variables.is_a?(Hash) && variables.key?("timer_minutes")
+end
+check(!normalization_variables_index.nil?, "start script has no input normalization")
+check(input_guard_index < normalization_variables_index,
+      "start input guard must run before coercive normalization")
+check(input_guard_index < first_side_effect_index,
+      "start input guard must run before all side effects")
+
 input_variables = start_sequence.map { |step| step["variables"] }.compact.reduce({}, :merge)
 check(input_variables.fetch("timer_seconds", "").include?("default(0"),
       "start script does not apply the optional seconds default at runtime")
@@ -148,6 +173,12 @@ check(paused_actions.any? do |step|
         step["action"] == "idotmatrix.set_countdown" && step.dig("data", "mode") == 2
       end,
       "add-minute no longer re-pauses the native timer")
+check(paused_actions.any? do |step|
+        step["action"] == "input_select.select_option" &&
+          step.dig("target", "entity_id") == "input_select.idotmatrix_timer_status" &&
+          step.dig("data", "option") == "paused"
+      end,
+      "add-minute paused branch no longer finishes with paused status")
 
 automations = package.fetch("automation", [])
 finished = automations.find { |node| node["id"] == "idotmatrix_timer_finished" }

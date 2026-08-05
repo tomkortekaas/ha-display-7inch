@@ -117,6 +117,16 @@ script:
             step: 1
             mode: box
     sequence:
+      - condition: template
+        value_template: >-
+          {% set raw_seconds = seconds if seconds is defined else 0 %}
+          {{ minutes is defined
+             and minutes is number
+             and minutes is not boolean
+             and minutes | float == minutes | int
+             and raw_seconds is number
+             and raw_seconds is not boolean
+             and raw_seconds | float == raw_seconds | int }}
       - variables:
           timer_minutes: "{{ minutes | int(0) }}"
           timer_seconds: "{{ seconds | default(0, true) | int(0) }}"
