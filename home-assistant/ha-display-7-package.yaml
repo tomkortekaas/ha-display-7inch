@@ -101,19 +101,38 @@ script:
         required: true
         selector:
           number:
-            min: 1
+            min: 0
             max: 99
+            step: 1
+            mode: box
+      seconds:
+        name: Seconden
+        description: Aanvullende seconden voor de keukentimer
+        required: false
+        default: 0
+        selector:
+          number:
+            min: 0
+            max: 59
             step: 1
             mode: box
     sequence:
       - variables:
           timer_minutes: "{{ minutes | int(0) }}"
+          timer_seconds: "{{ seconds | default(0, true) | int(0) }}"
+      - variables:
+          total_seconds: "{{ timer_minutes * 60 + timer_seconds }}"
       - condition: template
         value_template: >-
-          {{ 1 <= timer_minutes <= 99 and minutes | float(0) == timer_minutes }}
+          {{ 1 <= total_seconds <= 5999
+             and minutes | float(0) == timer_minutes
+             and seconds | default(0, true) | float(0) == timer_seconds }}
       - condition: state
         entity_id: input_select.idotmatrix_timer_status
         state: idle
+      - variables:
+          normalized_minutes: "{{ (total_seconds | int(0)) // 60 }}"
+          normalized_seconds: "{{ (total_seconds | int(0)) % 60 }}"
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.idotmatrix_actief
@@ -125,18 +144,22 @@ script:
       - action: idotmatrix.set_countdown
         data:
           mode: 1
-          minutes: "{{ timer_minutes }}"
-          seconds: 0
+          minutes: "{{ normalized_minutes }}"
+          seconds: "{{ normalized_seconds }}"
       - action: timer.start
         target:
           entity_id: timer.idotmatrix_timer
         data:
-          duration: "{{ '00:%02d:00' | format(timer_minutes) }}"
+          duration: >-
+            {{ '%02d:%02d:%02d' | format(
+                 (total_seconds | int(0)) // 3600,
+                 ((total_seconds | int(0)) % 3600) // 60,
+                 (total_seconds | int(0)) % 60) }}
       - action: input_number.set_value
         target:
           entity_id: input_number.idotmatrix_timer_minuten
         data:
-          value: "{{ timer_minutes }}"
+          value: "{{ normalized_minutes }}"
       - action: input_select.select_option
         target:
           entity_id: input_select.idotmatrix_timer_status
@@ -210,11 +233,16 @@ script:
       - variables:
           remaining_parts: "{{ remaining.split(':') }}"
           remaining_seconds: >-
-            {{ (remaining_parts[0] | int(0)) * 3600
-               + (remaining_parts[1] | int(0)) * 60
-               + (remaining_parts[2] | float(0) | int) }}
+            {% if original_status == 'running' %}
+              {{ [((as_timestamp(state_attr('timer.idotmatrix_timer', 'finishes_at'), 0)
+                    - as_timestamp(now())) | round(0, 'ceil') | int(0)), 0] | max }}
+            {% else %}
+              {{ (remaining_parts[0] | int(0)) * 3600
+                 + (remaining_parts[1] | int(0)) * 60
+                 + (remaining_parts[2] | float(0) | int) }}
+            {% endif %}
       - variables:
-          new_remaining_seconds: "{{ [(remaining_seconds | int(0)) + 60, 5940] | min }}"
+          new_remaining_seconds: "{{ [(remaining_seconds | int(0)) + 60, 5999] | min }}"
       - action: timer.start
         target:
           entity_id: timer.idotmatrix_timer
@@ -226,7 +254,7 @@ script:
                  (new_remaining_seconds | int(0)) % 60) }}
       - action: idotmatrix.set_countdown
         data:
-          mode: 3
+          mode: 1
           minutes: "{{ (new_remaining_seconds | int(0)) // 60 }}"
           seconds: "{{ (new_remaining_seconds | int(0)) % 60 }}"
       - if:

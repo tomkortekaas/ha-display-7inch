@@ -41,23 +41,56 @@ script_names.each do |name|
 end
 
 start_script = scripts.fetch("idotmatrix_timer_start")
+seconds_field = start_script.dig("fields", "seconds")
+check(seconds_field.is_a?(Hash), "start script has no seconds field")
+check(seconds_field["required"] == false && seconds_field["default"] == 0,
+      "start seconds field must be optional and default to zero")
+seconds_selector = seconds_field.dig("selector", "number")
+check(seconds_selector.is_a?(Hash), "start seconds field has no number selector")
+check(seconds_selector.values_at("min", "max", "step") == [0, 59, 1],
+      "start seconds selector must enforce whole seconds 0..59")
+
 selector = start_script.dig("fields", "minutes", "selector", "number")
 check(selector.is_a?(Hash), "start minutes field has no number selector")
-check(selector.values_at("min", "max", "step") == [1, 99, 1],
-      "start minutes selector must enforce whole minutes 1..99")
+check(selector.values_at("min", "max", "step") == [0, 99, 1],
+      "start minutes selector must allow whole minutes 0..99")
 
 start_sequence = start_script.fetch("sequence")
 first_side_effect_index = start_sequence.index { |step| step.key?("action") }
 check(!first_side_effect_index.nil?, "start script has no side effects")
 
-minutes_guard_index = start_sequence.index do |step|
-  step["condition"] == "template" &&
-    step.fetch("value_template", "").include?("1 <= timer_minutes <= 99") &&
-    step.fetch("value_template", "").include?("minutes | float(0) == timer_minutes")
+input_variables = start_sequence.map { |step| step["variables"] }.compact.reduce({}, :merge)
+check(input_variables.fetch("timer_seconds", "").include?("default(0"),
+      "start script does not apply the optional seconds default at runtime")
+
+total_variables_index = start_sequence.index do |step|
+  variables = step["variables"]
+  variables.is_a?(Hash) &&
+    variables.fetch("total_seconds", "").include?("timer_minutes * 60 + timer_seconds")
 end
-check(!minutes_guard_index.nil?, "start script does not validate whole minutes 1..99")
-check(minutes_guard_index < first_side_effect_index,
-      "start minutes guard must run before all side effects")
+check(!total_variables_index.nil?, "start script does not calculate total seconds")
+
+normalized_variables_index = start_sequence.index do |step|
+  variables = step["variables"]
+  variables.is_a?(Hash) &&
+    variables.fetch("normalized_minutes", "").include?("total_seconds") &&
+    variables.fetch("normalized_minutes", "").include?("// 60") &&
+    variables.fetch("normalized_seconds", "").include?("total_seconds") &&
+    variables.fetch("normalized_seconds", "").include?("% 60")
+end
+check(!normalized_variables_index.nil?, "start script does not normalize minutes and seconds")
+
+duration_guard_index = start_sequence.index do |step|
+  step["condition"] == "template" &&
+    step.fetch("value_template", "").include?("1 <= total_seconds <= 5999") &&
+    step.fetch("value_template", "").include?("minutes | float(0) == timer_minutes") &&
+    step.fetch("value_template", "").include?(
+      "seconds | default(0, true) | float(0) == timer_seconds"
+    )
+end
+check(!duration_guard_index.nil?, "start script does not validate integer input totaling 1..5999 seconds")
+check(duration_guard_index < first_side_effect_index,
+      "start duration guard must run before all side effects")
 
 idle_guard_index = start_sequence.index do |step|
   step["condition"] == "state" &&
@@ -67,6 +100,54 @@ end
 check(!idle_guard_index.nil?, "start script has no idle source-state guard")
 check(idle_guard_index < first_side_effect_index,
       "start idle guard must run before all side effects")
+
+start_native = start_sequence.find { |step| step["action"] == "idotmatrix.set_countdown" }
+check(start_native.is_a?(Hash), "start script has no native countdown action")
+check(start_native.dig("data", "mode") == 1,
+      "start script must send a fresh native countdown start")
+check(start_native.dig("data", "minutes").to_s.include?("normalized_minutes") &&
+      start_native.dig("data", "seconds").to_s.include?("normalized_seconds"),
+      "start native countdown does not use normalized minutes and seconds")
+
+start_ha = start_sequence.find { |step| step["action"] == "timer.start" }
+start_duration = start_ha&.dig("data", "duration").to_s
+check(start_duration.include?("total_seconds") &&
+      start_duration.include?("// 3600") &&
+      start_duration.include?("% 3600") &&
+      start_duration.include?("% 60"),
+      "start HA timer does not use the exact normalized total duration")
+
+add_minute_script = scripts.fetch("idotmatrix_timer_add_minute")
+add_minute_sequence = add_minute_script.fetch("sequence")
+remaining_variables = add_minute_sequence.map { |step| step["variables"] }.compact.reduce({}, :merge)
+running_remaining = remaining_variables.fetch("remaining_seconds", "").to_s
+check(running_remaining.include?("original_status == 'running'") &&
+      running_remaining.include?("finishes_at") &&
+      running_remaining.include?("now()"),
+      "add-minute running duration must derive from finishes_at and now")
+check(running_remaining.include?("remaining_parts"),
+      "add-minute paused duration must derive from fixed remaining")
+
+new_remaining = remaining_variables.fetch("new_remaining_seconds", "").to_s
+check(new_remaining.include?("+ 60") && new_remaining.include?("5999"),
+      "add-minute must add exactly 60 seconds and cap at 5999")
+
+add_native = add_minute_sequence.find { |step| step["action"] == "idotmatrix.set_countdown" }
+check(add_native.is_a?(Hash), "add-minute script has no native countdown action")
+check(add_native.dig("data", "mode") == 1,
+      "add-minute must send a fresh native countdown start with mode 1")
+check(add_native.dig("data", "minutes").to_s.include?("new_remaining_seconds") &&
+      add_native.dig("data", "seconds").to_s.include?("new_remaining_seconds"),
+      "add-minute native countdown does not use the new normalized duration")
+
+paused_branch = add_minute_sequence.find { |step| step.key?("if") }
+paused_actions = paused_branch&.fetch("then", []) || []
+check(paused_actions.any? { |step| step["action"] == "timer.pause" },
+      "add-minute no longer re-pauses the HA timer")
+check(paused_actions.any? do |step|
+        step["action"] == "idotmatrix.set_countdown" && step.dig("data", "mode") == 2
+      end,
+      "add-minute no longer re-pauses the native timer")
 
 automations = package.fetch("automation", [])
 finished = automations.find { |node| node["id"] == "idotmatrix_timer_finished" }
