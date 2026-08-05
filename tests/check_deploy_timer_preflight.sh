@@ -162,7 +162,7 @@ printf 'ssh %s\n' "$*" >>"$DEPLOY_COMMAND_LOG"
 if [[ -n "$payload" ]]; then
   printf '%s\n' "$payload" >>"$DEPLOY_SSH_STDIN_LOG"
 fi
-if [[ "$*" == *"hassio@test-ha"* ]]; then
+if [[ "$*" == *"@test-ha"* ]]; then
   PATH="$DEPLOY_REMOTE_BIN:$PATH" \
     SSH_PREFLIGHT_MODE="$SSH_PREFLIGHT_MODE" \
     DEPLOY_REMOTE_FIXTURE="$DEPLOY_REMOTE_FIXTURE" \
@@ -192,6 +192,20 @@ run_deploy() {
     SSH_PREFLIGHT_MODE="$preflight_mode" \
     DEPLOY_REMOTE_BIN="$remote_bin" \
     DEPLOY_REMOTE_FIXTURE="$remote_fixture" \
+    PATH="$fake_bin:$PATH" \
+    bash "$deploy_script" test-ha test-swipe >"$output_file" 2>&1
+}
+
+run_deploy_as() {
+  local ha_user="$1"
+  local output_file="$2"
+  DEPLOY_COMMAND_LOG="$tmp_dir/commands.log" \
+    DEPLOY_SSH_STDIN_LOG="$tmp_dir/ssh-stdin.log" \
+    DEPLOY_REMOTE_TEMP_LOG="$tmp_dir/remote-temp.log" \
+    SSH_PREFLIGHT_MODE=success \
+    DEPLOY_REMOTE_BIN="$remote_bin" \
+    DEPLOY_REMOTE_FIXTURE="$remote_fixture" \
+    HA_USER="$ha_user" \
     PATH="$fake_bin:$PATH" \
     bash "$deploy_script" test-ha test-swipe >"$output_file" 2>&1
 }
@@ -331,9 +345,29 @@ if grep -Fq '/config/custom_components/idotmatrix' "$tmp_dir/commands.log"; then
   echo "FAIL: deployment must not overwrite custom-component Python" >&2
   exit 1
 fi
-grep -Fq 'home-assistant/ha-display-7-package.yaml root@test-ha:/config/packages/ha_display_7.yaml' \
+grep -Fq 'home-assistant/ha-display-7-package.yaml hassio@test-ha:/config/packages/ha_display_7.yaml' \
   "$tmp_dir/commands.log" || {
-    echo "FAIL: deployment must copy the timer package to /config/packages/ha_display_7.yaml" >&2
+    echo "FAIL: deployment must reuse the verified hassio SSH user for HA copies" >&2
+    exit 1
+  }
+
+grep -Fq "HA_SSH_USER=\"\${HA_SSH_USER:-\$HA_USER}\"" "$deploy_script" || {
+  echo "FAIL: preflight SSH user must inherit the overridable HA deployment user" >&2
+  exit 1
+}
+
+: >"$tmp_dir/commands.log"
+: >"$tmp_dir/ssh-stdin.log"
+: >"$tmp_dir/remote-temp.log"
+run_deploy_as operator "$tmp_dir/override.out"
+override_first_command="$(sed -n '1p' "$tmp_dir/commands.log")"
+[[ "$override_first_command" == *"operator@test-ha"* ]] || {
+  echo "FAIL: HA_USER override must select the preflight SSH account" >&2
+  exit 1
+}
+grep -Fq 'home-assistant/ha-display-7-package.yaml operator@test-ha:/config/packages/ha_display_7.yaml' \
+  "$tmp_dir/commands.log" || {
+    echo "FAIL: HA_USER override must select the HA copy account too" >&2
     exit 1
   }
 

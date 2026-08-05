@@ -181,6 +181,52 @@ check(paused_actions.any? do |step|
       "add-minute paused branch no longer finishes with paused status")
 
 automations = package.fetch("automation", [])
+startup = automations.find { |node| node["id"] == "idotmatrix_timer_startup_reconcile" }
+check(startup.is_a?(Hash), "missing idotmatrix_timer_startup_reconcile automation")
+startup_trigger = startup.fetch("trigger", []).find do |trigger|
+  trigger["trigger"] == "homeassistant" && trigger["event"] == "start"
+end
+check(!startup_trigger.nil?, "startup reconciliation must run on Home Assistant start")
+startup_actions = startup.fetch("action", [])
+alarm_off_index = startup_actions.index do |step|
+  step["action"] == "automation.turn_off" &&
+    step.dig("target", "entity_id") == "automation.idotmatrix_timer_alarmgong"
+end
+idle_index = startup_actions.index do |step|
+  step["action"] == "input_select.select_option" &&
+    step.dig("target", "entity_id") == "input_select.idotmatrix_timer_status" &&
+    step.dig("data", "option") == "idle"
+end
+native_off_index = startup_actions.index do |step|
+  step["action"] == "idotmatrix.set_countdown" &&
+    step.dig("data", "mode") == 0 &&
+    step.dig("data", "minutes") == 0 &&
+    step.dig("data", "seconds") == 0 &&
+    step["continue_on_error"] == true
+end
+minutes_zero_index = startup_actions.index do |step|
+  step["action"] == "input_number.set_value" &&
+    step.dig("target", "entity_id") == "input_number.idotmatrix_timer_minuten" &&
+    step.dig("data", "value") == 0
+end
+rotation_on_index = startup_actions.index do |step|
+  step["action"] == "automation.turn_on" &&
+    step.dig("target", "entity_id") == "automation.idot_rotatie"
+end
+display_on_index = startup_actions.index do |step|
+  step["action"] == "input_boolean.turn_on" &&
+    step.dig("target", "entity_id") == "input_boolean.idotmatrix_actief"
+end
+alarm_on_index = startup_actions.index do |step|
+  step["action"] == "automation.turn_on" &&
+    step.dig("target", "entity_id") == "automation.idotmatrix_timer_alarmgong"
+end
+check([alarm_off_index, idle_index, native_off_index, minutes_zero_index,
+       rotation_on_index, display_on_index, alarm_on_index].none?(&:nil?),
+      "startup reconciliation must stop alarm, reset timer/native state, and resume rotation")
+check(alarm_off_index < idle_index && idle_index < alarm_on_index,
+      "startup reconciliation must silence the alarm loop before idle and re-enable it afterward")
+
 finished = automations.find { |node| node["id"] == "idotmatrix_timer_finished" }
 check(finished.is_a?(Hash), "missing idotmatrix_timer_finished automation")
 finished_trigger = finished.fetch("trigger", []).find do |trigger|

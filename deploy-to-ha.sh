@@ -6,8 +6,10 @@ set -euo pipefail
 
 HA_HOST="${1:-192.168.1.178}"
 SWIPE_HOST="${2:-192.168.1.237}"
-HA_USER="${HA_USER:-root}"
-HA_SSH_USER="${HA_SSH_USER:-hassio}"
+HA_USER="${HA_USER:-hassio}"
+# Gebruik voor preflight en deployment standaard exact hetzelfde geverifieerde
+# SSH-account. HA_SSH_USER blijft apart overschrijfbaar voor uitzonderingen.
+HA_SSH_USER="${HA_SSH_USER:-$HA_USER}"
 SWIPE_USER="${SWIPE_USER:-root}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 

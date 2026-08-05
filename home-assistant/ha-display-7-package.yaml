@@ -1788,6 +1788,49 @@ automation:
     action:
       - action: shell_command.immich_rotate_7inch
 
+  # De HA-timer is bewust niet herstelbaar. Trek bij iedere Core-start daarom ook
+  # de losse statushelper en de native iDot-countdown terug naar dezelfde idle-
+  # toestand. Zet de alarm-automation tijdelijk uit zodat een eventueel lopende
+  # gonglus eerst wordt afgebroken; een onbereikbare iDot mag het overige herstel
+  # niet blokkeren.
+  - alias: "iDotMatrix timer herstellen na HA-start"
+    id: idotmatrix_timer_startup_reconcile
+    mode: single
+    trigger:
+      - trigger: homeassistant
+        event: start
+    action:
+      - action: automation.turn_off
+        target:
+          entity_id: automation.idotmatrix_timer_alarmgong
+        data:
+          stop_actions: true
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.idotmatrix_timer_status
+        data:
+          option: idle
+      - action: idotmatrix.set_countdown
+        continue_on_error: true
+        data:
+          mode: 0
+          minutes: 0
+          seconds: 0
+      - action: input_number.set_value
+        target:
+          entity_id: input_number.idotmatrix_timer_minuten
+        data:
+          value: 0
+      - action: automation.turn_on
+        target:
+          entity_id: automation.idot_rotatie
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.idotmatrix_actief
+      - action: automation.turn_on
+        target:
+          entity_id: automation.idotmatrix_timer_alarmgong
+
   - alias: "iDotMatrix timer afgelopen"
     id: idotmatrix_timer_finished
     mode: single
