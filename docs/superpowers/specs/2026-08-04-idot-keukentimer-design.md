@@ -35,11 +35,13 @@ Het lege timerscherm bevat:
 - een terugknop naar het vorige scherm;
 - een grote tijdweergave;
 - vaste keuzes voor 5, 10, 15 en 20 minuten;
-- een numeriek toetsenbord voor een vrij aantal hele minuten;
+- twee selecteerbare numerieke velden voor minuten (`0–99`) en seconden (`0–59`);
+- een numeriek toetsenbord dat het geselecteerde veld invult;
 - een prominente knop **Start op iDot**.
 
-Een vaste keuze vult de tijd direct in. Numerieke invoer vervangt de gekozen waarde.
-Nul minuten kan niet worden gestart. De eerste versie ondersteunt geen losse seconden.
+Een vaste keuze vult hele minuten in en zet seconden op nul. Numerieke invoer vervangt
+de waarde van het geselecteerde veld. Een timer kan starten zodra de totale duur minimaal
+één seconde is.
 
 ### Lopende timer
 
@@ -52,6 +54,12 @@ Tijdens het aftellen toont het timerscherm de resterende tijd en drie bedieninge
 Stoppen annuleert zonder alarm en herstelt de normale iDot-schermrotatie. De timer blijft
 in Home Assistant lopen wanneer de gebruiker vanaf het timerscherm terug navigeert. Bij
 terugkeer leest het scherm de actuele toestand en resterende tijd opnieuw in.
+
+De zichtbare klok op het 7-inch scherm loopt iedere seconde mee. Home Assistant publiceert
+het `remaining`-attribuut van een actieve timer niet iedere seconde; daarom berekent
+ESPHome de lopende tijd lokaal uit het `finishes_at`-tijdstip. Bij pauzeren gebruikt het
+display de vaste `remaining`-waarde. Iedere nieuwe Home Assistant-statusupdate corrigeert
+de lokale weergave, zodat Home Assistant de gezaghebbende bron blijft.
 
 ### Afgelopen timer
 
@@ -81,7 +89,10 @@ Geldige overgangen:
 - `alarming → idle`: **Alarm uit**.
 
 `+1 minuut` verandert de resterende duur in `running` en `paused`, zonder de overige
-status te wijzigen.
+status te wijzigen. Home Assistant start zijn timer opnieuw met de nieuwe resterende
+duur en stuurt diezelfde minuten/seconden als een nieuwe native countdownstart naar iDot.
+ESPHome werkt de zichtbare tijd direct bij en synchroniseert daarna opnieuw met Home
+Assistant.
 
 ## Architectuur en gegevensstroom
 
@@ -142,12 +153,14 @@ heeft geaccepteerd.
 ## Testcriteria
 
 1. De Timer-tegel staat links direct onder Recepten en opent het timerscherm.
-2. De vaste keuzes en numerieke minuteninvoer starten een geldige timer.
-3. Nul of ongeldige invoer kan niet worden gestart.
+2. De vaste keuzes en afzonderlijke minuten-/secondeninvoer starten een geldige timer.
+3. `00:00`, meer dan 99 minuten of meer dan 59 seconden kan niet worden gestart.
 4. De iDot-rotatie stopt en de aftelling verschijnt op iDot.
-5. Pauzeren, hervatten en `+1 minuut` blijven synchroon op beide schermen.
-6. Stoppen annuleert zonder gong en hervat de iDot-rotatie.
-7. Navigeren of herladen verliest een lopende timer niet.
-8. Bij afloop blijft de gong herhalen en blijft iDot `00:00` tonen.
-9. Alleen **Alarm uit** stopt de gonglus en hervat de iDot-rotatie.
-10. Een mislukte Home Assistant- of iDot-opdracht wordt zichtbaar afgehandeld.
+5. De tijd op het 7-inch scherm telt iedere seconde zichtbaar af en blijft synchroon met
+   Home Assistant en iDot.
+6. Pauzeren, hervatten en `+1 minuut` werken de tijd direct en gelijk bij op beide schermen.
+7. Stoppen annuleert zonder gong en hervat de iDot-rotatie.
+8. Navigeren of herladen verliest een lopende timer niet.
+9. Bij afloop blijft de gong herhalen en blijft iDot `00:00` tonen.
+10. Alleen **Alarm uit** stopt de gonglus en hervat de iDot-rotatie.
+11. Een mislukte Home Assistant- of iDot-opdracht wordt zichtbaar afgehandeld.
