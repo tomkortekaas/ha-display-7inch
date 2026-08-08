@@ -248,7 +248,7 @@ external_components:
   - source:
       type: git
       url: https://github.com/jtenniswood/espcontrol
-      ref: main
+      ref: be900d7b8298c9e08ec03e608613657c4aeb6778
     components: [artwork_image]
     refresh: never
 
