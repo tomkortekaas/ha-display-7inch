@@ -26,6 +26,9 @@ globals:
   - id: immich_art_loaded_url
     type: std::string
     initial_value: '""'
+  - id: immich_art_desired_url
+    type: std::string
+    initial_value: '""'
   - id: immich_art_retry_count
     type: int
     initial_value: '0'
@@ -119,6 +122,10 @@ globals:
   - id: ah_recipe_page_active
     type: bool
     initial_value: 'false'
+  - id: recipe_list_page_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
   - id: ah_recipes_dirty
     type: bool
     restore_value: no
@@ -132,10 +139,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: artwork_busy_ticks
-    type: int
-    restore_value: no
-    initial_value: '0'
   - id: radar_wrap_pending
     type: bool
     restore_value: no
@@ -148,10 +151,14 @@ globals:
     type: int
     restore_value: no
     initial_value: '0'
-  - id: recipe_thumb_inflight_ticks
-    type: int
+  - id: recipe_thumb_inflight_id
+    type: std::string
     restore_value: no
-    initial_value: '0'
+    initial_value: '""'
+  - id: recipe_thumb_loaded_ids
+    type: std::vector<std::string>
+    restore_value: no
+    initial_value: 'std::vector<std::string>(24)'
   - id: touch_swipe_tracking
     type: bool
     restore_value: no
@@ -275,7 +282,7 @@ logger:
   level: INFO
 
 api:
-  reboot_timeout: 5min
+  reboot_timeout: 0s
   on_client_connected:
     - lambda: |-
         if (client_info.find("Home Assistant") == std::string::npos) return;
@@ -912,7 +919,18 @@ text_sensor:
     entity_id: sensor.immich_photo_url
     internal: true
     on_value:
-      - script.execute: immich_photo_load
+      - lambda: |-
+          std::string rel = id(immich_url).state;
+          if (rel.empty() || rel == "unknown" || rel == "unavailable") return;
+          std::string desired =
+            (rel.rfind("http", 0) == 0) ? rel : id(ha_base_url_detected) + rel;
+          if (desired != id(immich_art_desired_url)) id(immich_art_retry_count) = 0;
+          id(immich_art_desired_url) = desired;
+      - if:
+          condition:
+            lambda: 'return id(immich_page_active);'
+          then:
+            - script.execute: immich_photo_load
   - { platform: homeassistant, id: immich_place, entity_id: sensor.immich_place, internal: true }
   - { platform: homeassistant, id: immich_date, entity_id: sensor.immich_date, internal: true }
   - { platform: homeassistant, id: immich_album_txt, entity_id: sensor.immich_album, internal: true }
@@ -1905,242 +1923,362 @@ artwork_image:
       allow_insecure_local_urls: true
       update_interval: never
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_1
           src: recipe_thumb_1
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 1 laad fout"
   - id: recipe_thumb_2
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_2
           src: recipe_thumb_2
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 2 laad fout"
   - id: recipe_thumb_3
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_3
           src: recipe_thumb_3
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 3 laad fout"
   - id: recipe_thumb_4
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_4
           src: recipe_thumb_4
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 4 laad fout"
   - id: recipe_thumb_5
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_5
           src: recipe_thumb_5
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 5 laad fout"
   - id: recipe_thumb_6
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_6
           src: recipe_thumb_6
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 6 laad fout"
   - id: recipe_thumb_7
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_7
           src: recipe_thumb_7
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 7 laad fout"
   - id: recipe_thumb_8
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_8
           src: recipe_thumb_8
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 8 laad fout"
   - id: recipe_thumb_9
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_9
           src: recipe_thumb_9
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 9 laad fout"
   - id: recipe_thumb_10
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_10
           src: recipe_thumb_10
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 10 laad fout"
   - id: recipe_thumb_11
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_11
           src: recipe_thumb_11
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 11 laad fout"
   - id: recipe_thumb_12
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_12
           src: recipe_thumb_12
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 12 laad fout"
   - id: recipe_thumb_13
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_13
           src: recipe_thumb_13
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 13 laad fout"
   - id: recipe_thumb_14
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_14
           src: recipe_thumb_14
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 14 laad fout"
   - id: recipe_thumb_15
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_15
           src: recipe_thumb_15
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 15 laad fout"
   - id: recipe_thumb_16
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_16
           src: recipe_thumb_16
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 16 laad fout"
   - id: recipe_thumb_17
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_17
           src: recipe_thumb_17
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 17 laad fout"
   - id: recipe_thumb_18
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_18
           src: recipe_thumb_18
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 18 laad fout"
   - id: recipe_thumb_19
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_19
           src: recipe_thumb_19
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 19 laad fout"
   - id: recipe_thumb_20
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_20
           src: recipe_thumb_20
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 20 laad fout"
   - id: recipe_thumb_21
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_21
           src: recipe_thumb_21
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 21 laad fout"
   - id: recipe_thumb_22
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_22
           src: recipe_thumb_22
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 22 laad fout"
   - id: recipe_thumb_23
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_23
           src: recipe_thumb_23
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 23 laad fout"
   - id: recipe_thumb_24
     <<: *recipe_thumb_base
     on_download_finished:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: |-
+          int i = id(recipe_thumb_inflight) - 1;
+          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
+          id(recipe_thumb_inflight) = 0;
+          id(recipe_thumb_inflight_id).clear();
+          id(artwork_busy) = false;
       - lvgl.image.update:
           id: img_recept_24
           src: recipe_thumb_24
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;'
+      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
       - logger.log: "Recipe thumbnail 24 laad fout"
 # Let op: recipe_header_art/ingredients_art/steps_art zijn bewust verwijderd.
 # Ingrediënten/stappen zijn platte tekst; die als PNG renderen + downloaden +
@@ -7903,7 +8041,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_1_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_1_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -7950,7 +8088,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_2_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_2_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -7997,7 +8135,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_3_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_3_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8044,7 +8182,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_4_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_4_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8091,7 +8229,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_5_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_5_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8138,7 +8276,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_6_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_6_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8185,7 +8323,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_7_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_7_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8232,7 +8370,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_8_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_8_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8279,7 +8417,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_9_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_9_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8326,7 +8464,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_10_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_10_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8373,7 +8511,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_11_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_11_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8420,7 +8558,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_12_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_12_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8467,7 +8605,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_13_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_13_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8514,7 +8652,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_14_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_14_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8561,7 +8699,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_15_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_15_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8608,7 +8746,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_16_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_16_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8655,7 +8793,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_17_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_17_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8702,7 +8840,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_18_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_18_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8749,7 +8887,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_19_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_19_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8796,7 +8934,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_20_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_20_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8843,7 +8981,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_21_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_21_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8890,7 +9028,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_22_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_22_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8937,7 +9075,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_23_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_23_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -8984,7 +9122,7 @@ lvgl:
                   scrollable: false
                   on_click:
                     then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_24_id).state.c_str(); id(ah_recipe_page_active) = true; id(nav_overlay_countdown) = 0;'
+                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_24_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
                       - lvgl.widget.hide: nav_rail_container
                       - lvgl.widget.hide: top_status_bar
                       - lvgl.widget.show: lbl_recipe_loading
@@ -10117,10 +10255,17 @@ script:
       - lambda: |-
           id(current_display_page) = page_index;
           id(immich_page_active) = (page_index == 4);
+          id(recipe_list_page_active) = (page_index == 5);
           id(weather_page_active) = (page_index == 2);
           id(ah_recipe_page_active) = false;
           id(immich_overlay_countdown) = 0;
           id(nav_overlay_countdown) = 0;
+      - if:
+          condition:
+            lambda: 'return page_index != 4;'
+          then:
+            - script.stop: immich_photo_load
+            - script.stop: immich_photo_retry
       - if:
           condition:
             lambda: 'return page_index == 0;'
@@ -10147,6 +10292,7 @@ script:
           then:
             - lvgl.page.show: page_immich
             - lvgl.widget.hide: immich_controls
+            - script.execute: immich_photo_load
       - if:
           condition:
             lambda: 'return page_index == 5;'
@@ -10718,33 +10864,36 @@ script:
   - id: immich_photo_load
     mode: restart
     then:
-      - lambda: |-
-          std::string rel = id(immich_url).state;
-          if (rel.empty() || rel == "unknown" || rel == "unavailable") return;
-          std::string url = (rel.rfind("http", 0) == 0) ? rel : id(ha_base_url_detected) + rel;
-          if (url == id(immich_art_loaded_url)) return;
-          id(immich_art_loaded_url) = url;
-          id(immich_art_retry_count) = 0;
-      - lvgl.label.update:
-          id: lbl_immich_status
-          text: ""
       - if:
           condition:
-            lambda: 'return !id(artwork_busy);'
+            lambda: |-
+              return id(immich_page_active) &&
+                     !id(immich_art_desired_url).empty() &&
+                     id(immich_art_desired_url) != id(immich_art_loaded_url);
           then:
-            - lambda: 'id(artwork_busy) = true;'
-            - artwork_image.set_url:
-                id: immich_art
-                url: !lambda 'return id(immich_art_loaded_url);'
-          else:
-            # Andere beeldbron is bezig — kort wachten en opnieuw proberen.
-            - delay: 200ms
-            - script.execute: immich_photo_load
+            - lvgl.label.update:
+                id: lbl_immich_status
+                text: ""
+            - if:
+                condition:
+                  lambda: 'return !id(artwork_busy);'
+                then:
+                  - lambda: 'id(artwork_busy) = true;'
+                  - artwork_image.set_url:
+                      id: immich_art
+                      url: !lambda 'return id(immich_art_desired_url);'
+                else:
+                  # Andere beeldbron is bezig — kort wachten en opnieuw proberen.
+                  - delay: 200ms
+                  - script.execute: immich_photo_load
 
   - id: immich_photo_apply
     mode: restart
     then:
-      - lambda: 'id(artwork_busy) = false;'
+      - lambda: |-
+          id(artwork_busy) = false;
+          id(immich_art_loaded_url) = std::string(id(immich_art)->get_url());
+          id(immich_art_retry_count) = 0;
       - lvgl.image.update:
           id: img_immich_photo
           src: immich_art
@@ -10752,6 +10901,7 @@ script:
       - lvgl.label.update:
           id: lbl_immich_status
           text: ""
+      - script.execute: immich_photo_load
 
   - id: immich_photo_retry
     mode: restart
@@ -10759,11 +10909,15 @@ script:
       - lambda: 'id(artwork_busy) = false;'
       - if:
           condition:
-            lambda: 'return id(immich_art_retry_count) < 2;'
+            lambda: 'return id(immich_page_active) && id(immich_art_retry_count) < 1;'
           then:
             - lambda: 'id(immich_art_retry_count)++;'
             - delay: 2s
-            - script.execute: immich_photo_load
+            - if:
+                condition:
+                  lambda: 'return id(immich_page_active);'
+                then:
+                  - script.execute: immich_photo_load
           else:
             - lvgl.label.update:
                 id: lbl_immich_status
@@ -10776,6 +10930,7 @@ script:
           id(doorbell_page_active) = true;
           id(spotify_drawer_open) = false;
           id(immich_page_active) = false;
+          id(recipe_list_page_active) = false;
           id(weather_page_active) = false;
           id(immich_overlay_countdown) = 0;
           id(doorbell_art_retry_count) = 0;
@@ -11001,22 +11156,6 @@ interval:
   # alle 24 image-sensoren in een burst) verzadigen PSRAM-bandbreedte en geven
   # DSI-underrun (blauw scherm). De on_value handlers zetten alleen een pending-bit;
   # deze dispatcher start telkens precies één download en wacht op de callback.
-  # Globale artwork-vergrendeling — failsafe watchdog. Iedere beeldbron
-  # (radar, Immich, Spotify, review, deurbel, receptthumbnails) zet dit vlagje
-  # zelf en maakt het zelf weer vrij; deze watchdog voorkomt alleen dat een
-  # ontbrekende callback het systeem voorgoed blokkeert.
-  - interval: 250ms
-    then:
-      - lambda: |-
-          if (id(artwork_busy)) {
-            if (++id(artwork_busy_ticks) > 40) {
-              id(artwork_busy) = false;
-              id(artwork_busy_ticks) = 0;
-            }
-          } else {
-            id(artwork_busy_ticks) = 0;
-          }
-
   # Recipe thumbnails één voor één downloaden — parallelle downloads (HA stuurt
   # alle 24 image-sensoren in een burst) verzadigen PSRAM-bandbreedte en geven
   # DSI-underrun (blauw scherm). De on_value handlers zetten alleen een pending-bit;
@@ -11024,12 +11163,8 @@ interval:
   - interval: 250ms
     then:
       - lambda: |-
-          if (id(recipe_thumb_inflight) != 0) {
-            // Watchdog: als callbacks uitblijven (~10s), vlag vrijgeven.
-            if (++id(recipe_thumb_inflight_ticks) <= 40) return;
-            id(recipe_thumb_inflight) = 0; id(artwork_busy) = false;
-            id(artwork_busy) = false;
-          }
+          if (!id(recipe_list_page_active)) return;
+          if (id(recipe_thumb_inflight) != 0) return;
           if (id(recipe_thumb_pending) == 0) return;
           // Niet mengen met de detail-load (header/ingredients/steps zijn groot).
           if (id(recipe_load_current).is_running()) return;
@@ -11046,8 +11181,9 @@ interval:
           for (int i = 0; i < 24; i++) {
             if (id(recipe_thumb_pending) & (1UL << i)) {
               id(recipe_thumb_pending) &= ~(1UL << i);
+              if (id(recipe_thumb_loaded_ids)[i] == thumbs[i]->get_url()) continue;
               id(recipe_thumb_inflight) = i + 1;
-              id(recipe_thumb_inflight_ticks) = 0;
+              id(recipe_thumb_inflight_id) = thumbs[i]->get_url();
               id(artwork_busy) = true;
               thumbs[i]->update();
               break;
@@ -11829,9 +11965,6 @@ interval:
             return (int)(v * 100.0f);
 
       # Keuken Amp — ingang-toggle (Lijn in / Spotify)
-      - lambda: |-
-          ESP_LOGI("input_toggle_debug", "keuken_amp_line_in_active = %d (has_state=%d)",
-                   id(keuken_amp_line_in_active).state, id(keuken_amp_line_in_active).has_state());
       - lvgl.obj.update:
           id: spotify_drawer_input_line_btn
           bg_color: !lambda |-
@@ -11844,12 +11977,6 @@ interval:
           id: spotify_drawer_input_spotify_btn
           bg_color: !lambda |-
             return id(keuken_amp_line_in_active).state ? lv_color_hex(0x1A1A1A) : lv_color_hex(0x1ED760);
-      - lambda: |-
-          lv_color_t c = lv_obj_get_style_bg_color(id(spotify_drawer_input_line_btn), LV_PART_MAIN);
-          lv_opa_t o = lv_obj_get_style_bg_opa(id(spotify_drawer_input_line_btn), LV_PART_MAIN);
-          bool hidden = lv_obj_has_flag(id(spotify_drawer_input_line_btn), LV_OBJ_FLAG_HIDDEN);
-          ESP_LOGI("input_toggle_debug", "line_btn readback bg=#%02X%02X%02X opa=%d hidden=%d",
-                   c.red, c.green, c.blue, o, hidden);
       - lvgl.label.update:
           id: spotify_drawer_input_spotify_label
           text_color: !lambda |-
