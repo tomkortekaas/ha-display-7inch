@@ -10,6 +10,8 @@ import { cacheRecipeDetail, getCachedRecipeDetail } from '@/lib/ah-cache'
 
 function dimensionsForMode(mode: string): { width: number; height: number } {
   switch (mode) {
+    case 'thumb':
+      return { width: 96, height: 72 }
     case 'header':
       return { width: 1024, height: 116 }
     case 'ingredients':
@@ -33,6 +35,7 @@ const client = new AhClient({
 })
 
 let fontPromise: Promise<Buffer> | undefined
+const thumbnailCache = new Map<number, Promise<Uint8Array>>()
 
 function getFont() {
   fontPromise ??= readFile(
@@ -400,6 +403,45 @@ async function renderPng(
     .asPng()
 }
 
+async function renderRecipeThumbnail(imageUrl: string): Promise<Uint8Array> {
+  if (!imageUrl) throw new Error('Receptafbeelding ontbreekt')
+
+  const response = await fetch(imageUrl)
+  if (!response.ok) {
+    throw new Error(`Receptafbeelding ophalen mislukt (${response.status})`)
+  }
+
+  const contentType = response.headers.get('content-type') ?? 'image/jpeg'
+  if (!contentType.startsWith('image/')) {
+    throw new Error('Receptafbeelding heeft een ongeldig content-type')
+  }
+
+  const encoded = Buffer.from(await response.arrayBuffer()).toString('base64')
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="96" height="72" viewBox="0 0 96 72">
+      <image href="data:${contentType};base64,${encoded}" width="96" height="72" preserveAspectRatio="xMidYMid slice" />
+    </svg>`
+
+  return new Uint8Array(new Resvg(svg).render().asPng())
+}
+
+async function getRecipeThumbnail(
+  recipeId: number,
+  imageUrl: string,
+): Promise<Uint8Array> {
+  const cached = thumbnailCache.get(recipeId)
+  if (cached) return cached
+
+  const rendering = renderRecipeThumbnail(imageUrl)
+  thumbnailCache.set(recipeId, rendering)
+  try {
+    return await rendering
+  } catch (error) {
+    thumbnailCache.delete(recipeId)
+    throw error
+  }
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> },
@@ -426,6 +468,16 @@ export async function GET(
         if (!cachedRecipe) throw error
         recipe = cachedRecipe
       }
+    }
+
+    if (mode === 'thumb') {
+      const png = await getRecipeThumbnail(recipeId, recipe.imageUrl)
+      return new NextResponse(png, {
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
+        },
+      })
     }
 
     const requestedStep = Number.parseInt(
