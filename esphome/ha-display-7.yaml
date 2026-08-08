@@ -10316,6 +10316,8 @@ script:
       - lambda: |-
           ESP_LOGI("swipe", "close_script called (was open=%d)", id(spotify_drawer_open));
           id(spotify_drawer_open) = false;
+      - script.stop: album_art_load
+      - script.stop: album_art_retry
       - lvgl.widget.hide: spotify_drawer_container
       - script.execute: spotify_drawer_restore_layout_script
 
@@ -10334,6 +10336,7 @@ script:
             - lvgl.widget.hide: top_status_bar
             - script.execute: spotify_drawer_apply_compact_layout_script
             - lvgl.widget.show: spotify_drawer_container
+            - script.execute: album_art_load
             - lambda: 'ESP_LOGI("swipe", "open_script: container shown");'
 
   - id: spotify_drawer_apply_compact_layout_script
@@ -10809,7 +10812,9 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return !id(album_art_pending_url).empty();'
+            lambda: |-
+              return id(spotify_drawer_open) &&
+                     !id(album_art_pending_url).empty();
           then:
             - if:
                 condition:
@@ -10850,7 +10855,7 @@ script:
       - lambda: 'id(artwork_busy) = false;'
       - if:
           condition:
-            lambda: 'return id(album_art_retry_count) < 3;'
+            lambda: 'return id(spotify_drawer_open) && id(album_art_retry_count) < 1;'
           then:
             - lambda: 'id(album_art_retry_count)++;'
             - delay: !lambda |-
