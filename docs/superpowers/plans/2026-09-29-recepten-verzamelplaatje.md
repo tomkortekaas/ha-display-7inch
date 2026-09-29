@@ -611,6 +611,8 @@ git commit -m "feat: compose one thumbnail sheet per display page"
 
 ### Task 4: Display-endpoints
 
+> **Correctie na uitvoering (2026-09-29):** Next.js 16 keurt extra exports uit `route.ts` af bij `next build` ("`cartRefresher` is not a valid Route export field"). De refresher staat daarom in `src/lib/display-cart-refresher.ts`; de route en de test importeren hem daaruit. De code hieronder toont nog de oorspronkelijke opzet. Verder zijn er 4 `tsc`-fouten in `src/app/api/import-recipe/route.test.ts` die al op `main` bestonden; die breken `next build` niet en vallen buiten dit plan.
+
 **Files:**
 - Create: `src/app/api/display/recipes/route.ts`
 - Create: `src/app/api/display/recipes/route.test.ts`
