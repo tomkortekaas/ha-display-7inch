@@ -126,10 +126,43 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: ah_recipes_dirty
+  - id: recipe_list_tab
+    # 0 = Eerder toegevoegd (cart), 1 = Favorieten, 2 = Eigen recepten
+    type: int
+    restore_value: yes
+    initial_value: '0'
+  - id: recipe_list_page
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: recipe_list_pages
+    type: int
+    restore_value: no
+    initial_value: '1'
+  - id: recipe_list_loaded_key
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: recipe_list_ids
+    type: std::vector<std::string>
+    restore_value: no
+    initial_value: 'std::vector<std::string>(10)'
+  - id: recipe_list_recheck_allowed
     type: bool
     restore_value: no
-    initial_value: 'true'
+    initial_value: 'false'
+  - id: recipe_back_from_detail
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: recipe_sheet_pending
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: recipe_sheet_desired_url
+    type: std::string
+    restore_value: no
+    initial_value: '""'
   # Globale vergrendeling: slechts ÉÉN artwork_image-decode tegelijk, device-breed.
   # Zonder dit kunnen onafhankelijke triggers (Immich-achtergrondfoto, Spotify-
   # albumhoes, review-foto's, deurbel-snapshot, weerradar, receptthumbnails)
@@ -143,22 +176,6 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
-  - id: recipe_thumb_pending
-    type: uint32_t
-    restore_value: no
-    initial_value: '0'
-  - id: recipe_thumb_inflight
-    type: int
-    restore_value: no
-    initial_value: '0'
-  - id: recipe_thumb_inflight_id
-    type: std::string
-    restore_value: no
-    initial_value: '""'
-  - id: recipe_thumb_loaded_ids
-    type: std::vector<std::string>
-    restore_value: no
-    initial_value: 'std::vector<std::string>(24)'
   - id: touch_swipe_tracking
     type: bool
     restore_value: no
@@ -421,6 +438,11 @@ touchscreen:
           }
           if (horizontal_swipe && id(spotify_drawer_open) && (from_left_edge || from_drawer_zone) && swipe_right) {
             id(spotify_drawer_close_script).execute();
+            return;
+          }
+          if (horizontal_swipe && id(recipe_list_page_active) && !id(spotify_drawer_open) &&
+              !from_left_edge && !from_right_edge) {
+            id(recipe_list_step)->execute(swipe_left ? 1 : -1);
             return;
           }
           if (abs_dx >= 55 && abs_dx > abs_dy) {
@@ -1086,728 +1108,6 @@ text_sensor:
   - { platform: homeassistant, id: agenda_d6_event_7, entity_id: sensor.familie_agenda_d6_event_7, internal: true }
   - { platform: homeassistant, id: agenda_d6_event_8, entity_id: sensor.familie_agenda_d6_event_8, internal: true }
   - { platform: homeassistant, id: agenda_d6_more, entity_id: sensor.familie_agenda_d6_more, internal: true }
-  - platform: homeassistant
-    id: ha_ah_favorites
-    entity_id: sensor.ah_cart_raw
-    attribute: recipes
-    internal: true
-  - platform: homeassistant
-    id: ha_recipe_tab
-    entity_id: input_select.ah_recipe_tab
-    internal: true
-    on_value:
-      - if:
-          condition:
-            lambda: 'return id(ha_recipe_tab).state == "Eerder toegevoegd aan mandje";'
-          then:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_cart
-                bg_color: 0xFF9020
-                border_color: 0xFF9020
-          else:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_cart
-                bg_color: 0x15151F
-                border_color: 0x28283A
-      - if:
-          condition:
-            lambda: 'return id(ha_recipe_tab).state == "Favorieten";'
-          then:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_favorites
-                bg_color: 0xFF9020
-                border_color: 0xFF9020
-          else:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_favorites
-                bg_color: 0x15151F
-                border_color: 0x28283A
-      - if:
-          condition:
-            lambda: 'return id(ha_recipe_tab).state == "Eigen recepten";'
-          then:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_custom
-                bg_color: 0xFF9020
-                border_color: 0xFF9020
-          else:
-            - lvgl.obj.update:
-                id: btn_recipe_tab_custom
-                bg_color: 0x15151F
-                border_color: 0x28283A
-
-  # AH Recepten — per-slot sensoren (24 recepten × title + id + meta + image)
-  - platform: homeassistant
-    id: ha_recept_1_title
-    entity_id: sensor.ah_recept_1_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_1_id
-    entity_id: sensor.ah_recept_1_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_1_meta
-    entity_id: sensor.ah_recept_1_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_1_image
-    entity_id: sensor.ah_recept_1_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_1_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_1).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 0);
-
-  - platform: homeassistant
-    id: ha_recept_2_title
-    entity_id: sensor.ah_recept_2_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_2_id
-    entity_id: sensor.ah_recept_2_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_2_meta
-    entity_id: sensor.ah_recept_2_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_2_image
-    entity_id: sensor.ah_recept_2_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_2_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_2).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 1);
-
-  - platform: homeassistant
-    id: ha_recept_3_title
-    entity_id: sensor.ah_recept_3_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_3_id
-    entity_id: sensor.ah_recept_3_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_3_meta
-    entity_id: sensor.ah_recept_3_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_3_image
-    entity_id: sensor.ah_recept_3_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_3_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_3).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 2);
-
-  - platform: homeassistant
-    id: ha_recept_4_title
-    entity_id: sensor.ah_recept_4_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_4_id
-    entity_id: sensor.ah_recept_4_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_4_meta
-    entity_id: sensor.ah_recept_4_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_4_image
-    entity_id: sensor.ah_recept_4_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_4_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_4).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 3);
-
-  - platform: homeassistant
-    id: ha_recept_5_title
-    entity_id: sensor.ah_recept_5_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_5_id
-    entity_id: sensor.ah_recept_5_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_5_meta
-    entity_id: sensor.ah_recept_5_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_5_image
-    entity_id: sensor.ah_recept_5_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_5_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_5).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 4);
-
-  - platform: homeassistant
-    id: ha_recept_6_title
-    entity_id: sensor.ah_recept_6_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_6_id
-    entity_id: sensor.ah_recept_6_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_6_meta
-    entity_id: sensor.ah_recept_6_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_6_image
-    entity_id: sensor.ah_recept_6_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_6_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_6).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 5);
-
-  - platform: homeassistant
-    id: ha_recept_7_title
-    entity_id: sensor.ah_recept_7_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_7_id
-    entity_id: sensor.ah_recept_7_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_7_meta
-    entity_id: sensor.ah_recept_7_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_7_image
-    entity_id: sensor.ah_recept_7_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_7_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_7).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 6);
-
-  - platform: homeassistant
-    id: ha_recept_8_title
-    entity_id: sensor.ah_recept_8_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_8_id
-    entity_id: sensor.ah_recept_8_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_8_meta
-    entity_id: sensor.ah_recept_8_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_8_image
-    entity_id: sensor.ah_recept_8_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_8_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_8).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 7);
-
-  - platform: homeassistant
-    id: ha_recept_9_title
-    entity_id: sensor.ah_recept_9_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_9_id
-    entity_id: sensor.ah_recept_9_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_9_meta
-    entity_id: sensor.ah_recept_9_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_9_image
-    entity_id: sensor.ah_recept_9_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_9_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_9).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 8);
-
-  - platform: homeassistant
-    id: ha_recept_10_title
-    entity_id: sensor.ah_recept_10_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_10_id
-    entity_id: sensor.ah_recept_10_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_10_meta
-    entity_id: sensor.ah_recept_10_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_10_image
-    entity_id: sensor.ah_recept_10_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_10_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_10).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 9);
-
-  - platform: homeassistant
-    id: ha_recept_11_title
-    entity_id: sensor.ah_recept_11_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_11_id
-    entity_id: sensor.ah_recept_11_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_11_meta
-    entity_id: sensor.ah_recept_11_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_11_image
-    entity_id: sensor.ah_recept_11_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_11_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_11).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 10);
-
-  - platform: homeassistant
-    id: ha_recept_12_title
-    entity_id: sensor.ah_recept_12_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_12_id
-    entity_id: sensor.ah_recept_12_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_12_meta
-    entity_id: sensor.ah_recept_12_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_12_image
-    entity_id: sensor.ah_recept_12_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_12_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_12).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 11);
-
-  - platform: homeassistant
-    id: ha_recept_13_title
-    entity_id: sensor.ah_recept_13_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_13_id
-    entity_id: sensor.ah_recept_13_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_13_meta
-    entity_id: sensor.ah_recept_13_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_13_image
-    entity_id: sensor.ah_recept_13_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_13_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_13).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 12);
-
-  - platform: homeassistant
-    id: ha_recept_14_title
-    entity_id: sensor.ah_recept_14_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_14_id
-    entity_id: sensor.ah_recept_14_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_14_meta
-    entity_id: sensor.ah_recept_14_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_14_image
-    entity_id: sensor.ah_recept_14_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_14_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_14).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 13);
-
-  - platform: homeassistant
-    id: ha_recept_15_title
-    entity_id: sensor.ah_recept_15_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_15_id
-    entity_id: sensor.ah_recept_15_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_15_meta
-    entity_id: sensor.ah_recept_15_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_15_image
-    entity_id: sensor.ah_recept_15_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_15_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_15).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 14);
-
-  - platform: homeassistant
-    id: ha_recept_16_title
-    entity_id: sensor.ah_recept_16_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_16_id
-    entity_id: sensor.ah_recept_16_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_16_meta
-    entity_id: sensor.ah_recept_16_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_16_image
-    entity_id: sensor.ah_recept_16_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_16_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_16).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 15);
-
-  - platform: homeassistant
-    id: ha_recept_17_title
-    entity_id: sensor.ah_recept_17_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_17_id
-    entity_id: sensor.ah_recept_17_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_17_meta
-    entity_id: sensor.ah_recept_17_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_17_image
-    entity_id: sensor.ah_recept_17_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_17_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_17).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 16);
-
-  - platform: homeassistant
-    id: ha_recept_18_title
-    entity_id: sensor.ah_recept_18_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_18_id
-    entity_id: sensor.ah_recept_18_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_18_meta
-    entity_id: sensor.ah_recept_18_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_18_image
-    entity_id: sensor.ah_recept_18_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_18_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_18).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 17);
-
-  - platform: homeassistant
-    id: ha_recept_19_title
-    entity_id: sensor.ah_recept_19_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_19_id
-    entity_id: sensor.ah_recept_19_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_19_meta
-    entity_id: sensor.ah_recept_19_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_19_image
-    entity_id: sensor.ah_recept_19_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_19_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_19).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 18);
-
-  - platform: homeassistant
-    id: ha_recept_20_title
-    entity_id: sensor.ah_recept_20_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_20_id
-    entity_id: sensor.ah_recept_20_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_20_meta
-    entity_id: sensor.ah_recept_20_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_20_image
-    entity_id: sensor.ah_recept_20_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_20_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_20).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 19);
-
-  - platform: homeassistant
-    id: ha_recept_21_title
-    entity_id: sensor.ah_recept_21_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_21_id
-    entity_id: sensor.ah_recept_21_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_21_meta
-    entity_id: sensor.ah_recept_21_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_21_image
-    entity_id: sensor.ah_recept_21_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_21_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_21).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 20);
-
-  - platform: homeassistant
-    id: ha_recept_22_title
-    entity_id: sensor.ah_recept_22_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_22_id
-    entity_id: sensor.ah_recept_22_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_22_meta
-    entity_id: sensor.ah_recept_22_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_22_image
-    entity_id: sensor.ah_recept_22_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_22_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_22).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 21);
-
-  - platform: homeassistant
-    id: ha_recept_23_title
-    entity_id: sensor.ah_recept_23_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_23_id
-    entity_id: sensor.ah_recept_23_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_23_meta
-    entity_id: sensor.ah_recept_23_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_23_image
-    entity_id: sensor.ah_recept_23_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_23_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_23).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 22);
-
-  - platform: homeassistant
-    id: ha_recept_24_title
-    entity_id: sensor.ah_recept_24_title
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_24_id
-    entity_id: sensor.ah_recept_24_id
-    internal: true
-  - platform: homeassistant
-    id: ha_recept_24_meta
-    entity_id: sensor.ah_recept_24_meta
-    internal: true
-    on_value:
-      - lambda: 'id(ah_recipes_dirty) = true;'
-  - platform: homeassistant
-    id: ha_recept_24_image
-    entity_id: sensor.ah_recept_24_image
-    internal: true
-    on_value:
-      # Alleen URL + pending-bit; de dispatcher-interval downloadt ze één voor één.
-      - lambda: |-
-          std::string url = id(ha_recept_24_image).state.c_str();
-          if (url.empty() || url == "unknown" || url == "unavailable") return;
-          id(recipe_thumb_24).set_url(url);
-          id(recipe_thumb_pending) |= (1UL << 23);
 
 binary_sensor:
   - platform: homeassistant
@@ -1912,374 +1212,36 @@ artwork_image:
       - script.execute: radar_frame_apply
     on_error:
       - script.execute: radar_frame_retry
-  - id: recipe_thumb_1
-    <<: &recipe_thumb_base
-      url: "http://homeassistant.local:8123/local/ha-display/recipe-placeholder.jpg"
-      format: AUTO
-      type: RGB565
-      byte_order: LITTLE_ENDIAN
-      resize: 96x72
-      resize_mode: COVER
-      allow_insecure_local_urls: true
-      update_interval: never
+  # Eén plaatje per receptenpagina: 10 thumbnails van 96x72 onder elkaar.
+  # Losse thumbnail-loads gaven per load kans op een blauwe flits; één load per
+  # pagina met software-decode flitste niet (gemeten op het paneel, 2026-09-29).
+  - id: recipe_sheet
+    url: "http://192.168.1.237:3002/api/display/recipes/sheet"
+    format: JPEG
+    type: RGB565
+    byte_order: LITTLE_ENDIAN
+    resize: 96x720
+    hardware_acceleration: false
+    allow_insecure_local_urls: true
+    update_interval: never
     on_download_finished:
       - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
           id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_1
-          src: recipe_thumb_1
+          // Intussen verder gebladerd: dit plaatje hoort niet meer bij de kaarten.
+          if (id(recipe_sheet)->get_url() != id(recipe_sheet_desired_url)) return;
+          static lv_obj_t *const imgs[10] = {id(img_recept_1), id(img_recept_2), id(img_recept_3), id(img_recept_4), id(img_recept_5), id(img_recept_6), id(img_recept_7), id(img_recept_8), id(img_recept_9), id(img_recept_10)};
+          for (int i = 0; i < 10; i++) {
+            lv_image_set_src(imgs[i], id(recipe_sheet)->get_lv_image_dsc());
+            lv_image_set_inner_align(imgs[i], LV_IMAGE_ALIGN_TOP_LEFT);
+            lv_image_set_offset_y(imgs[i], -72 * i);
+            if (!id(recipe_list_ids)[i].empty()) lv_obj_clear_flag(imgs[i], LV_OBJ_FLAG_HIDDEN);
+          }
     on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 1 laad fout"
-  - id: recipe_thumb_2
-    <<: *recipe_thumb_base
-    on_download_finished:
       - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
           id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_2
-          src: recipe_thumb_2
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 2 laad fout"
-  - id: recipe_thumb_3
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_3
-          src: recipe_thumb_3
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 3 laad fout"
-  - id: recipe_thumb_4
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_4
-          src: recipe_thumb_4
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 4 laad fout"
-  - id: recipe_thumb_5
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_5
-          src: recipe_thumb_5
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 5 laad fout"
-  - id: recipe_thumb_6
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_6
-          src: recipe_thumb_6
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 6 laad fout"
-  - id: recipe_thumb_7
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_7
-          src: recipe_thumb_7
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 7 laad fout"
-  - id: recipe_thumb_8
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_8
-          src: recipe_thumb_8
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 8 laad fout"
-  - id: recipe_thumb_9
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_9
-          src: recipe_thumb_9
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 9 laad fout"
-  - id: recipe_thumb_10
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_10
-          src: recipe_thumb_10
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 10 laad fout"
-  - id: recipe_thumb_11
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_11
-          src: recipe_thumb_11
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 11 laad fout"
-  - id: recipe_thumb_12
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_12
-          src: recipe_thumb_12
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 12 laad fout"
-  - id: recipe_thumb_13
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_13
-          src: recipe_thumb_13
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 13 laad fout"
-  - id: recipe_thumb_14
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_14
-          src: recipe_thumb_14
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 14 laad fout"
-  - id: recipe_thumb_15
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_15
-          src: recipe_thumb_15
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 15 laad fout"
-  - id: recipe_thumb_16
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_16
-          src: recipe_thumb_16
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 16 laad fout"
-  - id: recipe_thumb_17
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_17
-          src: recipe_thumb_17
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 17 laad fout"
-  - id: recipe_thumb_18
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_18
-          src: recipe_thumb_18
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 18 laad fout"
-  - id: recipe_thumb_19
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_19
-          src: recipe_thumb_19
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 19 laad fout"
-  - id: recipe_thumb_20
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_20
-          src: recipe_thumb_20
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 20 laad fout"
-  - id: recipe_thumb_21
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_21
-          src: recipe_thumb_21
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 21 laad fout"
-  - id: recipe_thumb_22
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_22
-          src: recipe_thumb_22
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 22 laad fout"
-  - id: recipe_thumb_23
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_23
-          src: recipe_thumb_23
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 23 laad fout"
-  - id: recipe_thumb_24
-    <<: *recipe_thumb_base
-    on_download_finished:
-      - lambda: |-
-          int i = id(recipe_thumb_inflight) - 1;
-          if (i >= 0 && i < 24) id(recipe_thumb_loaded_ids)[i] = id(recipe_thumb_inflight_id);
-          id(recipe_thumb_inflight) = 0;
-          id(recipe_thumb_inflight_id).clear();
-          id(artwork_busy) = false;
-      - lvgl.image.update:
-          id: img_recept_24
-          src: recipe_thumb_24
-    on_error:
-      - lambda: 'id(recipe_thumb_inflight) = 0; id(recipe_thumb_inflight_id).clear(); id(artwork_busy) = false;'
-      - logger.log: "Recipe thumbnail 24 laad fout"
+          // Volgende keer openen/bladeren opnieuw proberen.
+          id(recipe_list_loaded_key).clear();
+      - logger.log: "Receptenplaatje laad fout"
 # Let op: recipe_header_art/ingredients_art/steps_art zijn bewust verwijderd.
 # Ingrediënten/stappen zijn platte tekst; die als PNG renderen + downloaden +
 # op het ESP32 decoderen naar RGB565 kostte tot ~2,9MB (664x2200) aan PSRAM-
@@ -7899,7 +6861,7 @@ lvgl:
                         text: "X"
 
     # ===========================================================
-    # PAGINA 6: AH RECEPTEN — FAVORIETENLIJST
+    # PAGINA 6: AH RECEPTEN — 10 per pagina uit recipe-hub
     # ===========================================================
     - id: page_recepten
       bg_color: 0x000000
@@ -7915,11 +6877,7 @@ lvgl:
             bg_opa: COVER
             border_width: 0
             pad_all: 0
-            scrollable: true
-            scroll_dir: VER
-            scrollbar_mode: AUTO
-            scroll_momentum: true
-            scroll_elastic: true
+            scrollable: false
             on_click:
               - if:
                   condition:
@@ -7934,11 +6892,14 @@ lvgl:
                   text_color: 0xFFFFFF
                   text: "Recepten"
               - label:
+                  id: lbl_recipe_count
                   x: 190
                   y: 30
+                  width: 160
+                  long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0xFF9020
-                  text: "24 recepten"
+                  text: ""
               - button:
                   id: btn_recipe_tab_cart
                   x: 360
@@ -7957,11 +6918,9 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
                           - script.execute: nav_overlay_show
-                    - homeassistant.action:
-                        action: input_select.select_option
-                        data:
-                          entity_id: input_select.ah_recipe_tab
-                          option: "Eerder toegevoegd aan mandje"
+                          - script.execute:
+                              id: recipe_list_select_tab
+                              tab: 0
                   widgets:
                     - label:
                         align: CENTER
@@ -7986,11 +6945,9 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
                           - script.execute: nav_overlay_show
-                    - homeassistant.action:
-                        action: input_select.select_option
-                        data:
-                          entity_id: input_select.ah_recipe_tab
-                          option: "Favorieten"
+                          - script.execute:
+                              id: recipe_list_select_tab
+                              tab: 1
                   widgets:
                     - label:
                         align: CENTER
@@ -8015,11 +6972,9 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
                           - script.execute: nav_overlay_show
-                    - homeassistant.action:
-                        action: input_select.select_option
-                        data:
-                          entity_id: input_select.ah_recipe_tab
-                          option: "Eigen recepten"
+                          - script.execute:
+                              id: recipe_list_select_tab
+                              tab: 2
                   widgets:
                     - label:
                         align: CENTER
@@ -8031,7 +6986,7 @@ lvgl:
                   x: 32
                   y: 74
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8039,31 +6994,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_1_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[0].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[0]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_1
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_1
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_1_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_1_meta
                         x: 122
@@ -8078,7 +7038,7 @@ lvgl:
                   x: 528
                   y: 74
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8086,31 +7046,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_2_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[1].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[1]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_2
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_2
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_2_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_2_meta
                         x: 122
@@ -8123,9 +7088,9 @@ lvgl:
               - button:
                   id: btn_recept_3
                   x: 32
-                  y: 176
+                  y: 170
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8133,31 +7098,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_3_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[2].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[2]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_3
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_3
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_3_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_3_meta
                         x: 122
@@ -8170,9 +7140,9 @@ lvgl:
               - button:
                   id: btn_recept_4
                   x: 528
-                  y: 176
+                  y: 170
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8180,31 +7150,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_4_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[3].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[3]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_4
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_4
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_4_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_4_meta
                         x: 122
@@ -8217,9 +7192,9 @@ lvgl:
               - button:
                   id: btn_recept_5
                   x: 32
-                  y: 278
+                  y: 266
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8227,31 +7202,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_5_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[4].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[4]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_5
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_5
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_5_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_5_meta
                         x: 122
@@ -8264,9 +7244,9 @@ lvgl:
               - button:
                   id: btn_recept_6
                   x: 528
-                  y: 278
+                  y: 266
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8274,31 +7254,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_6_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[5].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[5]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_6
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_6
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_6_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_6_meta
                         x: 122
@@ -8311,9 +7296,9 @@ lvgl:
               - button:
                   id: btn_recept_7
                   x: 32
-                  y: 380
+                  y: 362
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8321,31 +7306,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_7_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[6].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[6]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_7
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_7
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_7_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_7_meta
                         x: 122
@@ -8358,9 +7348,9 @@ lvgl:
               - button:
                   id: btn_recept_8
                   x: 528
-                  y: 380
+                  y: 362
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8368,31 +7358,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_8_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[7].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[7]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_8
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_8
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_8_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_8_meta
                         x: 122
@@ -8405,9 +7400,9 @@ lvgl:
               - button:
                   id: btn_recept_9
                   x: 32
-                  y: 482
+                  y: 458
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8415,31 +7410,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_9_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[8].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[8]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_9
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_9
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_9_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_9_meta
                         x: 122
@@ -8452,9 +7452,9 @@ lvgl:
               - button:
                   id: btn_recept_10
                   x: 528
-                  y: 482
+                  y: 458
                   width: 464
-                  height: 88
+                  height: 86
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -8462,31 +7462,36 @@ lvgl:
                   border_color: 0x28283A
                   pad_all: 0
                   scrollable: false
+                  hidden: true
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_10_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[9].empty();'
+                        then:
+                          - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[9]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
+                          - lvgl.widget.hide: nav_rail_container
+                          - lvgl.widget.hide: top_status_bar
+                          - lvgl.widget.show: lbl_recipe_loading
+                          - lvgl.page.show: page_recipe_detail
+                          - script.execute: recipe_load_current
                   widgets:
                     - image:
                         id: img_recept_10
                         x: 8
-                        y: 8
+                        y: 7
                         width: 96
                         height: 72
-                        src: recipe_thumb_10
+                        src: recipe_sheet
+                        hidden: true
                     - label:
                         id: lbl_recept_10_title
                         x: 122
                         y: 14
-                        width: 300
+                        width: 320
                         text_font: font_roboto_16
                         text_color: 0xF2F2F2
                         long_mode: DOT
-                        text: "—"
+                        text: ""
                     - label:
                         id: lbl_recept_10_meta
                         x: 122
@@ -8497,663 +7502,60 @@ lvgl:
                         long_mode: DOT
                         text: ""
               - button:
-                  id: btn_recept_11
+                  id: btn_recipe_prev
                   x: 32
-                  y: 584
-                  width: 464
-                  height: 88
+                  y: 556
+                  width: 200
+                  height: 40
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
                   border_width: 1
                   border_color: 0x28283A
                   pad_all: 0
-                  scrollable: false
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_11_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - script.execute:
+                        id: recipe_list_step
+                        delta: -1
                   widgets:
-                    - image:
-                        id: img_recept_11
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_11
                     - label:
-                        id: lbl_recept_11_title
-                        x: 122
-                        y: 14
-                        width: 300
+                        id: lbl_recipe_prev
+                        align: CENTER
                         text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_11_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
+                        text_color: 0x555566
+                        text: "‹  Vorige"
+              - label:
+                  id: lbl_recipe_page
+                  x: 262
+                  y: 566
+                  width: 500
+                  text_align: CENTER
+                  text_font: font_roboto_16
+                  text_color: 0xA0A0A0
+                  text: ""
               - button:
-                  id: btn_recept_12
-                  x: 528
-                  y: 584
-                  width: 464
-                  height: 88
+                  id: btn_recipe_next
+                  x: 792
+                  y: 556
+                  width: 200
+                  height: 40
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
                   border_width: 1
                   border_color: 0x28283A
                   pad_all: 0
-                  scrollable: false
                   on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_12_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
+                    - script.execute:
+                        id: recipe_list_step
+                        delta: 1
                   widgets:
-                    - image:
-                        id: img_recept_12
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_12
                     - label:
-                        id: lbl_recept_12_title
-                        x: 122
-                        y: 14
-                        width: 300
+                        id: lbl_recipe_next
+                        align: CENTER
                         text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_12_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_13
-                  x: 32
-                  y: 686
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_13_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_13
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_13
-                    - label:
-                        id: lbl_recept_13_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_13_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_14
-                  x: 528
-                  y: 686
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_14_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_14
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_14
-                    - label:
-                        id: lbl_recept_14_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_14_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_15
-                  x: 32
-                  y: 788
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_15_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_15
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_15
-                    - label:
-                        id: lbl_recept_15_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_15_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_16
-                  x: 528
-                  y: 788
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_16_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_16
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_16
-                    - label:
-                        id: lbl_recept_16_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_16_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_17
-                  x: 32
-                  y: 890
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_17_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_17
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_17
-                    - label:
-                        id: lbl_recept_17_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_17_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_18
-                  x: 528
-                  y: 890
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_18_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_18
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_18
-                    - label:
-                        id: lbl_recept_18_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_18_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_19
-                  x: 32
-                  y: 992
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_19_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_19
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_19
-                    - label:
-                        id: lbl_recept_19_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_19_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_20
-                  x: 528
-                  y: 992
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_20_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_20
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_20
-                    - label:
-                        id: lbl_recept_20_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_20_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_21
-                  x: 32
-                  y: 1094
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_21_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_21
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_21
-                    - label:
-                        id: lbl_recept_21_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_21_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_22
-                  x: 528
-                  y: 1094
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_22_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_22
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_22
-                    - label:
-                        id: lbl_recept_22_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_22_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_23
-                  x: 32
-                  y: 1196
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_23_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_23
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_23
-                    - label:
-                        id: lbl_recept_23_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_23_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
-              - button:
-                  id: btn_recept_24
-                  x: 528
-                  y: 1196
-                  width: 464
-                  height: 88
-                  radius: 8
-                  bg_color: 0x15151F
-                  bg_opa: COVER
-                  border_width: 1
-                  border_color: 0x28283A
-                  pad_all: 0
-                  scrollable: false
-                  on_click:
-                    then:
-                      - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(ha_recept_24_id).state.c_str(); id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                      - lvgl.widget.hide: nav_rail_container
-                      - lvgl.widget.hide: top_status_bar
-                      - lvgl.widget.show: lbl_recipe_loading
-                      - lvgl.page.show: page_recipe_detail
-                      - script.execute: recipe_load_current
-                  widgets:
-                    - image:
-                        id: img_recept_24
-                        x: 8
-                        y: 8
-                        width: 96
-                        height: 72
-                        src: recipe_thumb_24
-                    - label:
-                        id: lbl_recept_24_title
-                        x: 122
-                        y: 14
-                        width: 300
-                        text_font: font_roboto_16
-                        text_color: 0xF2F2F2
-                        long_mode: DOT
-                        text: "—"
-                    - label:
-                        id: lbl_recept_24_meta
-                        x: 122
-                        y: 48
-                        width: 240
-                        text_font: font_roboto_16
-                        text_color: 0xA0A0A0
-                        long_mode: DOT
-                        text: ""
+                        text_color: 0x555566
+                        text: "Volgende  ›"
 
 
     # ===========================================================
@@ -9898,6 +8300,7 @@ lvgl:
             border_color: 0x333344
             on_click:
               then:
+                - lambda: 'id(recipe_back_from_detail) = true;'
                 - script.execute:
                     id: goto_page
                     page_index: 5
@@ -10298,6 +8701,15 @@ script:
             lambda: 'return page_index == 5;'
           then:
             - lvgl.page.show: page_recepten
+            - if:
+                condition:
+                  lambda: 'return id(recipe_back_from_detail);'
+                then:
+                  - lambda: 'id(recipe_back_from_detail) = false;'
+                else:
+                  - lambda: 'id(recipe_list_page) = 0; id(recipe_list_recheck_allowed) = true;'
+                  - script.execute: recipe_tab_colors
+                  - script.execute: recipe_list_load
       - if:
           condition:
             lambda: 'return page_index == 6;'
@@ -11076,6 +9488,142 @@ script:
                 id: lbl_radar_frame
                 text: "radar offline"
 
+  - id: recipe_tab_colors
+    then:
+      - lambda: |-
+          static lv_obj_t *const tabs[3] = {id(btn_recipe_tab_cart), id(btn_recipe_tab_favorites), id(btn_recipe_tab_custom)};
+          for (int i = 0; i < 3; i++) {
+            const bool active = (i == id(recipe_list_tab));
+            lv_obj_set_style_bg_color(tabs[i], lv_color_hex(active ? 0xFF9020 : 0x15151F), LV_PART_MAIN);
+            lv_obj_set_style_border_color(tabs[i], lv_color_hex(active ? 0xFF9020 : 0x28283A), LV_PART_MAIN);
+          }
+
+  - id: recipe_list_select_tab
+    parameters:
+      tab: int
+    then:
+      - lambda: 'id(recipe_list_tab) = tab; id(recipe_list_page) = 0; id(recipe_list_recheck_allowed) = true;'
+      - script.execute: recipe_tab_colors
+      - script.execute: recipe_list_load
+
+  - id: recipe_list_step
+    parameters:
+      delta: int
+    then:
+      - if:
+          condition:
+            lambda: |-
+              const int next = id(recipe_list_page) + delta;
+              return next >= 0 && next < id(recipe_list_pages);
+          then:
+            - lambda: 'id(recipe_list_page) += delta;'
+            - script.execute: recipe_list_load
+
+  # recipe-hub ververst "Eerder toegevoegd" op de achtergrond; één keer
+  # opnieuw vragen haalt een net in de AH-app gekozen recept binnen.
+  - id: recipe_list_recheck
+    mode: restart
+    then:
+      - delay: 5s
+      - if:
+          condition:
+            lambda: 'return id(recipe_list_page_active) && id(recipe_list_page) == 0;'
+          then:
+            - script.execute: recipe_list_load
+
+  # restart: snel doorbladeren laadt alleen de laatst gekozen pagina.
+  - id: recipe_list_load
+    mode: restart
+    then:
+      - http_request.get:
+          url: !lambda |-
+            static const char *const lists[3] = {"cart", "favorites", "custom"};
+            const int tab = (id(recipe_list_tab) >= 0 && id(recipe_list_tab) <= 2) ? id(recipe_list_tab) : 0;
+            char url[128];
+            snprintf(url, sizeof(url), "http://192.168.1.237:3002/api/display/recipes?list=%s&page=%d",
+                     lists[tab], id(recipe_list_page));
+            return std::string(url);
+          capture_response: true
+          max_response_buffer_size: 8kB
+          on_response:
+            then:
+              - lambda: |-
+                  if (response->status_code != 200) {
+                    ESP_LOGW("recipe_list", "lijst ophalen mislukt: %d", response->status_code);
+                    lv_label_set_text(id(lbl_recipe_count), "Niet bereikbaar");
+                    return;
+                  }
+                  static lv_obj_t *const cards[10] = {id(btn_recept_1), id(btn_recept_2), id(btn_recept_3), id(btn_recept_4), id(btn_recept_5), id(btn_recept_6), id(btn_recept_7), id(btn_recept_8), id(btn_recept_9), id(btn_recept_10)};
+                  static lv_obj_t *const titles[10] = {id(lbl_recept_1_title), id(lbl_recept_2_title), id(lbl_recept_3_title), id(lbl_recept_4_title), id(lbl_recept_5_title), id(lbl_recept_6_title), id(lbl_recept_7_title), id(lbl_recept_8_title), id(lbl_recept_9_title), id(lbl_recept_10_title)};
+                  static lv_obj_t *const metas[10] = {id(lbl_recept_1_meta), id(lbl_recept_2_meta), id(lbl_recept_3_meta), id(lbl_recept_4_meta), id(lbl_recept_5_meta), id(lbl_recept_6_meta), id(lbl_recept_7_meta), id(lbl_recept_8_meta), id(lbl_recept_9_meta), id(lbl_recept_10_meta)};
+                  static lv_obj_t *const imgs[10] = {id(img_recept_1), id(img_recept_2), id(img_recept_3), id(img_recept_4), id(img_recept_5), id(img_recept_6), id(img_recept_7), id(img_recept_8), id(img_recept_9), id(img_recept_10)};
+                  static const char *const lists[3] = {"cart", "favorites", "custom"};
+                  bool refreshing = false;
+                  const bool ok = json::parse_json(body, [&](JsonObject root) -> bool {
+                    const int page = root["page"] | 0;
+                    const int pages = root["pages"] | 1;
+                    const int total = root["total"] | 0;
+                    const std::string version = root["version"] | "";
+                    refreshing = root["refreshing"] | false;
+                    const int tab = (id(recipe_list_tab) >= 0 && id(recipe_list_tab) <= 2) ? id(recipe_list_tab) : 0;
+
+                    id(recipe_list_page) = page;
+                    id(recipe_list_pages) = pages < 1 ? 1 : pages;
+                    char buf[48];
+                    snprintf(buf, sizeof(buf), "%d recepten", total);
+                    lv_label_set_text(id(lbl_recipe_count), buf);
+                    snprintf(buf, sizeof(buf), "Pagina %d van %d", page + 1, id(recipe_list_pages));
+                    lv_label_set_text(id(lbl_recipe_page), buf);
+                    lv_obj_set_style_text_color(id(lbl_recipe_prev),
+                        lv_color_hex(page > 0 ? 0xFFFFFF : 0x555566), LV_PART_MAIN);
+                    lv_obj_set_style_text_color(id(lbl_recipe_next),
+                        lv_color_hex(page + 1 < id(recipe_list_pages) ? 0xFFFFFF : 0x555566), LV_PART_MAIN);
+
+                    // Ongewijzigde pagina (zelfde tab, pagina en versie): niets hertekenen.
+                    char key[64];
+                    snprintf(key, sizeof(key), "%d:%d:%s", tab, page, version.c_str());
+                    if (id(recipe_list_loaded_key) == key) return true;
+                    id(recipe_list_loaded_key) = key;
+
+                    JsonArray recipes = root["recipes"].as<JsonArray>();
+                    for (int i = 0; i < 10; i++) {
+                      lv_obj_add_flag(imgs[i], LV_OBJ_FLAG_HIDDEN);
+                      if (i < (int) recipes.size()) {
+                        JsonObject recipe = recipes[i];
+                        id(recipe_list_ids)[i] = recipe["id"] | "";
+                        lv_label_set_text(titles[i], recipe["title"] | "");
+                        snprintf(buf, sizeof(buf), "%d min  \xc2\xb7  %d p",
+                                 (int) (recipe["duration"] | 0), (int) (recipe["servings"] | 0));
+                        lv_label_set_text(metas[i], buf);
+                        lv_obj_clear_flag(cards[i], LV_OBJ_FLAG_HIDDEN);
+                      } else {
+                        id(recipe_list_ids)[i].clear();
+                        lv_obj_add_flag(cards[i], LV_OBJ_FLAG_HIDDEN);
+                      }
+                    }
+
+                    char url[160];
+                    snprintf(url, sizeof(url),
+                             "http://192.168.1.237:3002/api/display/recipes/sheet?list=%s&page=%d&v=%s",
+                             lists[tab], page, version.c_str());
+                    id(recipe_sheet_desired_url) = url;
+                    id(recipe_sheet_pending) = true;
+                    return true;
+                  });
+                  if (!ok) {
+                    lv_label_set_text(id(lbl_recipe_count), "Niet bereikbaar");
+                    return;
+                  }
+                  if (refreshing && id(recipe_list_page) == 0 && id(recipe_list_recheck_allowed)) {
+                    id(recipe_list_recheck_allowed) = false;
+                    id(recipe_list_recheck).execute();
+                  }
+          on_error:
+            then:
+              - lambda: |-
+                  ESP_LOGW("recipe_list", "recipe-hub niet bereikbaar");
+                  lv_label_set_text(id(lbl_recipe_count), "Niet bereikbaar");
+
   - id: recipe_load_current
     # restart: nieuwe recept-tik onderbreekt de lopende load.
     # Ingrediënten/stappen zijn platte tekst — één lichte JSON-fetch i.p.v.
@@ -11157,78 +9705,16 @@ interval:
     then:
       - script.execute: timer_display_tick
 
-  # Recipe thumbnails één voor één downloaden — parallelle downloads (HA stuurt
-  # alle 24 image-sensoren in een burst) verzadigen PSRAM-bandbreedte en geven
-  # DSI-underrun (blauw scherm). De on_value handlers zetten alleen een pending-bit;
-  # deze dispatcher start telkens precies één download en wacht op de callback.
-  # Recipe thumbnails één voor één downloaden — parallelle downloads (HA stuurt
-  # alle 24 image-sensoren in een burst) verzadigen PSRAM-bandbreedte en geven
-  # DSI-underrun (blauw scherm). De on_value handlers zetten alleen een pending-bit;
-  # deze dispatcher start telkens precies één download en wacht op de callback.
-  - interval: 250ms
+  # Receptenplaatje laden zodra de pagina zichtbaar is en geen andere
+  # artwork-decode loopt (globale artwork_busy-vergrendeling).
+  - interval: 100ms
     then:
       - lambda: |-
-          if (!id(recipe_list_page_active)) return;
-          if (id(recipe_thumb_inflight) != 0) return;
-          if (id(recipe_thumb_pending) == 0) return;
-          // Niet mengen met de detail-load (header/ingredients/steps zijn groot).
-          if (id(recipe_load_current).is_running()) return;
-          // Niet mengen met andere beeldbronnen (radar, Immich, Spotify, ...).
-          if (id(artwork_busy)) return;
-          static esphome::artwork_image::ArtworkImage *const thumbs[24] = {
-            id(recipe_thumb_1),  id(recipe_thumb_2),  id(recipe_thumb_3),  id(recipe_thumb_4),
-            id(recipe_thumb_5),  id(recipe_thumb_6),  id(recipe_thumb_7),  id(recipe_thumb_8),
-            id(recipe_thumb_9),  id(recipe_thumb_10), id(recipe_thumb_11), id(recipe_thumb_12),
-            id(recipe_thumb_13), id(recipe_thumb_14), id(recipe_thumb_15), id(recipe_thumb_16),
-            id(recipe_thumb_17), id(recipe_thumb_18), id(recipe_thumb_19), id(recipe_thumb_20),
-            id(recipe_thumb_21), id(recipe_thumb_22), id(recipe_thumb_23), id(recipe_thumb_24),
-          };
-          for (int i = 0; i < 24; i++) {
-            if (id(recipe_thumb_pending) & (1UL << i)) {
-              id(recipe_thumb_pending) &= ~(1UL << i);
-              if (id(recipe_thumb_loaded_ids)[i] == thumbs[i]->get_url()) continue;
-              id(recipe_thumb_inflight) = i + 1;
-              id(recipe_thumb_inflight_id) = thumbs[i]->get_url();
-              id(artwork_busy) = true;
-              thumbs[i]->update();
-              break;
-            }
-          }
-
-  # AH receptenlijst — batch tekstupdates zodat HA sensor-bursts niet 48 losse LVGL redraws doen.
-  - interval: 1s
-    then:
-      - lambda: |-
-          if (!id(ah_recipes_dirty)) return;
-          id(ah_recipes_dirty) = false;
-          auto set_recipe_text = [](lv_obj_t *title, lv_obj_t *meta, const std::string &title_text, const std::string &meta_text) {
-            lv_label_set_text(title, title_text.c_str());
-            lv_label_set_text(meta, meta_text.c_str());
-          };
-          set_recipe_text(id(lbl_recept_1_title), id(lbl_recept_1_meta), id(ha_recept_1_title).state, id(ha_recept_1_meta).state);
-          set_recipe_text(id(lbl_recept_2_title), id(lbl_recept_2_meta), id(ha_recept_2_title).state, id(ha_recept_2_meta).state);
-          set_recipe_text(id(lbl_recept_3_title), id(lbl_recept_3_meta), id(ha_recept_3_title).state, id(ha_recept_3_meta).state);
-          set_recipe_text(id(lbl_recept_4_title), id(lbl_recept_4_meta), id(ha_recept_4_title).state, id(ha_recept_4_meta).state);
-          set_recipe_text(id(lbl_recept_5_title), id(lbl_recept_5_meta), id(ha_recept_5_title).state, id(ha_recept_5_meta).state);
-          set_recipe_text(id(lbl_recept_6_title), id(lbl_recept_6_meta), id(ha_recept_6_title).state, id(ha_recept_6_meta).state);
-          set_recipe_text(id(lbl_recept_7_title), id(lbl_recept_7_meta), id(ha_recept_7_title).state, id(ha_recept_7_meta).state);
-          set_recipe_text(id(lbl_recept_8_title), id(lbl_recept_8_meta), id(ha_recept_8_title).state, id(ha_recept_8_meta).state);
-          set_recipe_text(id(lbl_recept_9_title), id(lbl_recept_9_meta), id(ha_recept_9_title).state, id(ha_recept_9_meta).state);
-          set_recipe_text(id(lbl_recept_10_title), id(lbl_recept_10_meta), id(ha_recept_10_title).state, id(ha_recept_10_meta).state);
-          set_recipe_text(id(lbl_recept_11_title), id(lbl_recept_11_meta), id(ha_recept_11_title).state, id(ha_recept_11_meta).state);
-          set_recipe_text(id(lbl_recept_12_title), id(lbl_recept_12_meta), id(ha_recept_12_title).state, id(ha_recept_12_meta).state);
-          set_recipe_text(id(lbl_recept_13_title), id(lbl_recept_13_meta), id(ha_recept_13_title).state, id(ha_recept_13_meta).state);
-          set_recipe_text(id(lbl_recept_14_title), id(lbl_recept_14_meta), id(ha_recept_14_title).state, id(ha_recept_14_meta).state);
-          set_recipe_text(id(lbl_recept_15_title), id(lbl_recept_15_meta), id(ha_recept_15_title).state, id(ha_recept_15_meta).state);
-          set_recipe_text(id(lbl_recept_16_title), id(lbl_recept_16_meta), id(ha_recept_16_title).state, id(ha_recept_16_meta).state);
-          set_recipe_text(id(lbl_recept_17_title), id(lbl_recept_17_meta), id(ha_recept_17_title).state, id(ha_recept_17_meta).state);
-          set_recipe_text(id(lbl_recept_18_title), id(lbl_recept_18_meta), id(ha_recept_18_title).state, id(ha_recept_18_meta).state);
-          set_recipe_text(id(lbl_recept_19_title), id(lbl_recept_19_meta), id(ha_recept_19_title).state, id(ha_recept_19_meta).state);
-          set_recipe_text(id(lbl_recept_20_title), id(lbl_recept_20_meta), id(ha_recept_20_title).state, id(ha_recept_20_meta).state);
-          set_recipe_text(id(lbl_recept_21_title), id(lbl_recept_21_meta), id(ha_recept_21_title).state, id(ha_recept_21_meta).state);
-          set_recipe_text(id(lbl_recept_22_title), id(lbl_recept_22_meta), id(ha_recept_22_title).state, id(ha_recept_22_meta).state);
-          set_recipe_text(id(lbl_recept_23_title), id(lbl_recept_23_meta), id(ha_recept_23_title).state, id(ha_recept_23_meta).state);
-          set_recipe_text(id(lbl_recept_24_title), id(lbl_recept_24_meta), id(ha_recept_24_title).state, id(ha_recept_24_meta).state);
+          if (!id(recipe_sheet_pending) || !id(recipe_list_page_active) || id(artwork_busy)) return;
+          id(recipe_sheet_pending) = false;
+          id(artwork_busy) = true;
+          id(recipe_sheet)->set_url(id(recipe_sheet_desired_url));
+          id(recipe_sheet)->update();
 
   # Immich overlay timeout — telt af van 30 naar 0, verbergt dan controls + nav
   - interval: 1s
