@@ -64,7 +64,7 @@ Home Assistant zit niet meer in de lijstroute. Het detail (`GET /api/ah/recipe/:
 ```
 
 - Paginagrootte vast op 10; `page` is 0-gebaseerd. Een `page` buiten bereik wordt de laatste geldige pagina; een lege lijst geeft `pages: 1`, `total: 0`, `recipes: []`.
-- `version`: korte hash over de id's en foto-URL's van precies deze pagina, in volgorde.
+- `version`: korte hash over id, titel, duur, personen en foto-URL van precies deze pagina, in volgorde. Zo ververst ook een gewijzigde titel de tekst op het display.
 - `refreshing: true` alleen als dit verzoek (of een lopend verzoek) een live verversing van de lijst heeft gestart.
 - Onbekende `list` → HTTP 400.
 - Response blijft onder 4 KB (het display gebruikt al een buffer van 32 kB voor `/text`).
@@ -134,7 +134,7 @@ Home Assistant zit niet meer in de lijstroute. Het detail (`GET /api/ah/recipe/:
 
 ### Fouten
 
-- Pagina-JSON mislukt of HTTP ≠ 200: de laatste inhoud blijft staan en de kopregel toont "Recepten niet bereikbaar" in plaats van het aantal. Bij de volgende keer openen, bladeren of wisselen van tab wordt het opnieuw geprobeerd.
+- Pagina-JSON mislukt of HTTP ≠ 200: de laatste inhoud blijft staan en de kopregel toont "Niet bereikbaar" in plaats van het aantal (de ruimte naast "Recepten" is ~170 px). Bij de volgende keer openen, bladeren of wisselen van tab wordt het opnieuw geprobeerd.
 - Plaatje mislukt: donkere vlakken blijven staan, titels en aantikken werken gewoon. Geen automatische retry.
 
 ### Wat verdwijnt uit `ha-display-7.yaml`
@@ -156,7 +156,7 @@ Pas nadat het display op de nieuwe route draait en bevestigd werkt:
 ### Backend (vitest in recipe-hub)
 
 - Paginering: paginagrootte 10, `pages`/`total` klopt, pagina buiten bereik, lege lijst.
-- `version` verandert als een id of foto-URL op de pagina verandert, en blijft gelijk als alleen een andere pagina verandert.
+- `version` verandert als id, titel, duur, personen of foto-URL op de pagina verandert, en blijft gelijk als alleen een andere pagina verandert.
 - Verzamelplaatje: 96×720 baseline-JPEG; lege plekken en mislukte thumbnails worden donker opgevuld.
 - Live verversen: alleen cart + page 0, niet vaker dan 1× per 2 minuten, single-flight, en een mislukte live-ophaalactie laat de cache intact.
 
@@ -166,7 +166,7 @@ Pas nadat het display op de nieuwe route draait en bevestigd werkt:
 - Pagina staat er binnen ~0,5 s na openen of bladeren (gemeten in de logs).
 - Recept toevoegen in de AH-app → pagina openen → recept staat binnen ~10 s bovenaan "Eerder toegevoegd".
 - Detail openen vanaf pagina 3 of later toont het juiste recept; terug komt uit op dezelfde pagina.
-- Backend stoppen → melding "Recepten niet bereikbaar"; backend starten → volgende keer openen werkt.
+- Backend stoppen → melding "Niet bereikbaar"; backend starten → volgende keer openen werkt.
 
 ## Buiten scope
 
