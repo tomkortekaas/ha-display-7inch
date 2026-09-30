@@ -568,6 +568,8 @@ font:
       - "\U000F00E0"   # mdi-brightness-7
       - "\U000F0425"   # mdi-power
       - "\U000F0150"   # mdi-clock-outline
+      - "\U000F0141"   # mdi-chevron-left
+      - "\U000F0142"   # mdi-chevron-right
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_48
     size: 48
@@ -6895,16 +6897,16 @@ lvgl:
                   id: lbl_recipe_count
                   x: 190
                   y: 30
-                  width: 160
+                  width: 500
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0xFF9020
                   text: ""
               - button:
                   id: btn_recipe_tab_cart
-                  x: 360
-                  y: 18
-                  width: 232
+                  x: 140
+                  y: 554
+                  width: 300
                   height: 42
                   radius: 8
                   bg_color: 0xFF9020
@@ -6917,7 +6919,6 @@ lvgl:
                         condition:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
-                          - script.execute: nav_overlay_show
                           - script.execute:
                               id: recipe_list_select_tab
                               tab: 0
@@ -6929,9 +6930,9 @@ lvgl:
                         text: "Eerder toegevoegd"
               - button:
                   id: btn_recipe_tab_favorites
-                  x: 604
-                  y: 18
-                  width: 168
+                  x: 450
+                  y: 554
+                  width: 212
                   height: 42
                   radius: 8
                   bg_color: 0x15151F
@@ -6944,7 +6945,6 @@ lvgl:
                         condition:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
-                          - script.execute: nav_overlay_show
                           - script.execute:
                               id: recipe_list_select_tab
                               tab: 1
@@ -6956,9 +6956,9 @@ lvgl:
                         text: "Favorieten"
               - button:
                   id: btn_recipe_tab_custom
-                  x: 784
-                  y: 18
-                  width: 168
+                  x: 672
+                  y: 554
+                  width: 212
                   height: 42
                   radius: 8
                   bg_color: 0x15151F
@@ -6971,7 +6971,6 @@ lvgl:
                         condition:
                           lambda: 'return !id(last_touch_was_swipe);'
                         then:
-                          - script.execute: nav_overlay_show
                           - script.execute:
                               id: recipe_list_select_tab
                               tab: 2
@@ -7504,9 +7503,9 @@ lvgl:
               - button:
                   id: btn_recipe_prev
                   x: 32
-                  y: 556
-                  width: 200
-                  height: 40
+                  y: 554
+                  width: 88
+                  height: 42
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -7521,24 +7520,15 @@ lvgl:
                     - label:
                         id: lbl_recipe_prev
                         align: CENTER
-                        text_font: font_roboto_16
+                        text_font: font_icon_28
                         text_color: 0x555566
-                        text: "‹  Vorige"
-              - label:
-                  id: lbl_recipe_page
-                  x: 262
-                  y: 566
-                  width: 500
-                  text_align: CENTER
-                  text_font: font_roboto_16
-                  text_color: 0xA0A0A0
-                  text: ""
+                        text: "\U000F0141"  # mdi-chevron-left
               - button:
                   id: btn_recipe_next
-                  x: 792
-                  y: 556
-                  width: 200
-                  height: 40
+                  x: 904
+                  y: 554
+                  width: 88
+                  height: 42
                   radius: 8
                   bg_color: 0x15151F
                   bg_opa: COVER
@@ -7553,9 +7543,9 @@ lvgl:
                     - label:
                         id: lbl_recipe_next
                         align: CENTER
-                        text_font: font_roboto_16
+                        text_font: font_icon_28
                         text_color: 0x555566
-                        text: "Volgende  ›"
+                        text: "\U000F0142"  # mdi-chevron-right
 
 
     # ===========================================================
@@ -9569,11 +9559,10 @@ script:
 
                     id(recipe_list_page) = page;
                     id(recipe_list_pages) = pages < 1 ? 1 : pages;
-                    char buf[48];
-                    snprintf(buf, sizeof(buf), "%d recepten", total);
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "%d recepten  \xc2\xb7  pagina %d van %d",
+                             total, page + 1, id(recipe_list_pages));
                     lv_label_set_text(id(lbl_recipe_count), buf);
-                    snprintf(buf, sizeof(buf), "Pagina %d van %d", page + 1, id(recipe_list_pages));
-                    lv_label_set_text(id(lbl_recipe_page), buf);
                     lv_obj_set_style_text_color(id(lbl_recipe_prev),
                         lv_color_hex(page > 0 ? 0xFFFFFF : 0x555566), LV_PART_MAIN);
                     lv_obj_set_style_text_color(id(lbl_recipe_next),
