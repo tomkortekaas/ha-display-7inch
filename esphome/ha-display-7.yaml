@@ -642,7 +642,7 @@ sensor:
     internal: true
   - platform: homeassistant
     id: ha_stroomprijs
-    entity_id: sensor.stroomprijs_huidige_prijs
+    entity_id: sensor.energie_huidige_onbalansprijs_all_in
     internal: true
   - platform: homeassistant
     id: ha_binnen_temp
