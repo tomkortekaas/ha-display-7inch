@@ -1466,6 +1466,7 @@ template:
           {{ h }}u {{ '%02d' % m }}m daglicht
 
 shell_command:
+  immich_rotate_7inch: "python3 /config/www/idotmatrix/immich_rotate_7inch.py"
   immich_photo_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py next"
   immich_photo_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py prev"
   immich_photo_zoom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py zoom"
