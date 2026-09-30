@@ -13,11 +13,13 @@ HA_SSH_USER="${HA_SSH_USER:-$HA_USER}"
 SWIPE_USER="${SWIPE_USER:-root}"
 REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-# De countdown-service leeft in een lokaal aangepaste custom component. Die Python-
-# bestanden worden bewust nooit vanuit deze repository overschreven. Controleer de
-# actieve Core-container en de live service registry via de versleutelde SSH-
-# verbinding. Het Supervisor-token bestaat en expandeert alleen in de login-shell
-# op de HA-host; de Mac leest, interpoleert of logt het niet.
+# De countdown-service leeft in de idotmatrix_extras custom component, die als
+# `idotmatrix_extras:` in configuration.yaml wordt geladen en leunt op de
+# config-entry van de idotmatrix-integratie (het apparaat). Die Python-bestanden
+# worden bewust nooit vanuit deze repository overschreven. Controleer de actieve
+# Core-container en de live service registry via de versleutelde SSH-verbinding.
+# Het Supervisor-token bestaat en expandeert alleen in de login-shell op de
+# HA-host; de Mac leest, interpoleert of logt het niet.
 preflight_countdown_service() {
   if ssh -o BatchMode=yes -o ConnectTimeout=10 \
     "${HA_SSH_USER}@${HA_HOST}" 'bash -lc "bash -s"' <<'REMOTE'
@@ -54,13 +56,13 @@ import json
 import sys
 
 domains = json.load(sys.stdin)
-idotmatrix = next(
-    (domain for domain in domains if domain.get("domain") == "idotmatrix"),
+idotmatrix_extras = next(
+    (domain for domain in domains if domain.get("domain") == "idotmatrix_extras"),
     None,
 )
-if idotmatrix is None:
+if idotmatrix_extras is None:
     raise SystemExit(1)
-service = idotmatrix.get("services", {}).get("set_countdown")
+service = idotmatrix_extras.get("services", {}).get("set_countdown")
 if service is None:
     raise SystemExit(1)
 fields = service.get("fields", {})
@@ -71,15 +73,18 @@ if not isinstance(fields, dict) or not all(
 ' <"$services_response"
 
 # Een geïnstalleerd bestand alleen bewijst geen succesvolle runtime-setup. Blokkeer
-# daarom safe mode en iedere iDotMatrix setup-/dependencyfout uit de huidige Core-log.
+# daarom safe mode en iedere setup-/dependencyfout van idotmatrix of idotmatrix_extras
+# uit de huidige Core-log.
 core_logs="$(ha core logs)"
 if printf '%s\n' "$core_logs" | grep -Eiq \
-  "starting home assistant in safe mode|setup failed for custom integration ['\"]idotmatrix|error (setting up|while setting up) entry .*idotmatrix|error setting up integration idotmatrix|unable to set up dependencies.*idotmatrix"; then
+  "starting home assistant in safe mode|setup failed for custom integration ['\"]idotmatrix|error (setting up|while setting up) entry .*idotmatrix|error setting up integration idotmatrix|unable to set up dependencies.*idotmatrix|setup failed for custom integration ['\"]idotmatrix_extras|error (setting up|while setting up) entry .*idotmatrix_extras|error setting up integration idotmatrix_extras|unable to set up dependencies.*idotmatrix_extras"; then
   exit 1
 fi
 
-# Vereis daarnaast minstens één ingeschakelde iDotMatrix config-entry in de actieve
-# Core-configuratie. Dit is read-only en blijft volledig op de HA-host.
+# Vereis daarnaast minstens één ingeschakelde config-entry van de idotmatrix-
+# integratie (het apparaat) in de actieve Core-configuratie. idotmatrix_extras
+# heeft geen eigen config-entry en hoeft hier dus niet te verschijnen. Dit is
+# read-only en blijft volledig op de HA-host.
 sudo -n docker exec homeassistant python3 -c '
 import json
 with open("/config/.storage/core.config_entries", encoding="utf-8") as source:
@@ -91,14 +96,15 @@ if not any(
     raise SystemExit(1)
 '
 
-component_dir=/config/custom_components/idotmatrix
-sudo -n grep -Fq \
-  'hass.services.async_register(DOMAIN, "set_countdown", async_set_countdown)' \
+component_dir=/config/custom_components/idotmatrix_extras
+sudo -n grep -Fq 'DOMAIN = "idotmatrix_extras"' \
   "$component_dir/__init__.py"
 sudo -n grep -Fq 'async def async_set_countdown(' \
-  "$component_dir/coordinator.py"
-sudo -n grep -Fq 'await countdown.setMode(mode, minutes, seconds)' \
-  "$component_dir/coordinator.py"
+  "$component_dir/__init__.py"
+sudo -n grep -Fq 'Countdown().setMode, mode, minutes, seconds' \
+  "$component_dir/__init__.py"
+sudo -n grep -Fq 'hass.services.async_register(' \
+  "$component_dir/__init__.py"
 sudo -n grep -Eq '^set_countdown:$' "$component_dir/services.yaml"
 sudo -n grep -Eq '^  fields:$' "$component_dir/services.yaml"
 sudo -n grep -Eq '^    mode:$' "$component_dir/services.yaml"
@@ -106,11 +112,11 @@ sudo -n grep -Eq '^    minutes:$' "$component_dir/services.yaml"
 sudo -n grep -Eq '^    seconds:$' "$component_dir/services.yaml"
 REMOTE
   then
-    echo "✓ Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd"
+    echo "✓ Preflight geslaagd: idotmatrix_extras.set_countdown is via SSH bevestigd"
     return 0
   fi
 
-  echo "✗ PREFLIGHT MISLUKT: idotmatrix.set_countdown kon via SSH niet veilig worden bevestigd; deployment en OTA zijn geblokkeerd." >&2
+  echo "✗ PREFLIGHT MISLUKT: idotmatrix_extras.set_countdown kon via SSH niet veilig worden bevestigd; deployment en OTA zijn geblokkeerd." >&2
   return 1
 }
 

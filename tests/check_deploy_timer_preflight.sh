@@ -11,23 +11,31 @@ fake_bin="$tmp_dir/bin"
 remote_bin="$tmp_dir/remote-bin"
 remote_fixture="$tmp_dir/remote-fixture"
 mkdir -p "$fake_bin" "$remote_bin" \
-  "$remote_fixture/config/custom_components/idotmatrix" \
+  "$remote_fixture/config/custom_components/idotmatrix_extras" \
   "$remote_fixture/config/.storage"
 
-cat >"$remote_fixture/config/custom_components/idotmatrix/__init__.py" <<'PY'
-hass.services.async_register(DOMAIN, "set_countdown", async_set_countdown)
+cat >"$remote_fixture/config/custom_components/idotmatrix_extras/__init__.py" <<'PY'
+DOMAIN = "idotmatrix_extras"
+
+async def async_setup(hass, config):
+    async def async_set_countdown(call) -> None:
+        await Countdown().setMode, mode, minutes, seconds
+
+    hass.services.async_register(
+        DOMAIN, "set_countdown", async_set_countdown
+    )
+    return True
 PY
-cat >"$remote_fixture/config/custom_components/idotmatrix/coordinator.py" <<'PY'
-async def async_set_countdown(self, mode, minutes, seconds):
-    await countdown.setMode(mode, minutes, seconds)
-PY
-cat >"$remote_fixture/config/custom_components/idotmatrix/services.yaml" <<'YAML'
+cat >"$remote_fixture/config/custom_components/idotmatrix_extras/services.yaml" <<'YAML'
 set_countdown:
   fields:
     mode:
     minutes:
     seconds:
 YAML
+cat >"$remote_fixture/config/custom_components/idotmatrix_extras/manifest.json" <<'JSON'
+{"domain":"idotmatrix_extras","config_flow":false,"after_dependencies":["idotmatrix"]}
+JSON
 cat >"$remote_fixture/config/.storage/core.config_entries" <<'JSON'
 {"data":{"entries":[{"domain":"idotmatrix","disabled_by":null}]}}
 JSON
@@ -43,6 +51,8 @@ if [[ "$*" == "--raw-json core stats" ]]; then
 elif [[ "$*" == "core logs" ]]; then
   if [[ "$SSH_PREFLIGHT_MODE" == "setup_error" ]]; then
     printf '%s\n' "ERROR Setup failed for custom integration 'idotmatrix'"
+  elif [[ "$SSH_PREFLIGHT_MODE" == "setup_error_extras" ]]; then
+    printf '%s\n' "ERROR Setup failed for custom integration 'idotmatrix_extras'"
   else
     printf '%s\n' 'Home Assistant initialized'
   fi
@@ -93,7 +103,7 @@ case "$SSH_PREFLIGHT_MODE" in
     printf '503'
     ;;
   service_absent)
-    printf '%s\n' '[{"domain":"idotmatrix","services":{"other_service":{"fields":{}}}}]' >"$output_file"
+    printf '%s\n' '[{"domain":"idotmatrix_extras","services":{"other_service":{"fields":{}}}}]' >"$output_file"
     printf '200'
     ;;
   domain_absent)
@@ -101,11 +111,11 @@ case "$SSH_PREFLIGHT_MODE" in
     printf '200'
     ;;
   field_absent|optimized_field_absent)
-    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":{"mode":{},"minutes":{}}}}}]' >"$output_file"
+    printf '%s\n' '[{"domain":"idotmatrix_extras","services":{"set_countdown":{"fields":{"mode":{},"minutes":{}}}}}]' >"$output_file"
     printf '200'
     ;;
   malformed_fields)
-    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":["mode","minutes","seconds"]}}}]' >"$output_file"
+    printf '%s\n' '[{"domain":"idotmatrix_extras","services":{"set_countdown":{"fields":["mode","minutes","seconds"]}}}]' >"$output_file"
     printf '200'
     ;;
   malformed_json)
@@ -113,7 +123,7 @@ case "$SSH_PREFLIGHT_MODE" in
     printf '200'
     ;;
   *)
-    printf '%s\n' '[{"domain":"idotmatrix","services":{"set_countdown":{"fields":{"mode":{},"minutes":{},"seconds":{}}}}}]' >"$output_file"
+    printf '%s\n' '[{"domain":"idotmatrix_extras","services":{"set_countdown":{"fields":{"mode":{},"minutes":{},"seconds":{}}}}}]' >"$output_file"
     printf '200'
     ;;
 esac
@@ -237,7 +247,7 @@ if grep -Eq 'HA_ACCESS_TOKEN|HA_SERVICES_URL|homeassistant:8123|http://[^/]*:812
   exit 1
 fi
 
-for failure_mode in non_200 domain_absent service_absent field_absent optimized_field_absent malformed_fields malformed_json runtime_failure setup_error missing_entry missing_marker; do
+for failure_mode in non_200 domain_absent service_absent field_absent optimized_field_absent malformed_fields malformed_json runtime_failure setup_error setup_error_extras missing_entry missing_marker; do
   : >"$tmp_dir/commands.log"
   : >"$tmp_dir/ssh-stdin.log"
   : >"$tmp_dir/remote-temp.log"
@@ -245,9 +255,9 @@ for failure_mode in non_200 domain_absent service_absent field_absent optimized_
     echo "FAIL: deployment must stop for SSH preflight mode $failure_mode" >&2
     exit 1
   fi
-  grep -Fq 'PREFLIGHT MISLUKT: idotmatrix.set_countdown kon via SSH niet veilig worden bevestigd' \
+  grep -Fq 'PREFLIGHT MISLUKT: idotmatrix_extras.set_countdown kon via SSH niet veilig worden bevestigd' \
     "$tmp_dir/$failure_mode.out" || {
-      echo "FAIL: SSH preflight failure must explicitly name idotmatrix.set_countdown" >&2
+      echo "FAIL: SSH preflight failure must explicitly name idotmatrix_extras.set_countdown" >&2
       exit 1
   }
   assert_no_ota_guidance "$tmp_dir/$failure_mode.out"
@@ -299,19 +309,19 @@ if grep -Eq '^[[:space:]]*assert[[:space:]]' "$tmp_dir/ssh-stdin.log"; then
   exit 1
 fi
 grep -Fq 'ha core logs' "$tmp_dir/ssh-stdin.log" || {
-  echo "FAIL: SSH preflight must reject safe mode and iDotMatrix setup errors" >&2
+  echo "FAIL: SSH preflight must reject safe mode and idotmatrix/idotmatrix_extras setup errors" >&2
   exit 1
 }
 grep -Fq '/config/.storage/core.config_entries' "$tmp_dir/ssh-stdin.log" || {
   echo "FAIL: SSH preflight must require an enabled iDotMatrix config entry" >&2
   exit 1
 }
-grep -Fq 'component_dir=/config/custom_components/idotmatrix' \
+grep -Fq 'component_dir=/config/custom_components/idotmatrix_extras' \
   "$tmp_dir/ssh-stdin.log" || {
-    echo "FAIL: SSH preflight must target the installed iDotMatrix component" >&2
+    echo "FAIL: SSH preflight must target the installed idotmatrix_extras component" >&2
     exit 1
   }
-for required_file in __init__.py coordinator.py services.yaml; do
+for required_file in __init__.py services.yaml; do
   grep -Fq "$required_file" "$tmp_dir/ssh-stdin.log" || {
     echo "FAIL: SSH preflight must inspect $required_file" >&2
     exit 1
@@ -331,7 +341,7 @@ if grep -Eq 'homeassistant:8123|http://[^/]*:8123' "$tmp_dir/ssh-stdin.log"; the
   exit 1
 fi
 assert_remote_temps_cleaned
-grep -Fq 'Preflight geslaagd: idotmatrix.set_countdown is via SSH bevestigd' \
+grep -Fq 'Preflight geslaagd: idotmatrix_extras.set_countdown is via SSH bevestigd' \
   "$tmp_dir/success.out" || {
     echo "FAIL: successful SSH preflight must be reported" >&2
     exit 1
@@ -341,7 +351,7 @@ grep -Fq 'esphome run esphome/ha-display-7.yaml --device ha-display-7.local' \
     echo "FAIL: successful SSH preflight must print the configured OTA command" >&2
     exit 1
   }
-if grep -Fq '/config/custom_components/idotmatrix' "$tmp_dir/commands.log"; then
+if grep -Eq '/config/custom_components/(idotmatrix|idotmatrix_extras)' "$tmp_dir/commands.log"; then
   echo "FAIL: deployment must not overwrite custom-component Python" >&2
   exit 1
 fi
