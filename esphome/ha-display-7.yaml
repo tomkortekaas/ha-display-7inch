@@ -166,8 +166,8 @@ globals:
   # Globale vergrendeling: slechts ÉÉN artwork_image-decode tegelijk, device-breed.
   # Zonder dit kunnen onafhankelijke triggers (Immich-achtergrondfoto, Spotify-
   # albumhoes, review-foto's, deurbel-snapshot, weerradar, receptthumbnails)
-  # gelijktijdig decoderen — dat verzadigt de PSRAM-bandbreedte en geeft een
-  # blauwe flits (DSI-underrun), ongeacht welke pagina actief is.
+  # gelijktijdig decoderen — dat belast PSRAM en CPU zwaar en vergroot de kans
+  # op een blauwe flits (zie display:), ongeacht welke pagina actief is.
   - id: artwork_busy
     type: bool
     restore_value: no
@@ -294,7 +294,7 @@ psram:
   speed: 200MHz
 
 # INFO i.p.v. DEBUG: debug-logging van http/esp_hosted vertraagt downloads
-# en vergroot de kans op DSI-underrun (blauw scherm) tijdens image-decodes.
+# en vergroot de kans op een blauwe flits (zie display:) tijdens image-decodes.
 logger:
   level: INFO
 
@@ -469,6 +469,14 @@ display:
   - platform: mipi_dsi
     model: JC1060P470
     id: my_display
+    # Blauwe flits: de DPI-DMA wordt na elk frame vanuit een interrupt herstart.
+    # Na grote redraws (pagina-/tabwissel, image-decode) komt die interrupt tot
+    # ~1,5 ms te laat, en de standaard verticale blanking is maar 45 regels
+    # (1,15 ms) — dan begint het frame zonder data en toont het paneel blauw.
+    # Het DSI-underrun-bit gaat daarbij níet aan. 100 i.p.v. 12 regels front
+    # porch geeft 3,4 ms marge (~53 Hz i.p.v. 60 Hz); gemeten 2026-09-30:
+    # 4 flitsen op 10 receptwissels ervoor, 0 op 23 erna.
+    vsync_front_porch: 100
     update_interval: never
     reset_pin: GPIO5
     auto_clear_enabled: false
@@ -1247,8 +1255,7 @@ artwork_image:
 # Let op: recipe_header_art/ingredients_art/steps_art zijn bewust verwijderd.
 # Ingrediënten/stappen zijn platte tekst; die als PNG renderen + downloaden +
 # op het ESP32 decoderen naar RGB565 kostte tot ~2,9MB (664x2200) aan PSRAM-
-# bandbreedte per receptweergave — genoeg om de DSI-refresh te laten stotteren
-# (blauw scherm). recipe_load_current haalt nu platte JSON op en LVGL tekent
+# bandbreedte per receptweergave — genoeg voor een blauwe flits (zie display:). recipe_load_current haalt nu platte JSON op en LVGL tekent
 # de tekst zelf (labels), zonder bitmap-decode.
 
 # ---------------------------------------------------------------
@@ -9617,7 +9624,7 @@ script:
     # restart: nieuwe recept-tik onderbreekt de lopende load.
     # Ingrediënten/stappen zijn platte tekst — één lichte JSON-fetch i.p.v.
     # drie PNG-downloads die op het ESP32 tot ~2,9MB RGB565 moesten decoderen
-    # (dat verzadigde de PSRAM-bandbreedte en gaf DSI-underrun/blauw scherm).
+    # (dat verzadigde de PSRAM-bandbreedte en gaf blauwe flitsen, zie display:).
     mode: restart
     then:
       - lvgl.widget.hide: recipe_header_container
