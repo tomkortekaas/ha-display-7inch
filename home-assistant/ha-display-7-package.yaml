@@ -115,7 +115,7 @@ script:
           face:
             layers: []
       - delay: "00:00:01"
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 1
           minutes: "{{ normalized_minutes }}"
@@ -150,7 +150,7 @@ script:
       - action: timer.pause
         target:
           entity_id: timer.idotmatrix_timer
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 2
           minutes: 0
@@ -178,7 +178,7 @@ script:
             {{ (remaining_parts[0] | int(0)) * 3600
                + (remaining_parts[1] | int(0)) * 60
                + (remaining_parts[2] | float(0) | int) }}
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 3
           minutes: "{{ (remaining_seconds | int(0)) // 60 }}"
@@ -226,7 +226,7 @@ script:
                  (new_remaining_seconds | int(0)) // 3600,
                  ((new_remaining_seconds | int(0)) % 3600) // 60,
                  (new_remaining_seconds | int(0)) % 60) }}
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 1
           minutes: "{{ (new_remaining_seconds | int(0)) // 60 }}"
@@ -238,7 +238,7 @@ script:
           - action: timer.pause
             target:
               entity_id: timer.idotmatrix_timer
-          - action: idotmatrix.set_countdown
+          - action: idotmatrix_extras.set_countdown
             data:
               mode: 2
               minutes: 0
@@ -259,7 +259,7 @@ script:
       - action: timer.cancel
         target:
           entity_id: timer.idotmatrix_timer
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 0
           minutes: 0
@@ -295,7 +295,7 @@ script:
           entity_id: input_select.idotmatrix_timer_status
         data:
           option: idle
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         data:
           mode: 0
           minutes: 0
@@ -1466,7 +1466,6 @@ template:
           {{ h }}u {{ '%02d' % m }}m daglicht
 
 shell_command:
-  immich_rotate_7inch: "python3 /config/www/idotmatrix/immich_rotate_7inch.py"
   immich_photo_next: "python3 /config/www/idotmatrix/immich_rotate_7inch.py next"
   immich_photo_prev: "python3 /config/www/idotmatrix/immich_rotate_7inch.py prev"
   immich_photo_zoom: "python3 /config/www/idotmatrix/immich_rotate_7inch.py zoom"
@@ -1579,7 +1578,7 @@ automation:
           entity_id: input_select.idotmatrix_timer_status
         data:
           option: idle
-      - action: idotmatrix.set_countdown
+      - action: idotmatrix_extras.set_countdown
         continue_on_error: true
         data:
           mode: 0

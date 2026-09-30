@@ -126,7 +126,7 @@ check(!idle_guard_index.nil?, "start script has no idle source-state guard")
 check(idle_guard_index < first_side_effect_index,
       "start idle guard must run before all side effects")
 
-start_native = start_sequence.find { |step| step["action"] == "idotmatrix.set_countdown" }
+start_native = start_sequence.find { |step| step["action"] == "idotmatrix_extras.set_countdown" }
 check(start_native.is_a?(Hash), "start script has no native countdown action")
 check(start_native.dig("data", "mode") == 1,
       "start script must send a fresh native countdown start")
@@ -157,7 +157,7 @@ new_remaining = remaining_variables.fetch("new_remaining_seconds", "").to_s
 check(new_remaining.include?("+ 60") && new_remaining.include?("5999"),
       "add-minute must add exactly 60 seconds and cap at 5999")
 
-add_native = add_minute_sequence.find { |step| step["action"] == "idotmatrix.set_countdown" }
+add_native = add_minute_sequence.find { |step| step["action"] == "idotmatrix_extras.set_countdown" }
 check(add_native.is_a?(Hash), "add-minute script has no native countdown action")
 check(add_native.dig("data", "mode") == 1,
       "add-minute must send a fresh native countdown start with mode 1")
@@ -170,7 +170,7 @@ paused_actions = paused_branch&.fetch("then", []) || []
 check(paused_actions.any? { |step| step["action"] == "timer.pause" },
       "add-minute no longer re-pauses the HA timer")
 check(paused_actions.any? do |step|
-        step["action"] == "idotmatrix.set_countdown" && step.dig("data", "mode") == 2
+        step["action"] == "idotmatrix_extras.set_countdown" && step.dig("data", "mode") == 2
       end,
       "add-minute no longer re-pauses the native timer")
 check(paused_actions.any? do |step|
@@ -198,7 +198,7 @@ idle_index = startup_actions.index do |step|
     step.dig("data", "option") == "idle"
 end
 native_off_index = startup_actions.index do |step|
-  step["action"] == "idotmatrix.set_countdown" &&
+  step["action"] == "idotmatrix_extras.set_countdown" &&
     step.dig("data", "mode") == 0 &&
     step.dig("data", "minutes") == 0 &&
     step.dig("data", "seconds") == 0 &&
