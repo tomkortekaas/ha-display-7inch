@@ -66,42 +66,17 @@ def wrapper_for_widget_id(node, id)
 end
 
 lvgl = display.fetch("lvgl")
-nav = find_by_id(lvgl.fetch("top_layer"), "nav_rail_container")
-check(nav.is_a?(Hash), "missing nav rail")
+home = find_by_id(lvgl.fetch("pages"), "page_home")
+check(home.is_a?(Hash), "missing tile home page")
 
-nav_ids = %w[
-  nav_energie nav_lichten nav_weather nav_agenda nav_immich nav_recepten nav_timer
-]
-strip_ids = %w[
-  nav_strip_energie nav_strip_lichten nav_strip_weather nav_strip_agenda
-  nav_strip_immich nav_strip_recepten nav_strip_timer
-]
-expected_y = [64, 136, 208, 280, 352, 424, 496]
-
-nav_ids.zip(strip_ids, expected_y).each do |button_id, strip_id, y|
-  button = find_by_id(nav, button_id)
-  strip = find_by_id(nav, strip_id)
-  wrapper = wrapper_for_widget_id(nav, button_id)
-  check(button.is_a?(Hash), "missing navigation button #{button_id}")
-  check(strip.is_a?(Hash), "missing navigation strip #{strip_id}")
-  check(button.values_at("width", "height") == [56, 56],
-        "#{button_id} must retain its 56x56 touch target")
-  check(wrapper.is_a?(Hash) && wrapper.values_at("y", "height") == [y, 64],
-        "#{button_id} row must be 64px high at y=#{y}")
-end
-
-logo = widgets_of_type(nav, "obj").find do |obj|
-  obj["align"] == "TOP_MID" && obj["width"] == 44 && obj["height"] == 44
-end
-check(logo.is_a?(Hash) && logo["y"] == 12, "navigation logo must remain at y=12")
-
-timer_nav = find_by_id(nav, "nav_timer")
-check(deep_values(timer_nav, "page_index").include?(6),
-      "Timer navigation button must select page index 6")
-check(deep_values(timer_nav, "text_font").include?("font_icon_28"),
-      "Timer navigation button must use the bundled icon font")
-check(deep_values(timer_nav, "text").include?("\u{F0150}"),
-      "Timer navigation button must show the bundled clock-outline glyph")
+timer_tile = find_by_id(home, "home_tile_timer")
+check(timer_tile.is_a?(Hash), "missing Timer tile on the home page")
+check(deep_values(timer_tile, "page_index").include?(6),
+      "Timer tile must select page index 6")
+check(deep_values(timer_tile, "text_font").include?("font_icon_48"),
+      "Timer tile must use the bundled icon font")
+check(deep_values(timer_tile, "text").include?("\u{F051B}"),
+      "Timer tile must show the bundled timer-outline glyph")
 
 timer_page = find_by_id(lvgl.fetch("pages"), "page_timer")
 check(timer_page.is_a?(Hash), "missing page_timer")
@@ -209,15 +184,6 @@ check(deep_values(find_by_id(timer_page, "btn_timer_alarm_off"), "homeassistant.
       "Alarm off must not call Home Assistant directly")
 
 scripts = display.fetch("script")
-nav_select = find_by_id(scripts, "nav_select")
-nav_code = deep_values(nav_select, "lambda").join("\n")
-%w[active_colors strips buttons].each do |array|
-  check(nav_code.match?(/#{array}\[7\]/), "nav_select #{array} array must contain seven entries")
-end
-check(nav_code.match?(/i\s*<\s*7/), "nav_select must update all seven navigation rows")
-check(nav_code.include?("id(nav_timer)") && nav_code.include?("id(nav_strip_timer)"),
-      "nav_select must include the Timer button and strip")
-
 goto_page = find_by_id(scripts, "goto_page")
 timer_branch = deep_values(goto_page, "if").find do |branch|
   branch.is_a?(Hash) && deep_values(branch["condition"], "lambda").any? do |code|

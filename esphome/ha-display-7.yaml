@@ -42,10 +42,6 @@ globals:
   - id: review_info_visible
     type: bool
     initial_value: 'false'
-  - id: review_nav_countdown
-    type: int
-    restore_value: no
-    initial_value: '0'
   - id: doorbell_page_active
     type: bool
     initial_value: 'false'
@@ -412,11 +408,8 @@ touchscreen:
           // grote drag op een niet-scrollbaar object) hun eigen actie doen —
           // anders sluiten die de net-geopende Spotify-drawer meteen weer.
           if (abs_dx >= 55 || abs_dy >= 55) id(last_touch_was_swipe) = true;
-          const bool overlay_visible =
-            !lv_obj_has_flag(id(nav_rail_container), LV_OBJ_FLAG_HIDDEN) ||
-            !lv_obj_has_flag(id(top_status_bar), LV_OBJ_FLAG_HIDDEN);
+          const bool overlay_visible = !lv_obj_has_flag(id(top_status_bar), LV_OBJ_FLAG_HIDDEN);
           const bool from_left_edge = id(touch_swipe_start_x) <= 120;
-          const bool from_nav_zone = id(touch_swipe_start_x) <= 260;
           const bool from_top_edge = id(touch_swipe_start_y) <= 80;
           const bool from_top_zone = id(touch_swipe_start_y) <= 160;
           const bool from_right_edge = id(touch_swipe_start_x) >= 904;
@@ -446,8 +439,11 @@ touchscreen:
             return;
           }
           if (abs_dx >= 55 && abs_dx > abs_dy) {
-            if (dx > 0 && from_left_edge) id(nav_overlay_show).execute();
-            else if (dx < 0 && overlay_visible && from_nav_zone) id(nav_overlay_hide).execute();
+            // Vanaf de linkerrand naar rechts = terug naar het tegelscherm.
+            // Niet vanaf de deurbel: die keert zelf terug naar de vorige pagina.
+            if (dx > 0 && from_left_edge && !id(doorbell_page_active) && id(current_display_page) != 7) {
+              id(goto_page)->execute(7);
+            }
             return;
           }
           if (abs_dy >= 55 && abs_dy > abs_dx) {
@@ -578,6 +574,7 @@ font:
       - "\U000F0150"   # mdi-clock-outline
       - "\U000F0141"   # mdi-chevron-left
       - "\U000F0142"   # mdi-chevron-right
+      - "\U000F02DC"   # mdi-home
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_48
     size: 48
@@ -592,6 +589,12 @@ font:
       - "\U000F0597"   # mdi-weather-rainy
       - "\U000F0596"   # mdi-weather-pouring
       - "\U000F02D1"   # mdi-heart
+      - "\U000F0241"   # mdi-flash
+      - "\U000F00ED"   # mdi-calendar
+      - "\U000F02F9"   # mdi-image-multiple
+      - "\U000F0B7C"   # mdi-chef-hat
+      - "\U000F051B"   # mdi-timer-outline
+      - "\U000F075A"   # mdi-music
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_72
     size: 72
@@ -1299,351 +1302,11 @@ lvgl:
         outline_width: 0
         shadow_width: 0
 
-  # Nav rail + status bar — altijd zichtbaar bovenop alles
+  # Statusbalk + Spotify-drawer — overlays bovenop elke pagina.
+  # Er is geen zijbalk meer: navigatie loopt via het tegelscherm (page_home),
+  # bereikbaar met de home-knop in de statusbalk of een swipe vanaf de linkerrand.
   top_layer:
     widgets:
-      # Nav rail (links, 88×600)
-      - obj:
-          id: nav_rail_container
-          x: 0
-          y: 0
-          width: 88
-          height: 600
-          hidden: true
-          bg_color: 0x050505
-          bg_opa: COVER
-          border_width: 0
-          pad_all: 0
-          widgets:
-            # Logo — 44×44 afgerond accentvlak
-            - obj:
-                align: TOP_MID
-                y: 12
-                width: 44
-                height: 44
-                radius: 10
-                bg_color: 0x2EE36A
-                bg_opa: COVER
-                border_width: 0
-                widgets:
-                  - label:
-                      align: CENTER
-                      text_font: font_roboto_28
-                      text_color: 0xFFFFFF
-                      text: "H"
-            # Energie — actief (accentstrip links)
-            - obj:
-                x: 0
-                y: 64
-                width: 88
-                height: 64
-                bg_color: 0x101010
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_energie
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x2EE36A
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_energie
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x202020
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 0
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0x2EE36A
-                            text: "E"
-            # Lichten — inactief
-            - obj:
-                x: 0
-                y: 136
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_lichten
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_lichten
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 1
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0xA0A0A0
-                            text: "L"
-            # Weer — inactief
-            - obj:
-                x: 0
-                y: 208
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_weather
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_weather
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 2
-                          # Even wachten tot de paginaovergang (volledige redraw)
-                          # is afgerond vóórdat de radar-decode start — anders
-                          # botsen de grote paginaredraw en de decode in dezelfde
-                          # tick (blauwe flits bij overschakelen naar dit scherm).
-                          - delay: 400ms
-                          - script.execute: radar_frame_load
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0xA0A0A0
-                            text: "W"
-            # Agenda — inactief
-            - obj:
-                x: 0
-                y: 280
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_agenda
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_agenda
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 3
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0xA0A0A0
-                            text: "A"
-            # Immich — inactief
-            - obj:
-                x: 0
-                y: 352
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_immich
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_immich
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 4
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0xA0A0A0
-                            text: "I"
-            # Recepten — inactief
-            - obj:
-                x: 0
-                y: 424
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_recepten
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_recepten
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 5
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_roboto_16
-                            text_color: 0xA0A0A0
-                            text: "R"
-            # Timer — inactief
-            - obj:
-                x: 0
-                y: 496
-                width: 88
-                height: 64
-                bg_color: 0x050505
-                bg_opa: COVER
-                border_width: 0
-                pad_all: 0
-                widgets:
-                  - obj:
-                      id: nav_strip_timer
-                      x: 0
-                      y: 4
-                      width: 3
-                      height: 56
-                      bg_color: 0x050505
-                      bg_opa: COVER
-                      border_width: 0
-                  - button:
-                      id: nav_timer
-                      x: 16
-                      y: 4
-                      width: 56
-                      height: 56
-                      radius: 10
-                      bg_color: 0x1a1a1a
-                      bg_opa: COVER
-                      on_click:
-                        then:
-                          - script.execute:
-                              id: goto_page
-                              page_index: 6
-                      widgets:
-                        - label:
-                            align: CENTER
-                            text_font: font_icon_28
-                            text_color: 0xA0A0A0
-                            text: "\U000F0150"  # mdi-clock-outline
-            # Onderkant — versie label
-            - label:
-                align: BOTTOM_MID
-                y: -8
-                text_font: font_roboto_16
-                text_color: 0x666666
-                text: "P4"
-
-      # Smalle tikzone links: zijbalk oproepen/verbergen zonder permanente ruimte.
-      - obj:
-          id: nav_edge_handle
-          x: 0
-          y: 0
-          width: 16
-          height: 600
-          bg_opa: 0%
-          border_width: 0
-          pad_all: 0
-          on_click:
-            then:
-              - lambda: |-
-                  if (lv_obj_has_flag(id(nav_rail_container), LV_OBJ_FLAG_HIDDEN)) {
-                    id(nav_overlay_show).execute();
-                  } else {
-                    id(nav_overlay_hide).execute();
-                  }
-
       - obj:
           id: spotify_drawer_container
           x: 717
@@ -1875,35 +1538,57 @@ lvgl:
                         vol: !lambda 'return lv_slider_get_value(id(spotify_drawer_volume)) / 100.0;'
 
       # Status bar wordt na de drawer getekend, zodat hij desgewenst erboven ligt.
+      # Overlay over de volle breedte: schuift over de pagina als je hem oproept
+      # (tik op een lege plek of swipe omlaag vanaf de bovenrand), verdwijnt na 30 s.
       - obj:
           id: top_status_bar
-          x: 88
+          x: 0
           y: 0
-          width: 936
+          width: 1024
           height: 56
+          hidden: true
           bg_color: 0x101010
-          bg_opa: 55%
+          bg_opa: 90%
           border_width: 0
           pad_all: 0
           widgets:
+            - button:
+                id: btn_status_home
+                align: LEFT_MID
+                x: 8
+                width: 48
+                height: 44
+                radius: 10
+                bg_color: 0x1A1A1A
+                bg_opa: COVER
+                on_click:
+                  - script.execute:
+                      id: goto_page
+                      page_index: 7
+                widgets:
+                  - label:
+                      align: CENTER
+                      text_font: font_icon_28
+                      text_color: 0x2EE36A
+                      text: "\U000F02DC"  # mdi-home
             - label:
                 id: lbl_clock
                 align: LEFT_MID
-                x: 20
+                x: 72
                 text_font: font_roboto_28
                 text_color: 0xFFFFFF
                 text: "--:--"
             - label:
                 id: lbl_date
                 align: LEFT_MID
-                x: 130
+                x: 182
                 text_font: font_roboto_16
                 text_color: 0xA0A0A0
                 text: "—"
             - label:
                 id: lbl_immich_header
                 align: LEFT_MID
-                x: 260
+                x: 312
                 width: 360
                 text_font: font_roboto_16
                 text_color: 0xFFFFFF
@@ -1954,7 +1639,7 @@ lvgl:
         - obj:
             id: energy_content_container
             x: 0
-            y: 56
+            y: 28
             width: 1024
             height: 544
             bg_color: 0x000000
@@ -2763,17 +2448,7 @@ lvgl:
                     outline_width: 0
                     shadow_width: 0
                   on_click:
-                    - if:
-                        condition:
-                          lambda: 'return !id(last_touch_was_swipe);'
-                        then:
-                          - if:
-                              condition:
-                                lambda: 'return id(spotify_drawer_open);'
-                              then:
-                                - script.execute: spotify_drawer_close_script
-                              else:
-                                - script.execute: nav_overlay_show
+                    - script.execute: page_background_tap
 
     # ===========================================================
     # PAGINA 2: VERLICHTING
@@ -2785,8 +2460,8 @@ lvgl:
       widgets:
         - obj:
             id: lights_content_container
-            x: 88
-            y: 56
+            x: 44
+            y: 28
             width: 936
             height: 544
             bg_color: 0x08080A
@@ -2794,6 +2469,8 @@ lvgl:
             border_width: 0
             pad_all: 16
             scrollable: false
+            on_click:
+              - script.execute: page_background_tap
             layout:
               type: FLEX
               flex_flow: ROW
@@ -2870,7 +2547,7 @@ lvgl:
                         id: lights_grid_container
                         x: 0
                         y: 64
-                        width: 564
+                        width: 580
                         height: 432
                         bg_color: 0x101010
                         bg_opa: COVER
@@ -2886,7 +2563,7 @@ lvgl:
                           # Tile: Woonkamer
                           - obj:
                               id: tile_woonkamer
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -2950,7 +2627,7 @@ lvgl:
                           # Tile: Keuken
                           - obj:
                               id: tile_keuken
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -3014,7 +2691,7 @@ lvgl:
                           # Tile: Eettafel
                           - obj:
                               id: tile_eettafel
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -3078,7 +2755,7 @@ lvgl:
                           # Tile: Hal
                           - obj:
                               id: tile_hal
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -3142,7 +2819,7 @@ lvgl:
                           # Tile: Veranda
                           - obj:
                               id: tile_veranda
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -3206,7 +2883,7 @@ lvgl:
                           # Tile: Kantoor
                           - obj:
                               id: tile_kantoor
-                              width: 270
+                              width: 278
                               height: 130
                               margin_right: 8
                               margin_bottom: 8
@@ -3579,6 +3256,8 @@ lvgl:
             border_width: 0
             pad_all: 0
             scrollable: false
+            on_click:
+              - script.execute: page_background_tap
             widgets:
               - obj:
                   id: weather_column_divider
@@ -3945,14 +3624,14 @@ lvgl:
     # PAGINA 4: AGENDA
     # ===========================================================
     - id: page_agenda
-      bg_color: 0x000000
+      bg_color: 0x08080A
       bg_opa: COVER
       scrollable: false
       widgets:
         - obj:
             id: agenda_week_root
-            x: 88
-            y: 56
+            x: 44
+            y: 28
             width: 936
             height: 544
             bg_color: 0x000000
@@ -5494,6 +5173,8 @@ lvgl:
                   radius: 0
                   pad_all: 0
                   scrollable: false
+                  on_click:
+                    - script.execute: page_background_tap
                   widgets:
                     # Topbar
                     - obj:
@@ -6109,11 +5790,7 @@ lvgl:
                     outline_width: 0
                     shadow_width: 0
                   on_click:
-                    - if:
-                        condition:
-                          lambda: 'return !id(last_touch_was_swipe);'
-                        then:
-                          - script.execute: nav_overlay_show
+                    - script.execute: page_background_tap
 
               # Klok — altijd zichtbaar linksboven
               - label:
@@ -6454,9 +6131,7 @@ lvgl:
                     - homeassistant.action:
                         action: shell_command.immich_review_today
                     - lvgl.page.show: page_review
-                    - lvgl.widget.hide: nav_rail_container
                     - lvgl.widget.hide: top_status_bar
-                    - lambda: 'id(review_nav_countdown) = 30;'
                   widgets:
                     - label:
                         id: lbl_review_badge
@@ -6527,7 +6202,6 @@ lvgl:
                         radius: 10
                         pad_all: 0
                         on_click:
-                          - lambda: 'id(review_nav_countdown) = 0;'
                           - script.execute:
                               id: goto_page
                               page_index: 4
@@ -6795,8 +6469,8 @@ lvgl:
       scrollable: false
       widgets:
         - obj:
-            x: 88
-            y: 44
+            x: 44
+            y: 22
             width: 936
             height: 556
             bg_color: 0x000000
@@ -6888,11 +6562,7 @@ lvgl:
             pad_all: 0
             scrollable: false
             on_click:
-              - if:
-                  condition:
-                    lambda: 'return !id(last_touch_was_swipe);'
-                  then:
-                    - script.execute: nav_overlay_show
+              - script.execute: page_background_tap
             widgets:
               - label:
                   x: 32
@@ -7007,7 +6677,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[0].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[0]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7059,7 +6728,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[1].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[1]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7111,7 +6779,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[2].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[2]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7163,7 +6830,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[3].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[3]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7215,7 +6881,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[4].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[4]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7267,7 +6932,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[5].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[5]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7319,7 +6983,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[6].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[6]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7371,7 +7034,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[7].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[7]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7423,7 +7085,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[8].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[8]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7475,7 +7136,6 @@ lvgl:
                           lambda: 'return !id(last_touch_was_swipe) && !id(recipe_list_ids)[9].empty();'
                         then:
                           - lambda: 'id(ah_current_step) = 0; id(ah_current_recipe_id) = id(recipe_list_ids)[9]; id(ah_recipe_page_active) = true; id(recipe_list_page_active) = false; id(nav_overlay_countdown) = 0;'
-                          - lvgl.widget.hide: nav_rail_container
                           - lvgl.widget.hide: top_status_bar
                           - lvgl.widget.show: lbl_recipe_loading
                           - lvgl.page.show: page_recipe_detail
@@ -7574,11 +7234,7 @@ lvgl:
             pad_all: 0
             scrollable: false
             on_click:
-              - if:
-                  condition:
-                    lambda: 'return !id(last_touch_was_swipe);'
-                  then:
-                    - script.execute: nav_overlay_show
+              - script.execute: page_background_tap
             widgets:
               - label:
                   x: 32
@@ -8156,6 +7812,487 @@ lvgl:
                               text: "ALARM UIT"
 
     # ===========================================================
+    # TEGELSCHERM — navigatie (vervangt de oude zijbalk)
+    # 4×2 tegels van 232×246 met live waarde; de statusbalk staat hier vast
+    # bovenin (y 0–56), dus het raster begint op y 76.
+    # ===========================================================
+    - id: page_home
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - button:
+            id: home_tile_energie
+            x: 24
+            y: 76
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x2EE36A
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 0
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x2EE36A
+                  text: "\U000F0241"  # mdi-flash
+              - label:
+                  id: home_val_energie
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Energie"
+              - label:
+                  id: home_sub_energie
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_lichten
+            x: 272
+            y: 76
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0xFFD84A
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 1
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0xFFD84A
+                  text: "\U000F0335"  # mdi-lightbulb
+              - label:
+                  id: home_val_lichten
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Lichten"
+              - label:
+                  id: home_sub_lichten
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_weer
+            x: 520
+            y: 76
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x34D0FF
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 2
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x34D0FF
+                  text: "\U000F0595"  # mdi-weather-partly-cloudy
+              - label:
+                  id: home_val_weer
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Weer"
+              - label:
+                  id: home_sub_weer
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_agenda
+            x: 768
+            y: 76
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x34D0FF
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 3
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x34D0FF
+                  text: "\U000F00ED"  # mdi-calendar
+              - label:
+                  id: home_val_agenda
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Agenda"
+              - label:
+                  id: home_sub_agenda
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_fotos
+            x: 24
+            y: 338
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x2EE36A
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 4
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x2EE36A
+                  text: "\U000F02F9"  # mdi-image-multiple
+              - label:
+                  id: home_val_fotos
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Foto's"
+              - label:
+                  id: home_sub_fotos
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_recepten
+            x: 272
+            y: 338
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0xFF9020
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 5
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0xFF9020
+                  text: "\U000F0B7C"  # mdi-chef-hat
+              - label:
+                  id: home_val_recepten
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Recepten"
+              - label:
+                  id: home_sub_recepten
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_timer
+            x: 520
+            y: 338
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x2EE36A
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 6
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x2EE36A
+                  text: "\U000F051B"  # mdi-timer-outline
+              - label:
+                  id: home_val_timer
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Timer"
+              - label:
+                  id: home_sub_timer
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_muziek
+            x: 768
+            y: 338
+            width: 232
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x1ED760
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute: spotify_drawer_open_script
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x1ED760
+                  text: "\U000F075A"  # mdi-music
+              - label:
+                  id: home_val_muziek
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Muziek"
+              - label:
+                  id: home_sub_muziek
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 196
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+
+    # ===========================================================
     # RECEPT DETAIL
     # ===========================================================
     - id: page_recipe_detail
@@ -8177,11 +8314,7 @@ lvgl:
             pad_all: 0
             scrollable: false
             on_click:
-              - if:
-                  condition:
-                    lambda: 'return !id(last_touch_was_swipe);'
-                  then:
-                    - script.execute: nav_overlay_show
+              - script.execute: page_background_tap
         - obj:
             id: recipe_header_container
             x: 0
@@ -8230,11 +8363,7 @@ lvgl:
             scroll_momentum: true
             scroll_elastic: true
             on_click:
-              - if:
-                  condition:
-                    lambda: 'return !id(last_touch_was_swipe);'
-                  then:
-                    - script.execute: nav_overlay_show
+              - script.execute: page_background_tap
             widgets:
               - label:
                   id: lbl_recipe_ingredients_text
@@ -8262,11 +8391,7 @@ lvgl:
             scroll_momentum: true
             scroll_elastic: true
             on_click:
-              - if:
-                  condition:
-                    lambda: 'return !id(last_touch_was_swipe);'
-                  then:
-                    - script.execute: nav_overlay_show
+              - script.execute: page_background_tap
             widgets:
               - label:
                   id: lbl_recipe_steps_text
@@ -8610,38 +8735,6 @@ script:
                    id(timer_input_minutes), id(timer_input_seconds),
                    static_cast<long long>(id(timer_finish_timestamp)));
 
-  # Nav rail — kleurt de strip+knop van page_index actief, de rest inactief.
-  # Vervangt de 6x14-regelige lvgl.obj.update-reeks die vroeger in elke
-  # nav-knop on_click stond (identiek op index en actieve kleur na).
-  - id: nav_select
-    parameters:
-      page_index: int
-    then:
-      - lambda: |-
-          static const lv_color_t active_colors[7] = {
-            lv_color_hex(0x2EE36A),  // 0 Energie
-            lv_color_hex(0x2EE36A),  // 1 Lichten
-            lv_color_hex(0x2EE36A),  // 2 Weer
-            lv_color_hex(0x34D0FF),  // 3 Agenda
-            lv_color_hex(0x2EE36A),  // 4 Immich
-            lv_color_hex(0xFF9020),  // 5 Recepten
-            lv_color_hex(0x2EE36A),  // 6 Timer
-          };
-          lv_obj_t *strips[7] = {
-            id(nav_strip_energie), id(nav_strip_lichten), id(nav_strip_weather),
-            id(nav_strip_agenda), id(nav_strip_immich), id(nav_strip_recepten),
-            id(nav_strip_timer)
-          };
-          lv_obj_t *buttons[7] = {
-            id(nav_energie), id(nav_lichten), id(nav_weather),
-            id(nav_agenda), id(nav_immich), id(nav_recepten), id(nav_timer)
-          };
-          for (int i = 0; i < 7; i++) {
-            bool active = (i == page_index);
-            lv_obj_set_style_bg_color(strips[i], active ? active_colors[i] : lv_color_hex(0x050505), LV_PART_MAIN);
-            lv_obj_set_style_bg_color(buttons[i], active ? lv_color_hex(0x202020) : lv_color_hex(0x1a1a1a), LV_PART_MAIN);
-          }
-
   - id: goto_page
     mode: restart
     parameters:
@@ -8664,6 +8757,7 @@ script:
           condition:
             lambda: 'return page_index != 4;'
           then:
+            - lambda: 'lv_label_set_text(id(lbl_immich_header), "");'
             - script.stop: immich_photo_load
             - script.stop: immich_photo_retry
       - if:
@@ -8713,11 +8807,131 @@ script:
           then:
             - lvgl.page.show: page_timer
             - script.execute: timer_ui_refresh
-      - lvgl.widget.hide: nav_rail_container
-      - lvgl.widget.hide: top_status_bar
-      - script.execute:
-          id: nav_select
-          page_index: !lambda 'return page_index;'
+      - if:
+          condition:
+            lambda: 'return page_index == 7;'
+          then:
+            - lvgl.page.show: page_home
+      - if:
+          condition:
+            lambda: 'return page_index == 7;'
+          then:
+            # Op het tegelscherm staat de statusbalk vast (klok, status, geen auto-hide).
+            - lambda: 'id(nav_overlay_countdown) = 0;'
+            - lvgl.widget.show: top_status_bar
+            - script.execute: home_tiles_refresh
+          else:
+            - lvgl.widget.hide: top_status_bar
+      - if:
+          condition:
+            lambda: 'return page_index == 2;'
+          then:
+            # Even wachten tot de paginaovergang (volledige redraw) is afgerond
+            # vóórdat de radar-decode start — anders botsen de grote paginaredraw
+            # en de decode in dezelfde tick (blauwe flits bij overschakelen).
+            - delay: 400ms
+            - script.execute: radar_frame_load
+
+  # Tegelscherm — live waarden. Leest alleen sensoren die er al zijn; geen
+  # plaatjes, zodat het tegelscherm geen decode-werk (en dus geen flits) kost.
+  - id: home_tiles_refresh
+    mode: restart
+    then:
+      - lambda: |-
+          auto set = [](lv_obj_t *label, const std::string &text) {
+            if (strcmp(lv_label_get_text(label), text.c_str()) != 0) lv_label_set_text(label, text.c_str());
+          };
+          auto usable = [](const std::string &v) {
+            return !v.empty() && v != "unknown" && v != "unavailable";
+          };
+
+          // Energie: actueel verbruik + stroomprijs
+          {
+            float kw = id(ha_verbruik).state;
+            if (isnan(kw)) set(id(home_val_energie), "-- W");
+            else if (std::fabs(kw) < 1.0f) set(id(home_val_energie), str_sprintf("%.0f W", kw * 1000.0f));
+            else set(id(home_val_energie), str_sprintf("%.1f kW", kw));
+            float prijs = id(ha_stroomprijs).state;
+            set(id(home_sub_energie), isnan(prijs) ? std::string("") : str_sprintf("\xe2\x82\xac%.2f/kWh", prijs));
+          }
+
+          // Lichten: zelfde samenvatting als de lichtenpagina
+          set(id(home_val_lichten), lv_label_get_text(id(lbl_lights_summary)));
+
+          // Weer: buitentemperatuur + regenverwachting
+          {
+            float t = id(wx_temp).state;
+            set(id(home_val_weer), isnan(t) ? std::string("--\xc2\xb0") : str_sprintf("%.0f\xc2\xb0", t));
+            std::string rain = id(wx_rain_cap).state;
+            set(id(home_sub_weer), usable(rain) ? rain : std::string(""));
+          }
+
+          // Agenda: eerstvolgende afspraak van vandaag ("HH:MM titel")
+          {
+            auto now = id(ha_time).now();
+            int now_min = now.is_valid() ? now.hour * 60 + now.minute : -1;
+            const std::string raws[6] = {
+              id(agenda_d0_event_1).state, id(agenda_d0_event_2).state, id(agenda_d0_event_3).state,
+              id(agenda_d0_event_4).state, id(agenda_d0_event_5).state, id(agenda_d0_event_6).state
+            };
+            std::string next_time, next_title;
+            for (const auto &raw : raws) {
+              if (!usable(raw) || raw.size() < 5) continue;
+              if (!(isdigit(raw[0]) && isdigit(raw[1]) && raw[2] == ':' && isdigit(raw[3]) && isdigit(raw[4]))) continue;
+              int m = ((raw[0] - '0') * 10 + (raw[1] - '0')) * 60 + (raw[3] - '0') * 10 + (raw[4] - '0');
+              if (now_min >= 0 && m < now_min) continue;
+              next_time = raw.substr(0, 5);
+              next_title = raw.size() > 6 ? raw.substr(6) : "";
+              break;
+            }
+            if (next_time.empty()) {
+              set(id(home_val_agenda), "Vrij");
+              set(id(home_sub_agenda), "geen afspraken meer");
+            } else {
+              set(id(home_val_agenda), next_time);
+              set(id(home_sub_agenda), next_title);
+            }
+          }
+
+          // Foto's: nog te beoordelen
+          {
+            int n = atoi(id(ha_review_resterend).state.c_str());
+            set(id(home_val_fotos), n > 0 ? str_sprintf("%d nieuw", n) : std::string("Fotolijst"));
+            set(id(home_sub_fotos), n > 0 ? std::string("te beoordelen") : std::string(""));
+          }
+
+          // Recepten: geen live waarde
+          set(id(home_val_recepten), "Koken");
+          set(id(home_sub_recepten), "mandje \xc2\xb7 favorieten");
+
+          // Timer: resterende tijd als hij loopt of gepauzeerd is
+          {
+            const std::string st = id(ha_idot_timer_status).state;
+            int secs = -1;
+            if (st == "running" && id(timer_finish_timestamp) > 0) {
+              auto now = id(ha_time).now();
+              if (now.is_valid()) secs = std::max<int64_t>(0, id(timer_finish_timestamp) - now.timestamp);
+            } else if (st == "running" || st == "paused") {
+              secs = std::max(0, id(timer_display_seconds));
+            }
+            if (secs >= 0) {
+              set(id(home_val_timer), str_sprintf("%02d:%02d", secs / 60, secs % 60));
+              set(id(home_sub_timer), st == "paused" ? "gepauzeerd" : "loopt");
+            } else {
+              set(id(home_val_timer), "Uit");
+              set(id(home_sub_timer), "keukentimer");
+            }
+            lv_obj_set_style_border_color(id(home_tile_timer),
+              lv_color_hex(st == "running" ? 0x2EE36A : 0x1F1F26), LV_PART_MAIN);
+          }
+
+          // Muziek: status van de keuken-amp
+          {
+            const std::string st = id(media_state).state;
+            set(id(home_val_muziek), st == "playing" ? "Speelt" : st == "paused" ? "Pauze" : "Uit");
+            const std::string title = id(media_title).state;
+            set(id(home_sub_muziek), (st == "playing" || st == "paused") && usable(title) ? title : std::string(""));
+          }
 
   - id: spotify_drawer_close_script
     mode: restart
@@ -8729,6 +8943,11 @@ script:
       - script.stop: album_art_retry
       - lvgl.widget.hide: spotify_drawer_container
       - script.execute: spotify_drawer_restore_layout_script
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) == 7;'
+          then:
+            - lvgl.widget.show: top_status_bar
 
   - id: spotify_drawer_open_script
     mode: restart
@@ -8741,7 +8960,6 @@ script:
             - lambda: |-
                 id(spotify_drawer_open) = true;
                 ESP_LOGI("swipe", "open_script: drawer_open set true");
-            - lvgl.widget.hide: nav_rail_container
             - lvgl.widget.hide: top_status_bar
             - script.execute: spotify_drawer_apply_compact_layout_script
             - lvgl.widget.show: spotify_drawer_container
@@ -9006,7 +9224,7 @@ script:
     then:
       - lvgl.obj.update:
           id: lights_content_container
-          x: 88
+          x: 44
           width: 936
       - lvgl.obj.update:
           id: lights_main_card
@@ -9144,29 +9362,15 @@ script:
           id(hood_auto_active) = false;
           id(hood_auto_countdown) = 0;
 
-  - id: left_nav_show
-    mode: restart
+  # Tik op een lege plek van een pagina: statusbalk tonen (of de Spotify-drawer
+  # sluiten als die open staat). Eén gedrag voor alle pagina's.
+  - id: page_background_tap
     then:
-      - lambda: 'id(nav_overlay_countdown) = 30;'
-      - lvgl.widget.show: nav_rail_container
-
-  - id: left_nav_hide
-    mode: restart
-    then:
-      - lambda: 'id(nav_overlay_countdown) = 0;'
-      - lvgl.widget.hide: nav_rail_container
-
-  - id: top_bar_show
-    mode: restart
-    then:
-      - lambda: 'id(nav_overlay_countdown) = 30;'
-      - lvgl.widget.show: top_status_bar
-
-  - id: top_bar_hide
-    mode: restart
-    then:
-      - lambda: 'id(nav_overlay_countdown) = 0;'
-      - lvgl.widget.hide: top_status_bar
+      - if:
+          condition:
+            lambda: 'return !id(last_touch_was_swipe);'
+          then:
+            - script.execute: nav_overlay_show
 
   - id: nav_overlay_show
     mode: restart
@@ -9181,8 +9385,8 @@ script:
                 if (id(immich_page_active)) {
                   id(immich_overlay_countdown) = 30;
                 }
-            - script.execute: left_nav_show
-            - script.execute: top_bar_show
+            - lambda: 'id(nav_overlay_countdown) = 30;'
+            - lvgl.widget.show: top_status_bar
             - if:
                 condition:
                   lambda: 'return id(immich_page_active);'
@@ -9194,8 +9398,12 @@ script:
     then:
       - lambda: |-
           id(immich_overlay_countdown) = 0;
-      - script.execute: left_nav_hide
-      - script.execute: top_bar_hide
+      - lambda: 'id(nav_overlay_countdown) = 0;'
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) != 7;'
+          then:
+            - lvgl.widget.hide: top_status_bar
       - if:
           condition:
             lambda: 'return id(immich_page_active);'
@@ -9349,7 +9557,6 @@ script:
           id(immich_overlay_countdown) = 0;
           id(doorbell_art_retry_count) = 0;
       - script.execute: spotify_drawer_close_script
-      - lvgl.widget.hide: nav_rail_container
       - lvgl.widget.hide: top_status_bar
       - lvgl.page.show: page_doorbell
       - lvgl.label.update:
@@ -9712,7 +9919,16 @@ interval:
           id(recipe_sheet)->set_url(id(recipe_sheet_desired_url));
           id(recipe_sheet)->update();
 
-  # Immich overlay timeout — telt af van 30 naar 0, verbergt dan controls + nav
+  # Tegelscherm — live waarden bijwerken zolang het in beeld is
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: 'return id(current_display_page) == 7 && !id(doorbell_page_active);'
+          then:
+            - script.execute: home_tiles_refresh
+
+  # Immich overlay timeout — telt af van 30 naar 0, verbergt dan controls + statusbalk
   - interval: 1s
     then:
       - if:
@@ -9725,19 +9941,7 @@ interval:
                   lambda: 'return id(immich_overlay_countdown) == 0 && id(immich_page_active);'
                 then:
                   - lvgl.widget.hide: immich_controls
-                  - lvgl.widget.hide: nav_rail_container
                   - lvgl.widget.hide: top_status_bar
-      - if:
-          condition:
-            lambda: 'return id(review_nav_countdown) > 0;'
-          then:
-            - lambda: 'id(review_nav_countdown)--;'
-            - if:
-                condition:
-                  lambda: 'return id(review_nav_countdown) == 0;'
-                then:
-                  - lvgl.widget.show: nav_rail_container
-                  - lvgl.widget.show: top_status_bar
       - if:
           condition:
             lambda: 'return id(nav_overlay_countdown) > 0;'
@@ -9745,9 +9949,8 @@ interval:
             - lambda: 'id(nav_overlay_countdown)--;'
             - if:
                 condition:
-                  lambda: 'return id(nav_overlay_countdown) == 0 && !id(immich_page_active);'
+                  lambda: 'return id(nav_overlay_countdown) == 0 && !id(immich_page_active) && id(current_display_page) != 7;'
                 then:
-                  - lvgl.widget.hide: nav_rail_container
                   - lvgl.widget.hide: top_status_bar
       - if:
           condition:
@@ -10312,7 +10515,7 @@ interval:
             id(lbl_agenda_future_d3_count), future_d3_slots, future_d3_accents,
             future_d3_times, future_d3_titles, id(lbl_agenda_future_d3_empty));
 
-          // Agenda-thema: alleen het agenda-canvas wisselt; de omliggende interface blijft zwart.
+          // Agenda-thema: het agenda-canvas en de pagina wisselen; de statusbalk blijft zwart.
           bool light = id(agenda_light_theme);
           lv_color_t surface = lv_color_hex(light ? 0xF5F5F7 : 0x08080A);
           lv_color_t card = lv_color_hex(light ? 0xFFFFFF : 0x131418);
@@ -10322,6 +10525,10 @@ interval:
           lv_color_t red = lv_color_hex(0xFF3B30);
 
           lv_obj_set_style_bg_color(id(agenda_focus_sidebar), surface, LV_PART_MAIN);
+          // Het agendavlak staat gecentreerd; de pagina eromheen kleurt mee,
+          // anders krijgt het lichte thema een zwarte rand.
+          lv_obj_set_style_bg_color(id(agenda_week_root), surface, LV_PART_MAIN);
+          lv_obj_set_style_bg_color(lv_obj_get_parent(id(agenda_week_root)), surface, LV_PART_MAIN);
           lv_obj_set_style_bg_color(id(agenda_panel_divider), divider, LV_PART_MAIN);
           lv_obj_set_style_bg_color(id(agenda_future_divider_1), divider, LV_PART_MAIN);
           lv_obj_set_style_bg_color(id(agenda_future_divider_2), divider, LV_PART_MAIN);
