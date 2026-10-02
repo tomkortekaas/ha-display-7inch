@@ -42,7 +42,7 @@ MAX_HISTORY = 40
 THIS_DAY_REFRESH_SECONDS = 30 * 60
 # Na een tik op het scherm wisselt de minuuttimer even niet: anders verdwijnt
 # de foto onder je vinger, of verwijdert de dialoog de volgende.
-AUTO_PAUSE_SECONDS = 120
+AUTO_PAUSE_SECONDS = 60
 
 NL_MONTHS = [
     "",
