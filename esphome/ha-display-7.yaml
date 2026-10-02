@@ -6144,10 +6144,10 @@ lvgl:
                         border_width: 0
                         on_click:
                           - lvgl.widget.hide: immich_delete_dialog
+                          # confirm-trash schuift zelf door naar de volgende foto;
+                          # een losse next erachteraan zou een foto overslaan.
                           - homeassistant.action:
                               action: shell_command.immich_photo_confirm_trash
-                          - homeassistant.action:
-                              action: shell_command.immich_photo_next
                         widgets:
                           - label:
                               align: CENTER

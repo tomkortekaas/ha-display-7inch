@@ -16,15 +16,8 @@
 # één keer per update en animeert door het beeld te verschuiven.
 # De tijden staan in input_text.ha_display_radar_meta: "<epoch frame 0>|<aantal>|<stap s>".
 
-rest:
-  - resource: !secret photo_swipe_today_url
-    scan_interval: 300
-    sensor:
-      - name: "Immich review vandaag count"
-        unique_id: immich_review_vandaag_count
-        value_template: "{{ value_json.count | int(0) }}"
-        unit_of_measurement: "foto's"
-        icon: "mdi:image-check"
+# sensor.immich_review_vandaag_count (badge op de fotopagina) schrijft
+# immich_rotate_7inch.py zelf, elke 5 minuten via review-count.
 
 input_select:
   idotmatrix_timer_status:

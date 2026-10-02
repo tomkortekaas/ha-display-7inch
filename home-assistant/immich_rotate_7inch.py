@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 import io
 import json
+import fcntl
 import os
+import random
 import signal
 import ssl
 import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import yaml
 from PIL import Image, ImageOps
@@ -27,6 +29,7 @@ PHOTO_SWIPE_URL = str(SECRETS.get("photo_swipe_url", "")).rstrip("/")
 
 OUT_DIR = os.path.join(CONFIG_DIR, "www", "immich")
 STATE_JSON = os.path.join(OUT_DIR, "state.json")
+LOCK_FILE = os.path.join(OUT_DIR, ".lock")
 OUT_JPG = os.path.join(OUT_DIR, "current.jpg")
 NEXT_JPG = os.path.join(OUT_DIR, "next.jpg")
 WIDTH = int(SECRETS.get("immich_photo_width", 1024))
@@ -36,6 +39,7 @@ TIMEOUT = 30
 SCRIPT_TIMEOUT = 50
 TRASH_CONFIRM_SECONDS = 5
 MAX_HISTORY = 40
+THIS_DAY_REFRESH_SECONDS = 30 * 60
 
 NL_MONTHS = [
     "",
@@ -79,9 +83,9 @@ def immich(path, method="GET", body=None):
     )
 
 
-def pick_asset():
+def pick_random_asset():
     try:
-        data = immich("/api/search/random", "POST", {"size": 1})
+        data = immich("/api/search/random", "POST", {"size": 1, "type": "IMAGE", "visibility": "timeline"})
         if isinstance(data, list) and data:
             return data[0]
         if isinstance(data, dict):
@@ -93,6 +97,109 @@ def pick_asset():
 
     data = immich("/api/assets/random?count=1")
     return data[0] if isinstance(data, list) else data
+
+
+# ---------------------------------------------------------------------------
+# Op deze dag — alle foto's van vandaag (dag + maand) uit alle jaren
+# ---------------------------------------------------------------------------
+
+def search_all(body):
+    items = []
+    page = 1
+    while page:
+        data = immich("/api/search/metadata", "POST", {**body, "page": page, "size": 1000})
+        assets = (data or {}).get("assets") or {}
+        items.extend(assets.get("items") or [])
+        page = assets.get("nextPage")
+    return items
+
+
+def fetch_this_day(today):
+    """Alle zichtbare assets waarvan de lokale opnamedatum dezelfde dag en maand is.
+
+    Immich filtert takenAfter/takenBefore op UTC; daarom ruim zoeken en op
+    localDateTime nafilteren. Alleen jaren met foto's in deze maand bevragen.
+    Visibility 'timeline' laat de verborgen bewegende helft van Live Photos weg.
+    """
+    month_key = f"-{today.month:02d}-"
+    buckets = immich("/api/timeline/buckets?visibility=timeline")
+    years = sorted(
+        {int(b["timeBucket"][:4]) for b in buckets or [] if month_key in b.get("timeBucket", "")[4:8]},
+        reverse=True,
+    )
+    day_key = f"{today.month:02d}-{today.day:02d}"
+    found = {}
+    for year in years:
+        try:
+            day = datetime(year, today.month, today.day)
+        except ValueError:
+            continue  # 29 februari in een niet-schrikkeljaar
+        start = (day - timedelta(days=1)).strftime("%Y-%m-%d")
+        end = (day + timedelta(days=1)).strftime("%Y-%m-%d")
+        for asset in search_all({
+            "takenAfter": f"{start}T00:00:00.000Z",
+            "takenBefore": f"{end}T23:59:59.999Z",
+            "visibility": "timeline",
+        }):
+            if str(asset.get("localDateTime", ""))[5:10] == day_key:
+                found[asset["id"]] = {
+                    "id": asset["id"],
+                    "type": asset.get("type", "IMAGE"),
+                    "taken": asset.get("localDateTime", ""),
+                }
+    return sorted(found.values(), key=lambda a: a["taken"])
+
+
+def this_day_pool(state, force=False):
+    today = datetime.now()
+    date_key = today.strftime("%Y-%m-%d")
+    pool = state.get("this_day") or {}
+    fresh = (
+        pool.get("date") == date_key
+        and time.time() - float(pool.get("fetched_at", 0)) < THIS_DAY_REFRESH_SECONDS
+    )
+    if fresh and not force:
+        return pool
+    try:
+        assets = fetch_this_day(today)
+    except Exception as exc:
+        sys.stderr.write(f"[immich] op-deze-dag ophalen faalde: {exc}\n")
+        if pool.get("date") == date_key:
+            return pool
+        assets = []
+    shown = pool.get("shown", []) if pool.get("date") == date_key else []
+    ids = {a["id"] for a in assets}
+    pool = {
+        "date": date_key,
+        "fetched_at": time.time(),
+        "assets": assets,
+        "shown": [asset_id for asset_id in shown if asset_id in ids],
+    }
+    state["this_day"] = pool
+    return pool
+
+
+def forget_this_day(state, asset_id):
+    pool = state.get("this_day") or {}
+    pool["assets"] = [a for a in pool.get("assets", []) if a["id"] != asset_id]
+    pool["shown"] = [i for i in pool.get("shown", []) if i != asset_id]
+
+
+def pick_asset(state):
+    """Volgende foto van deze dag; alles komt een keer langs voordat er iets herhaalt."""
+    pool = this_day_pool(state)
+    photos = [a["id"] for a in pool.get("assets", []) if a.get("type") == "IMAGE"]
+    if not photos:
+        return pick_random_asset()
+    shown = set(pool.get("shown", []))
+    current = current_asset(state)
+    candidates = [i for i in photos if i not in shown]
+    if not candidates:
+        pool["shown"] = []
+        candidates = [i for i in photos if not current or i != current["id"]] or photos
+    asset_id = random.choice(candidates)
+    pool.setdefault("shown", []).append(asset_id)
+    return get_asset(asset_id)
 
 
 def get_asset(asset_id):
@@ -228,7 +335,7 @@ def ensure_next(state):
     if state.get("next"):
         return
     try:
-        next_asset = asset_summary(pick_asset())
+        next_asset = asset_summary(pick_asset(state))
         save_rendered(next_asset, NEXT_JPG, zoom=False)
         state["next"] = next_asset
     except Exception as exc:
@@ -491,43 +598,35 @@ def publish_review(state, status="Aan het beoordelen"):
     set_state("sensor.immich_review_bestand", asset.get("originalFileName", ""))
     set_state("sensor.immich_review_personen", ", ".join(people) or "")
     set_state("sensor.immich_review_voortgang", f"{idx + 1} / {total}")
-    set_state("sensor.immich_review_resterend", str(total - idx))
+    publish_review_count(total - idx)
     set_state("sensor.immich_review_status", status)
 
 
-def fetch_today_queue():
-    if PHOTO_SWIPE_URL:
-        try:
-            result = request_json(f"{PHOTO_SWIPE_URL}/api/display-session/today",
-                                  method="POST", body={})
-            return result.get("assetIds", [])
-        except Exception:
-            pass
-    # Fallback: Immich direct
-    today = datetime.now()
-    y, m, d = today.year, today.month, today.day
-    result = immich("/api/search/metadata", "POST", {
-        "takenAfter": f"{y}-{m:02d}-{d:02d}T00:00:00.000Z",
-        "takenBefore": f"{y}-{m:02d}-{d:02d}T23:59:59.999Z",
-        "size": 1000,
-    })
-    items = (result or {}).get("assets", {}).get("items", [])
+def tag_id(tag_name):
     tags = immich("/api/tags")
-    btag = next((t for t in (tags or []) if t["name"] == "beoordeeld"), None)
-    if btag:
-        reviewed_res = immich("/api/search/metadata", "POST", {
-            "tagIds": [btag["id"]],
-            "takenAfter": f"{y}-{m:02d}-{d:02d}T00:00:00.000Z",
-            "takenBefore": f"{y}-{m:02d}-{d:02d}T23:59:59.999Z",
-            "size": 1000,
-        })
-        reviewed = {a["id"] for a in (reviewed_res or {}).get("assets", {}).get("items", [])}
-        items = [a for a in items if a["id"] not in reviewed]
-    return [a["id"] for a in items]
+    tag = next((t for t in tags or [] if t.get("value", t.get("name")) == tag_name), None)
+    return tag["id"] if tag else None
+
+
+def fetch_today_queue(state, force=False):
+    """Nog niet beoordeelde foto's en video's van deze dag, oudste jaar eerst."""
+    pool = this_day_pool(state, force=force)
+    ids = [a["id"] for a in pool.get("assets", [])]
+    reviewed_tag = tag_id("beoordeeld")
+    if ids and reviewed_tag:
+        reviewed = {a["id"] for a in search_all({"tagIds": [reviewed_tag], "visibility": "timeline"})}
+        ids = [i for i in ids if i not in reviewed]
+    return ids
+
+
+def publish_review_count(count):
+    attrs = {"unit_of_measurement": "foto's", "icon": "mdi:image-check"}
+    set_state("sensor.immich_review_vandaag_count", str(count), attrs)
+    set_state("sensor.immich_review_resterend", str(count))
 
 
 def action_review_today(state):
-    queue = fetch_today_queue()
+    queue = fetch_today_queue(state, force=True)
     state["review_queue"] = queue
     state["review_idx"] = 0
     state["review_current_asset"] = None
@@ -535,7 +634,7 @@ def action_review_today(state):
     if not queue:
         set_state("sensor.immich_review_status", "Geen foto's meer vandaag")
         set_state("sensor.immich_review_voortgang", "0 / 0")
-        set_state("sensor.immich_review_resterend", "0")
+        publish_review_count(0)
         return
     asset = render_review_photo(queue[0])
     state["review_current_asset"] = asset
@@ -549,7 +648,7 @@ def action_review_next(state):
     if idx + 1 >= len(queue):
         set_state("sensor.immich_review_status", "Alle foto's beoordeeld!")
         set_state("sensor.immich_review_voortgang", f"{len(queue)} / {len(queue)}")
-        set_state("sensor.immich_review_resterend", "0")
+        publish_review_count(0)
         return
     state["review_idx"] = idx + 1
     state["review_current_asset"] = None
@@ -593,6 +692,7 @@ def action_review_trash(state):
         return
     trash_asset(asset_id)
     notify_photo_swipe(asset_id, "trash")
+    forget_this_day(state, asset_id)
     state["last_action"] = {"asset_id": asset_id, "action": "trash"}
     save_state(state)
     action_review_next(state)
@@ -620,16 +720,9 @@ def action_review_rotate(state):
 
 
 def action_review_count(state):
-    """Update badge count zonder sessie aan te maken."""
-    if PHOTO_SWIPE_URL:
-        try:
-            result = request_json(f"{PHOTO_SWIPE_URL}/api/display-session/today")
-            set_state("sensor.immich_review_resterend", str(result.get("count", 0)))
-            return
-        except Exception:
-            pass
-    queue = fetch_today_queue()
-    set_state("sensor.immich_review_resterend", str(len(queue)))
+    """Badge bijwerken zonder sessie aan te maken."""
+    publish_review_count(len(fetch_today_queue(state)))
+    save_state(state)
 
 
 def get_or_create_tag(tag_name):
@@ -707,6 +800,8 @@ def action_trash(state, confirm=False):
     if not asset:
         publish_current(state, "Geen foto om te verwijderen")
         return
+    # confirm=True komt van de bevestigdialoog op het scherm: die vraagt het
+    # zelf al na. Zonder dialoog geldt: twee keer tikken binnen een paar seconden.
     now = time.time()
     pending_id = state.get("trash_pending_asset_id")
     pending_until = float(state.get("trash_pending_until", 0))
@@ -718,15 +813,10 @@ def action_trash(state, confirm=False):
         save_state(state)
         publish_current(state, "Tik nogmaals op prullenbak om te bevestigen")
         return
-    if pending_id != asset["id"] or now > pending_until:
-        state.pop("trash_pending_asset_id", None)
-        state.pop("trash_pending_until", None)
-        save_state(state)
-        publish_current(state, "Prullenbak bevestiging verlopen")
-        return
     asset_id = asset["id"]
     trash_asset(asset_id)
     notify_photo_swipe(asset_id, "trash")
+    forget_this_day(state, asset_id)
     state["last_action"] = {"asset_id": asset_id, "action": "trash"}
     state.pop("trash_pending_asset_id", None)
     state.pop("trash_pending_until", None)
@@ -744,6 +834,10 @@ def main():
         signal.signal(signal.SIGALRM, script_timeout)
         signal.alarm(SCRIPT_TIMEOUT)
     os.makedirs(OUT_DIR, exist_ok=True)
+    # Schermknoppen en de minuuttimer starten losse processen; zonder slot
+    # overschrijven ze elkaars state.json.
+    lock = open(LOCK_FILE, "w")
+    fcntl.flock(lock, fcntl.LOCK_EX)
     try:
         state = load_state()
         action = sys.argv[1] if len(sys.argv) > 1 else "next"
