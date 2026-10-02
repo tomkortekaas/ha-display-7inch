@@ -200,7 +200,7 @@ def this_day_pool(state, force=False):
 
 def forget_this_day(state, asset_id):
     pool = state.get("this_day") or {}
-    pool["assets"] = [a for a in pool.get("assets", []) if a["id"] != asset_id]
+    pool["assets"] = [a for a in pool.get("assets", []) if asset_id not in a.get("copies", [a["id"]])]
     pool["shown"] = [i for i in pool.get("shown", []) if i != asset_id]
 
 
@@ -519,8 +519,17 @@ def action_zoom(state):
     save_state(state)
 
 
-def trash_asset(asset_id):
-    body = {"ids": [asset_id], "force": False}
+def copies_of(state, asset_id):
+    """Alle kopieën van deze foto (ook die in de andere bibliotheek)."""
+    for entry in (state.get("this_day") or {}).get("assets", []):
+        if asset_id in entry.get("copies", [entry["id"]]):
+            return list(entry.get("copies") or [asset_id])
+    return [asset_id]
+
+
+def trash_asset(asset_ids):
+    ids = [asset_ids] if isinstance(asset_ids, str) else list(asset_ids)
+    body = {"ids": ids, "force": False}
     try:
         immich("/api/assets", "DELETE", body)
     except urllib.error.HTTPError as exc:
@@ -715,10 +724,11 @@ def action_review_trash(state):
     asset_id = review_asset_id(state)
     if not asset_id:
         return
-    trash_asset(asset_id)
+    copies = copies_of(state, asset_id)
+    trash_asset(copies)
     notify_photo_swipe(asset_id, "trash")
     forget_this_day(state, asset_id)
-    state["last_action"] = {"asset_id": asset_id, "action": "trash"}
+    state["last_action"] = {"asset_id": asset_id, "action": "trash", "copies": copies}
     save_state(state)
     action_review_next(state)
 
@@ -797,7 +807,7 @@ def action_undo(state):
     last_asset_id = last["asset_id"] if last else None
     if last and last.get("action") == "trash":
         try:
-            immich("/api/trash/assets/restore", "POST", {"ids": [last_asset_id]})
+            immich("/api/trash/assets/restore", "POST", {"ids": last.get("copies") or [last_asset_id]})
         except Exception:
             pass
     notify_photo_swipe(last_asset_id or "", "undo", last_asset_id)
@@ -850,10 +860,11 @@ def action_trash(state, confirm=False):
         publish_current(state, "Tik nogmaals op prullenbak om te bevestigen")
         return
     asset_id = asset["id"]
-    trash_asset(asset_id)
+    copies = copies_of(state, asset_id)
+    trash_asset(copies)
     notify_photo_swipe(asset_id, "trash")
     forget_this_day(state, asset_id)
-    state["last_action"] = {"asset_id": asset_id, "action": "trash"}
+    state["last_action"] = {"asset_id": asset_id, "action": "trash", "copies": copies}
     state.pop("trash_pending_asset_id", None)
     state.pop("trash_pending_until", None)
     action_next(state)
