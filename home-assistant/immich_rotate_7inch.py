@@ -40,6 +40,9 @@ SCRIPT_TIMEOUT = 50
 TRASH_CONFIRM_SECONDS = 5
 MAX_HISTORY = 40
 THIS_DAY_REFRESH_SECONDS = 30 * 60
+# Na een tik op het scherm wisselt de minuuttimer even niet: anders verdwijnt
+# de foto onder je vinger, of verwijdert de dialoog de volgende.
+AUTO_PAUSE_SECONDS = 120
 
 NL_MONTHS = [
     "",
@@ -840,7 +843,15 @@ def main():
     fcntl.flock(lock, fcntl.LOCK_EX)
     try:
         state = load_state()
-        action = sys.argv[1] if len(sys.argv) > 1 else "next"
+        # Zonder argument = de minuuttimer.
+        action = sys.argv[1] if len(sys.argv) > 1 else "auto"
+        if action == "auto":
+            if time.time() - float(state.get("user_action_at", 0)) < AUTO_PAUSE_SECONDS:
+                return
+            action = "next"
+        elif action not in ("review-count", "refresh"):
+            state["user_action_at"] = time.time()
+            save_state(state)
 
         if action == "next":
             action_next(state)

@@ -476,6 +476,20 @@ touchscreen:
             id(recipe_list_step)->execute(swipe_left ? 1 : -1);
             return;
           }
+          // Fotopagina: links = volgende, rechts = vorige, omhoog = verwijderen.
+          // Niet vanaf de randen (startscherm, Spotify, navigatiebalk) en niet
+          // terwijl de verwijderdialoog openstaat.
+          if (id(immich_page_active) && !id(spotify_drawer_open) && !from_left_edge && !from_right_edge &&
+              lv_obj_has_flag(id(immich_delete_dialog), LV_OBJ_FLAG_HIDDEN)) {
+            if (horizontal_swipe) {
+              id(immich_swipe)->execute(swipe_left ? 1 : -1);
+              return;
+            }
+            if (dy <= -90 && abs_dy > abs_dx * 2 && !from_top_zone) {
+              id(immich_swipe)->execute(0);
+              return;
+            }
+          }
           if (abs_dx >= 55 && abs_dx > abs_dy) {
             // Vanaf de linkerrand naar rechts = terug naar het tegelscherm.
             // Niet vanaf de deurbel: die keert zelf terug naar de vorige pagina.
@@ -5942,9 +5956,13 @@ lvgl:
                           outline_width: 0
                           shadow_width: 0
                         on_click:
-                          - lambda: 'id(immich_overlay_countdown) = 30;'
-                          - homeassistant.action:
-                              action: shell_command.immich_photo_zoom
+                          - if:
+                              condition:
+                                lambda: 'return !id(last_touch_was_swipe);'
+                              then:
+                                - lambda: 'id(immich_overlay_countdown) = 30;'
+                                - homeassistant.action:
+                                    action: shell_command.immich_photo_zoom
                     # Links — vorige foto
                     - button:
                         x: 8
@@ -6112,7 +6130,7 @@ lvgl:
                         y: 130
                         text_font: font_roboto_16
                         text_color: 0x888888
-                        text: "Dit kan niet ongedaan worden gemaakt"
+                        text: "Gaat 30 dagen naar de Immich-prullenbak"
                         text_align: CENTER
                     - button:
                         align: BOTTOM_LEFT
@@ -9678,6 +9696,36 @@ script:
 
   # Tik op een lege plek van een pagina: statusbalk tonen (of de Spotify-drawer
   # sluiten als die open staat). Eén gedrag voor alle pagina's.
+  # Veeggebaar op de fotopagina: 1 = volgende, -1 = vorige, 0 = verwijderen.
+  # De tekst verschijnt meteen; het script in HA zet daarna de echte status.
+  - id: immich_swipe
+    mode: queued
+    parameters:
+      direction: int
+    then:
+      - lambda: |-
+          const char *msg = direction > 0 ? "Volgende..." : (direction < 0 ? "Vorige..." : "Verwijderen...");
+          lv_label_set_text(id(lbl_immich_status), msg);
+          lv_obj_set_style_bg_opa(id(immich_toast), LV_OPA_70, LV_PART_MAIN);
+      - if:
+          condition:
+            lambda: 'return direction > 0;'
+          then:
+            - homeassistant.action:
+                action: shell_command.immich_photo_next
+      - if:
+          condition:
+            lambda: 'return direction < 0;'
+          then:
+            - homeassistant.action:
+                action: shell_command.immich_photo_prev
+      - if:
+          condition:
+            lambda: 'return direction == 0;'
+          then:
+            - homeassistant.action:
+                action: shell_command.immich_photo_confirm_trash
+
   - id: page_background_tap
     then:
       - if:
