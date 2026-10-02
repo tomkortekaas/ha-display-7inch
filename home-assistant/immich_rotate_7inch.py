@@ -40,6 +40,7 @@ SCRIPT_TIMEOUT = 50
 TRASH_CONFIRM_SECONDS = 5
 MAX_HISTORY = 40
 THIS_DAY_REFRESH_SECONDS = 30 * 60
+PREFERRED_LIBRARY_PATH = str(SECRETS.get("immich_preferred_library_path", "/mnt/media/Photos/"))
 # Na een tik op het scherm wisselt de minuuttimer even niet: anders verdwijnt
 # de foto onder je vinger, of verwijdert de dialoog de volgende.
 AUTO_PAUSE_SECONDS = 60
@@ -144,12 +145,27 @@ def fetch_this_day(today):
             "takenBefore": f"{end}T23:59:59.999Z",
             "visibility": "timeline",
         }):
-            if str(asset.get("localDateTime", ""))[5:10] == day_key:
-                found[asset["id"]] = {
-                    "id": asset["id"],
-                    "type": asset.get("type", "IMAGE"),
-                    "taken": asset.get("localDateTime", ""),
-                }
+            if str(asset.get("localDateTime", ""))[5:10] != day_key:
+                continue
+            # Dezelfde foto staat soms in beide bibliotheken (Tom en Chanel):
+            # zelfde naam en opnamemoment. Toon hem één keer.
+            key = (str(asset.get("localDateTime", ""))[:19], asset.get("originalFileName", asset["id"]))
+            entry = {
+                "id": asset["id"],
+                "type": asset.get("type", "IMAGE"),
+                "taken": asset.get("localDateTime", ""),
+                "copies": [asset["id"]],
+            }
+            if key in found:
+                kept = found[key]
+                copies = kept["copies"] + [asset["id"]]
+                if PREFERRED_LIBRARY_PATH and str(asset.get("originalPath", "")).startswith(PREFERRED_LIBRARY_PATH):
+                    entry["copies"] = copies
+                    found[key] = entry
+                else:
+                    kept["copies"] = copies
+            else:
+                found[key] = entry
     return sorted(found.values(), key=lambda a: a["taken"])
 
 
