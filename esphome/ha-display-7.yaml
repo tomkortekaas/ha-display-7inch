@@ -55,15 +55,43 @@ globals:
   - id: doorbell_art_retry_count
     type: int
     initial_value: '0'
-  - id: radar_frame_index
+  # Buienradar: één verzamelplaatje met radar_frame_count frames onder elkaar.
+  # De animatie verschuift alleen het beeld (offset_y); er wordt per frame niets
+  # gedownload of gedecodeerd.
+  - id: radar_frame
     type: int
     initial_value: '0'
+  - id: radar_hold_ticks
+    type: int
+    initial_value: '0'
+  - id: radar_paused
+    type: bool
+    initial_value: 'false'
+  - id: radar_page_active
+    type: bool
+    initial_value: 'false'
+  - id: radar_sheet_ready
+    type: bool
+    initial_value: 'false'
   - id: radar_art_retry_count
     type: int
     initial_value: '0'
-  - id: radar_last_frame_label
+  # input_text.ha_display_radar_meta: "<epoch frame 0>|<aantal>|<stap s>"
+  - id: radar_meta
     type: std::string
-    initial_value: '"radar laden"'
+    initial_value: '""'
+  - id: radar_loaded_meta
+    type: std::string
+    initial_value: '""'
+  - id: radar_first_epoch
+    type: int
+    initial_value: '0'
+  - id: radar_frame_count
+    type: int
+    initial_value: '12'
+  - id: radar_step_s
+    type: int
+    initial_value: '600'
   - id: energy_flow_phase
     type: int
     restore_value: no
@@ -165,10 +193,6 @@ globals:
   # gelijktijdig decoderen — dat belast PSRAM en CPU zwaar en vergroot de kans
   # op een blauwe flits (zie display:), ongeacht welke pagina actief is.
   - id: artwork_busy
-    type: bool
-    restore_value: no
-    initial_value: 'false'
-  - id: radar_wrap_pending
     type: bool
     restore_value: no
     initial_value: 'false'
@@ -296,6 +320,20 @@ logger:
 
 api:
   reboot_timeout: 0s
+  # esphome.ha_display_7_show_page {page: 8} opent een pagina vanuit Home Assistant
+  # (0 energie … 7 tegelscherm, 8 buienradar).
+  actions:
+    - action: show_page
+      variables:
+        page: int
+      then:
+        - if:
+            condition:
+              lambda: 'return page >= 0 && page <= 8 && !id(doorbell_page_active);'
+            then:
+              - script.execute:
+                  id: goto_page
+                  page_index: !lambda 'return page;'
   on_client_connected:
     - lambda: |-
         if (client_info.find("Home Assistant") == std::string::npos) return;
@@ -595,6 +633,7 @@ font:
       - "\U000F0B7C"   # mdi-chef-hat
       - "\U000F051B"   # mdi-timer-outline
       - "\U000F075A"   # mdi-music
+      - "\U000F0437"   # mdi-radar
   - file: "https://github.com/Templarian/MaterialDesign-Webfont/raw/master/fonts/materialdesignicons-webfont.ttf"
     id: font_icon_72
     size: 72
@@ -783,6 +822,21 @@ sensor:
 # Text sensors — Media + Lichten
 # ---------------------------------------------------------------
 text_sensor:
+  - platform: homeassistant
+    id: ha_radar_meta
+    entity_id: input_text.ha_display_radar_meta
+    internal: true
+    on_value:
+      - lambda: |-
+          // "<epoch frame 0>|<aantal>|<stap s>"; alles wat niet klopt negeren.
+          int first = 0, count = 0, step = 0;
+          if (sscanf(x.c_str(), "%d|%d|%d", &first, &count, &step) != 3) return;
+          if (first <= 0 || count != 12 || step <= 0) return;  // buffer is vast 550x(512*12)
+          id(radar_meta) = x;
+          id(radar_first_epoch) = first;
+          id(radar_frame_count) = count;
+          id(radar_step_s) = step;
+      - script.execute: radar_sheet_load
   - platform: homeassistant
     id: ha_idot_timer_status
     entity_id: input_select.idotmatrix_timer_status
@@ -1208,23 +1262,23 @@ artwork_image:
     on_error:
       - script.execute: doorbell_snapshot_retry
   - id: radar_art
-    url: "http://homeassistant.local:8123/local/ha-display-radar/radar_0.jpg"
-    format: AUTO
+    url: "http://homeassistant.local:8123/local/ha-display-radar/radar_sheet.jpg"
+    format: JPEG
     type: RGB565
     byte_order: LITTLE_ENDIAN
-    # Home Assistant (buienradar_radar_7inch.py) levert nu al een kant-en-klaar
-    # 240x225-plaatje. Vroeger schaalde het ESP32 zelf een 268x402-bron ~1.8x op
-    # (resize_mode: COVER) — dat opschalen (interpolatie per pixel, elke 6s)
-    # bleek de werkelijke oorzaak van de blauwe flits, niet de timing. Nu is
-    # source == target, dus dit is een simpele 1:1 decode zonder schaalwerk.
-    resize: 240x225
-    buffer_size: 65536
+    # 12 Buienradar-frames van 550x512 onder elkaar (buienradar_radar_7inch.py).
+    # Eén download + decode per Buienradar-update in plaats van één per frame:
+    # het aantal laadbeurten was de oorzaak van de blauwe flitsen. Software-decode
+    # werkt in tijdsplakjes in een aparte buffer, dus de oude kaart blijft lopen
+    # tot de nieuwe klaar is.
+    resize: 550x6144
+    hardware_acceleration: false
     allow_insecure_local_urls: true
     update_interval: never
     on_download_finished:
-      - script.execute: radar_frame_apply
+      - script.execute: radar_sheet_apply
     on_error:
-      - script.execute: radar_frame_retry
+      - script.execute: radar_sheet_retry
   # Eén plaatje per receptenpagina: 10 thumbnails van 96x72 onder elkaar.
   # Losse thumbnail-loads gaven per load kans op een blauwe flits; één load per
   # pagina met software-decode flitste niet (gemeten op het paneel, 2026-09-29).
@@ -3442,8 +3496,10 @@ lvgl:
                         knob:
                           bg_opa: TRANSP
 
+              # De radar heeft een eigen pagina; hier alleen een link zonder plaatje,
+              # zodat het weerscherm geen beelden meer decodeert.
               - obj:
-                  id: weather_radar_card
+                  id: weather_radar_link
                   x: 10
                   y: 150
                   width: 340
@@ -3453,8 +3509,19 @@ lvgl:
                   border_color: 0x2A2B30
                   border_width: 1
                   radius: 18
-                  pad_all: 14
+                  pad_all: 18
                   scrollable: false
+                  pressed:
+                    bg_color: 0x1B1C21
+                    bg_opa: COVER
+                  on_click:
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe);'
+                        then:
+                          - script.execute:
+                              id: goto_page
+                              page_index: 8
                   widgets:
                     - label:
                         x: 0
@@ -3463,37 +3530,34 @@ lvgl:
                         text_color: 0x6B6E76
                         text: "BUIENRADAR"
                     - label:
-                        id: lbl_radar_frame
-                        x: 138
+                        x: 0
+                        y: 40
+                        text_font: font_icon_48
+                        text_color: 0x5A96EB
+                        text: "\U000F0437"  # mdi-radar
+                    - label:
+                        id: lbl_wx_radar_cap
+                        x: 0
+                        y: 116
+                        width: 300
+                        long_mode: WRAP
+                        text_font: font_roboto_28
+                        text_color: 0xFFFFFF
+                        text: "regen --"
+                    - label:
+                        align: BOTTOM_LEFT
+                        x: 0
                         y: 0
-                        width: 174
-                        text_align: RIGHT
-                        text_font: font_roboto_12
+                        text_font: font_roboto_20
                         text_color: 0x78B4EB
-                        long_mode: DOT
-                        text: "radar laden"
-                    - image:
-                        id: img_buienradar
-                        # Gecentreerd binnen de oude 320x300-footprint (x 10-330, y 34-334)
-                        # zodat het kleinere 240x225-beeld geen lege ruimte laat hangen.
-                        x: 50
-                        y: 72
-                        src: radar_art
-                    - bar:
-                        id: bar_radar_progress
-                        x: 10
-                        y: 344
-                        width: 320
-                        height: 7
-                        min_value: 0
-                        max_value: 8
-                        value: 0
-                        radius: 4
-                        bg_color: 0x1B1C21
-                        bg_opa: COVER
-                        indicator:
-                          bg_color: 0x5A96EB
-                          bg_opa: COVER
+                        text: "Open radar"
+                    - label:
+                        align: BOTTOM_LEFT
+                        x: 124
+                        y: 4
+                        text_font: font_icon_28
+                        text_color: 0x78B4EB
+                        text: "\U000F0142"  # mdi-chevron-right
 
               - obj:
                   id: weather_forecast_container
@@ -7823,9 +7887,9 @@ lvgl:
       widgets:
         - button:
             id: home_tile_energie
-            x: 24
+            x: 25
             y: 76
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -7858,7 +7922,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -7875,16 +7939,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_lichten
-            x: 272
+            x: 223
             y: 76
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -7917,7 +7981,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -7934,16 +7998,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_weer
-            x: 520
+            x: 421
             y: 76
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -7976,7 +8040,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -7993,16 +8057,75 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+        - button:
+            id: home_tile_radar
+            x: 619
+            y: 76
+            width: 182
+            height: 246
+            radius: 18
+            bg_color: 0x121214
+            bg_opa: COVER
+            border_width: 1
+            border_color: 0x1F1F26
+            pad_all: 0
+            pressed:
+              bg_color: 0x1C1C20
+              bg_opa: COVER
+              border_width: 1
+              border_color: 0x5A96EB
+            on_click:
+              - if:
+                  condition:
+                    lambda: 'return !id(last_touch_was_swipe);'
+                  then:
+                    - script.execute:
+                        id: goto_page
+                        page_index: 8
+            widgets:
+              - label:
+                  x: 20
+                  y: 18
+                  text_font: font_icon_48
+                  text_color: 0x5A96EB
+                  text: "\U000F0437"  # mdi-radar
+              - label:
+                  id: home_val_radar
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -70
+                  width: 142
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -42
+                  text_font: font_roboto_20
+                  text_color: 0xA0A0A0
+                  text: "Buienradar"
+              - label:
+                  id: home_sub_radar
+                  align: BOTTOM_LEFT
+                  x: 20
+                  y: -18
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_agenda
-            x: 768
+            x: 817
             y: 76
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -8035,7 +8158,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -8052,16 +8175,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_fotos
-            x: 24
+            x: 25
             y: 338
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -8094,7 +8217,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -8111,16 +8234,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_recepten
-            x: 272
+            x: 223
             y: 338
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -8153,7 +8276,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -8170,16 +8293,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_timer
-            x: 520
+            x: 421
             y: 338
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -8212,7 +8335,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -8229,16 +8352,16 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
                   text: ""
         - button:
             id: home_tile_muziek
-            x: 768
+            x: 619
             y: 338
-            width: 232
+            width: 182
             height: 246
             radius: 18
             bg_color: 0x121214
@@ -8269,7 +8392,7 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -70
-                  width: 196
+                  width: 142
                   long_mode: DOT
                   text_font: font_roboto_28
                   text_color: 0xFFFFFF
@@ -8286,7 +8409,163 @@ lvgl:
                   align: BOTTOM_LEFT
                   x: 20
                   y: -18
-                  width: 196
+                  width: 142
+                  long_mode: DOT
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: ""
+
+    # ===========================================================
+    # BUIENRADAR
+    # ===========================================================
+    - id: page_radar
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            id: radar_page_root
+            x: 0
+            y: 0
+            width: 1024
+            height: 600
+            bg_color: 0x000000
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            on_click:
+              - script.execute: page_background_tap
+            widgets:
+              # Tik op de kaart = pauze/verder.
+              - obj:
+                  id: radar_map_frame
+                  x: 23
+                  y: 43
+                  width: 552
+                  height: 514
+                  bg_color: 0x121214
+                  bg_opa: COVER
+                  border_color: 0x1F1F26
+                  border_width: 1
+                  radius: 0
+                  pad_all: 0
+                  scrollable: false
+                  on_click:
+                    - if:
+                        condition:
+                          lambda: 'return !id(last_touch_was_swipe) && id(radar_sheet_ready);'
+                        then:
+                          - lambda: |-
+                              id(radar_paused) = !id(radar_paused);
+                              id(radar_hold_ticks) = 0;
+                          - script.execute: radar_labels_update
+                  widgets:
+                    - image:
+                        id: img_radar
+                        x: 0
+                        y: 0
+                        width: 550
+                        height: 512
+                        src: radar_art
+                        hidden: true
+                    - label:
+                        id: lbl_radar_loading
+                        align: CENTER
+                        text_font: font_roboto_20
+                        text_color: 0x6B6E76
+                        text: "radar laden"
+              - label:
+                  x: 606
+                  y: 52
+                  text_font: font_roboto_12
+                  text_color: 0x6B6E76
+                  text: "BUIENRADAR"
+              - label:
+                  id: lbl_radar_time
+                  x: 602
+                  y: 72
+                  text_font: font_num_76
+                  text_color: 0xFFFFFF
+                  text: "--:--"
+              - label:
+                  id: lbl_radar_rel
+                  x: 606
+                  y: 168
+                  width: 394
+                  long_mode: DOT
+                  text_font: font_roboto_28
+                  text_color: 0x78B4EB
+                  text: ""
+              # Zelfde regenbalken als de weerpagina: regen per 10 min, nu t/m +2 u.
+              # Ze staan stil; alleen de kaart animeert.
+              - obj:
+                  id: radar_rain_bars
+                  x: 606
+                  y: 222
+                  width: 394
+                  height: 90
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  layout:
+                    type: FLEX
+                    flex_flow: ROW
+                    flex_align_cross: END
+                    pad_column: 7
+                  widgets:
+                    - bar: { id: radar_rb0, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb1, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb2, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb3, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb4, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb5, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb6, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb7, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb8, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb9, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb10, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+                    - bar: { id: radar_rb11, flex_grow: 1, height: 90, min_value: 0, max_value: 100, value: 0, bg_color: 0x252A35, bg_opa: COVER, radius: 5, indicator: { bg_color: 0x38BDF8, bg_opa: COVER, radius: 5 } }
+              - label:
+                  id: lbl_radar_tick_start
+                  x: 606
+                  y: 320
+                  text_font: font_roboto_12
+                  text_color: 0x6B6E76
+                  text: ""
+              - label:
+                  id: lbl_radar_tick_end
+                  x: 900
+                  y: 320
+                  width: 100
+                  text_align: RIGHT
+                  text_font: font_roboto_12
+                  text_color: 0x6B6E76
+                  text: ""
+              - label:
+                  id: lbl_radar_rain
+                  x: 606
+                  y: 362
+                  width: 394
+                  long_mode: WRAP
+                  text_font: font_roboto_20
+                  text_color: 0xFFFFFF
+                  text: ""
+              - label:
+                  id: lbl_radar_state
+                  x: 606
+                  y: 406
+                  width: 394
+                  long_mode: WRAP
+                  text_font: font_roboto_16
+                  text_color: 0x6B6E76
+                  text: "tik op de kaart om te pauzeren"
+              - label:
+                  id: lbl_radar_updated
+                  x: 606
+                  y: 524
+                  width: 394
                   long_mode: DOT
                   text_font: font_roboto_16
                   text_color: 0x6B6E76
@@ -8750,6 +9029,7 @@ script:
           id(immich_page_active) = (page_index == 4);
           id(recipe_list_page_active) = (page_index == 5);
           id(weather_page_active) = (page_index == 2);
+          id(radar_page_active) = (page_index == 8);
           id(ah_recipe_page_active) = false;
           id(immich_overlay_countdown) = 0;
           id(nav_overlay_countdown) = 0;
@@ -8814,6 +9094,12 @@ script:
             - lvgl.page.show: page_home
       - if:
           condition:
+            lambda: 'return page_index == 8;'
+          then:
+            - lvgl.page.show: page_radar
+            - script.execute: radar_labels_update
+      - if:
+          condition:
             lambda: 'return page_index == 7;'
           then:
             # Op het tegelscherm staat de statusbalk vast (klok, status, geen auto-hide).
@@ -8824,13 +9110,12 @@ script:
             - lvgl.widget.hide: top_status_bar
       - if:
           condition:
-            lambda: 'return page_index == 2;'
+            lambda: 'return page_index == 8;'
           then:
-            # Even wachten tot de paginaovergang (volledige redraw) is afgerond
-            # vóórdat de radar-decode start — anders botsen de grote paginaredraw
-            # en de decode in dezelfde tick (blauwe flits bij overschakelen).
+            # Eerst de paginaovergang (volledige redraw) laten afronden, dan pas
+            # een eventuele nieuwe radarkaart ophalen.
             - delay: 400ms
-            - script.execute: radar_frame_load
+            - script.execute: radar_sheet_load
 
   # Tegelscherm — live waarden. Leest alleen sensoren die er al zijn; geen
   # plaatjes, zodat het tegelscherm geen decode-werk (en dus geen flits) kost.
@@ -8864,6 +9149,35 @@ script:
             set(id(home_val_weer), isnan(t) ? std::string("--\xc2\xb0") : str_sprintf("%.0f\xc2\xb0", t));
             std::string rain = id(wx_rain_cap).state;
             set(id(home_sub_weer), usable(rain) ? rain : std::string(""));
+          }
+
+          // Buienradar: wanneer begint de regen (regenpunten = 12 stappen van 10 min)
+          {
+            const std::string pts = id(wx_rain_pts).state;
+            int first_wet = -1, idx = 0;
+            size_t pos = 0;
+            while (idx < 12 && pos <= pts.size() && usable(pts)) {
+              size_t comma = pts.find(',', pos);
+              int v = atoi(pts.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos).c_str());
+              if (v > 0) { first_wet = idx; break; }
+              if (comma == std::string::npos) break;
+              pos = comma + 1;
+              idx++;
+            }
+            if (!usable(pts)) {
+              set(id(home_val_radar), "--");
+              set(id(home_sub_radar), "");
+            } else if (first_wet < 0) {
+              set(id(home_val_radar), "Droog");
+              set(id(home_sub_radar), "komende 2 uur");
+            } else if (first_wet == 0) {
+              set(id(home_val_radar), "Regen");
+              const std::string cap = id(wx_rain_cap).state;
+              set(id(home_sub_radar), usable(cap) ? cap : std::string("nu"));
+            } else {
+              set(id(home_val_radar), str_sprintf("+%d min", first_wet * 10));
+              set(id(home_sub_radar), "regen verwacht");
+            }
           }
 
           // Agenda: eerstvolgende afspraak van vandaag ("HH:MM titel")
@@ -9554,6 +9868,7 @@ script:
           id(immich_page_active) = false;
           id(recipe_list_page_active) = false;
           id(weather_page_active) = false;
+          id(radar_page_active) = false;
           id(immich_overlay_countdown) = 0;
           id(doorbell_art_retry_count) = 0;
       - script.execute: spotify_drawer_close_script
@@ -9621,62 +9936,54 @@ script:
                 id: lbl_doorbell_status
                 text: "geen snapshot"
 
-  - id: radar_frame_load
+  # Haalt het radarplaatje alleen op als de radarpagina open is en Home Assistant
+  # een nieuwe Buienradar-run heeft gemeld (of er nog niets geladen is).
+  - id: radar_sheet_load
     mode: restart
     then:
       - if:
           condition:
-            lambda: 'return !id(artwork_busy);'
+            lambda: |-
+              return id(radar_page_active) && !id(radar_meta).empty() &&
+                     id(radar_meta) != id(radar_loaded_meta);
           then:
-            - lambda: |-
-                id(artwork_busy) = true;
-                int frame = id(radar_frame_index);
-                if (frame < 0) frame = 0;
-                if (frame > 8) frame = 8;
-                int minutes = frame * 15;
-                char label[24];
-                if (minutes == 0) {
-                  snprintf(label, sizeof(label), "radar nu");
-                } else {
-                  snprintf(label, sizeof(label), "radar +%d min", minutes);
-                }
-                id(radar_last_frame_label) = std::string(label);
-                lv_label_set_text(id(lbl_radar_frame), id(radar_last_frame_label).c_str());
-                lv_bar_set_value(id(bar_radar_progress), frame, LV_ANIM_OFF);
-            # Verbergen tijdens de buffer-swap: de oude artwork-buffer wordt
-            # vrijgegeven vóórdat de nieuwe klaar is, en zonder hide/show blijft
-            # het widget in dat gaatje even naar ongeldig geheugen wijzen —
-            # dat toont een blauwe flits. Zelfde patroon als andere artwork-widgets.
-            - lvgl.widget.hide: img_buienradar
-            - artwork_image.set_url:
-                id: radar_art
-                url: !lambda |-
-                  int frame = id(radar_frame_index);
-                  if (frame < 0) frame = 0;
-                  if (frame > 8) frame = 8;
-                  char path[96];
-                  snprintf(path, sizeof(path), "/local/ha-display-radar/radar_%d.jpg?v=%lu", frame, (unsigned long) millis());
-                  return id(ha_base_url_detected) + std::string(path);
-          else:
-            # Andere beeldbron is bezig — kort wachten en opnieuw proberen.
-            - delay: 200ms
-            - script.execute: radar_frame_load
+            - if:
+                condition:
+                  lambda: 'return !id(artwork_busy);'
+                then:
+                  - lambda: 'id(artwork_busy) = true;'
+                  - artwork_image.set_url:
+                      id: radar_art
+                      url: !lambda |-
+                        // ?v= met de uitgiftetijd: elke run een eigen URL, geen cache.
+                        return id(ha_base_url_detected) +
+                               std::string("/local/ha-display-radar/radar_sheet.jpg?v=") +
+                               to_string(id(radar_first_epoch));
+                else:
+                  # Andere beeldbron is bezig — kort wachten en opnieuw proberen.
+                  - delay: 200ms
+                  - script.execute: radar_sheet_load
 
-  - id: radar_frame_apply
+  - id: radar_sheet_apply
     mode: restart
     then:
       - lambda: |-
           id(artwork_busy) = false;
           id(radar_art_retry_count) = 0;
-      - lvgl.image.update:
-          id: img_buienradar
-          src: radar_art
-      - lvgl.widget.show: img_buienradar
-      - lvgl.label.update:
-          id: lbl_radar_frame
-          text: !lambda 'return id(radar_last_frame_label);'
+          id(radar_loaded_meta) = id(radar_meta);
+          id(radar_sheet_ready) = true;
+          // Nieuwe run: vooraan beginnen, met de gewone pauze op "nu".
+          id(radar_frame) = 0;
+          id(radar_hold_ticks) = 0;
+          lv_obj_t *img = id(img_radar);
+          lv_image_set_src(img, id(radar_art)->get_lv_image_dsc());
+          lv_image_set_inner_align(img, LV_IMAGE_ALIGN_TOP_LEFT);
+          lv_image_set_offset_y(img, 0);
+          lv_obj_clear_flag(img, LV_OBJ_FLAG_HIDDEN);
+          lv_obj_add_flag(id(lbl_radar_loading), LV_OBJ_FLAG_HIDDEN);
+      - script.execute: radar_labels_update
 
-  - id: radar_frame_retry
+  - id: radar_sheet_retry
     mode: restart
     then:
       - lambda: 'id(artwork_busy) = false;'
@@ -9686,11 +9993,74 @@ script:
           then:
             - lambda: 'id(radar_art_retry_count)++;'
             - delay: 750ms
-            - script.execute: radar_frame_load
+            - script.execute: radar_sheet_load
           else:
-            - lvgl.label.update:
-                id: lbl_radar_frame
-                text: "radar offline"
+            - lambda: |-
+                id(radar_art_retry_count) = 0;
+                // De vorige kaart (als die er is) blijft gewoon lopen.
+                if (!id(radar_sheet_ready)) lv_label_set_text(id(lbl_radar_loading), "radar offline");
+                lv_label_set_text(id(lbl_radar_updated), "radar offline");
+                lv_obj_set_style_text_color(id(lbl_radar_updated), lv_color_hex(0xF5B45A), LV_PART_MAIN);
+
+  # Tijd, tijdlijn en bijschriften bij het huidige frame.
+  - id: radar_labels_update
+    then:
+      - lambda: |-
+          auto set = [](lv_obj_t *label, const std::string &text) {
+            if (strcmp(lv_label_get_text(label), text.c_str()) != 0) lv_label_set_text(label, text.c_str());
+          };
+          auto hhmm = [](int epoch) {
+            if (epoch <= 0) return std::string("--:--");
+            ESPTime t = ESPTime::from_epoch_local((time_t) epoch);
+            return str_sprintf("%02d:%02d", t.hour, t.minute);
+          };
+          const int count = std::max(1, id(radar_frame_count));
+          const int frame = std::min(std::max(0, id(radar_frame)), count - 1);
+          const int first = id(radar_first_epoch);
+          const int frame_epoch = first > 0 ? first + frame * id(radar_step_s) : 0;
+
+          set(id(lbl_radar_time), hhmm(frame_epoch));
+          {
+            // Regenhoogtes uit dezelfde sensor als de weerpagina ("v0,v1,…,v11", 0-100).
+            static lv_obj_t *const bars[12] = {
+              id(radar_rb0), id(radar_rb1), id(radar_rb2), id(radar_rb3), id(radar_rb4), id(radar_rb5),
+              id(radar_rb6), id(radar_rb7), id(radar_rb8), id(radar_rb9), id(radar_rb10), id(radar_rb11)
+            };
+            const std::string pts = id(wx_rain_pts).state;
+            size_t pos = 0;
+            for (int i = 0; i < 12; i++) {
+              int v = 0;
+              if (pos != std::string::npos && pos < pts.size()) {
+                size_t comma = pts.find(',', pos);
+                v = atoi(pts.substr(pos, comma == std::string::npos ? std::string::npos : comma - pos).c_str());
+                pos = comma == std::string::npos ? std::string::npos : comma + 1;
+              }
+              lv_bar_set_value(bars[i], std::min(std::max(v, 0), 100), LV_ANIM_OFF);  // no-op als gelijk
+            }
+          }
+          set(id(lbl_radar_tick_start), hhmm(first));
+          set(id(lbl_radar_tick_end), hhmm(first > 0 ? first + (count - 1) * id(radar_step_s) : 0));
+
+          auto now = id(ha_time).now();
+          std::string rel;
+          if (frame_epoch > 0 && now.is_valid()) {
+            int minutes = (int) ((frame_epoch - (int) now.timestamp) / 60);
+            rel = minutes < 5 ? std::string("nu") : str_sprintf("+%d min", minutes);
+          }
+          set(id(lbl_radar_rel), rel);
+
+          std::string rain = id(wx_rain_cap).state;
+          if (rain.empty() || rain == "unknown" || rain == "unavailable") rain = "";
+          set(id(lbl_radar_rain), rain);
+          set(id(lbl_radar_state), id(radar_paused) ? "gepauzeerd \xc2\xb7 tik om verder te gaan"
+                                                    : "tik op de kaart om te pauzeren");
+
+          // Buienradar geeft elke 5 min een run uit; ouder dan 30 min = HA haalt niets meer op.
+          if (first > 0 && now.is_valid()) {
+            const bool stale = (int) now.timestamp - first > 30 * 60;
+            set(id(lbl_radar_updated), (stale ? "verouderd \xc2\xb7 run " : "bijgewerkt ") + hhmm(first));
+            lv_obj_set_style_text_color(id(lbl_radar_updated), lv_color_hex(stale ? 0xF5B45A : 0x6B6E76), LV_PART_MAIN);
+          }
 
   - id: recipe_tab_colors
     then:
@@ -10779,6 +11149,7 @@ interval:
           std::string rain = id(wx_rain_cap).state;
           if (rain.empty() || rain == "unknown" || rain == "unavailable") rain = "regen --";
           lv_label_set_text(id(lbl_wx_rain), rain.c_str());
+          lv_label_set_text(id(lbl_wx_radar_cap), rain.c_str());
           {
             std::string s = id(wx_rain_pts).state;
             lv_obj_t* rbars[12] = {
@@ -11275,27 +11646,19 @@ interval:
           place(id(dot_energy_battery_2), battery_active_pts, wrap(battery_index - 8));
           place(id(dot_energy_battery_3), battery_active_pts, wrap(battery_index - 16));
 
-  # Buienradar loop — 9 frames van nu t/m +120 min, 15 minuten per stap.
-  # Interval was 3s: dat decodeert continu (elke 3s, zolang het weerscherm
-  # open staat) een nieuwe JPEG, vaak genoeg om af en toe samen te vallen
-  # met de DSI-refresh (blauwe flits). De radardata zelf verandert toch maar
-  # om de 15 minuten, dus 6s per frame kost geen echte informatie.
-  - interval: 6s
+  # Buienradar-animatie: 800 ms per frame, 2,5 s op het eerste en laatste
+  # frame. Alleen offset_y verschuift; LVGL tekent dan alleen het kaartvlak.
+  - interval: 100ms
     then:
       - if:
           condition:
-            lambda: 'return id(weather_page_active);'
+            lambda: 'return id(radar_page_active) && id(radar_sheet_ready) && !id(radar_paused);'
           then:
             - lambda: |-
-                id(radar_frame_index)++;
-                id(radar_wrap_pending) = id(radar_frame_index) > 8;
-                if (id(radar_wrap_pending)) id(radar_frame_index) = 0;
-            # Extra marge bij de cyclus-wrap (120 min -> nu): niet hard bewezen,
-            # maar de blauwe flits werd hier vaker gezien dan bij tussenliggende
-            # frames. Mogelijk heap-fragmentatie na 8 opeenvolgende decodes.
-            - if:
-                condition:
-                  lambda: 'return id(radar_wrap_pending);'
-                then:
-                  - delay: 300ms
-            - script.execute: radar_frame_load
+                const int count = std::max(1, id(radar_frame_count));
+                const bool at_end = id(radar_frame) == 0 || id(radar_frame) == count - 1;
+                if (++id(radar_hold_ticks) < (at_end ? 25 : 8)) return;
+                id(radar_hold_ticks) = 0;
+                id(radar_frame) = (id(radar_frame) + 1) % count;
+                lv_image_set_offset_y(id(img_radar), -512 * id(radar_frame));
+                id(radar_labels_update).execute();

@@ -7,22 +7,14 @@
 # homeassistant:
 #   packages: !include_dir_named packages
 
-# Buienradar-kaart voor het ESPHome weerscherm
+# Buienradar-kaart voor de radarpagina van het 7-inch scherm
 # ------------------------------------------------------------
-# Het display verwacht 9 lokale JPG frames:
-#   /config/www/ha-display-radar/radar_0.jpg  -> nu
-#   /config/www/ha-display-radar/radar_1.jpg  -> +15 min
-#   ...
-#   /config/www/ha-display-radar/radar_8.jpg  -> +120 min
-#
-# Deze zijn via Home Assistant bereikbaar als:
-#   /local/ha-display-radar/radar_0.jpg ... radar_8.jpg
-#
-# De Buienradar integratie is aanwezig. De entity registry bevat
-# camera.buienradar, maar die staat standaard disabled_by=integration.
-# Schakel deze camera in via Settings > Devices & services > Entities
-# als je een actuele Buienradar still als bron of fallback wilt gebruiken.
-# De bewegende 2-uurs radar gebruikt de lokale framebestanden hierboven.
+# buienradar_radar_7inch.py zet de 12 radarframes (nu t/m +110 min, 10 min per
+# stap, 550x512) onder elkaar in één plaatje:
+#   /config/www/ha-display-radar/radar_sheet.jpg  (550x6144)
+# bereikbaar als /local/ha-display-radar/radar_sheet.jpg. Het scherm laadt dat
+# één keer per update en animeert door het beeld te verschuiven.
+# De tijden staan in input_text.ha_display_radar_meta: "<epoch frame 0>|<aantal>|<stap s>".
 
 rest:
   - resource: !secret photo_swipe_today_url
@@ -1487,6 +1479,12 @@ shell_command:
   immich_review_count: "python3 /config/www/idotmatrix/immich_rotate_7inch.py review-count"
   buienradar_update_7inch: "python3 /config/www/idotmatrix/buienradar_radar_7inch.py"
 
+input_text:
+  ha_display_radar_meta:
+    name: "HA Display 7 radar meta"
+    icon: mdi:radar
+    max: 64
+
 input_boolean:
   ha_display_deurbel_actief:
     name: "HA Display 7 deurbel actief"
@@ -1535,6 +1533,8 @@ automation:
     action:
       - action: shell_command.immich_review_count
 
+  # Buienradar geeft elke 5 minuten een nieuwe run uit. Alleen bij succes de
+  # meta bijwerken: dan blijft het scherm bij een storing op de vorige kaart.
   - alias: "HA Display 7 - Buienradar frames verversen"
     id: ha_display_7_buienradar_frames_verversen
     mode: single
@@ -1542,9 +1542,19 @@ automation:
       - trigger: homeassistant
         event: start
       - trigger: time_pattern
-        minutes: "/10"
+        minutes: "/5"
     action:
       - action: shell_command.buienradar_update_7inch
+        response_variable: radar
+      - if:
+          - condition: template
+            value_template: "{{ radar.returncode == 0 and radar.stdout | trim | length > 0 }}"
+        then:
+          - action: input_text.set_value
+            target:
+              entity_id: input_text.ha_display_radar_meta
+            data:
+              value: "{{ (radar.stdout | trim).split('\\n') | last }}"
 
   - alias: "HA Display 7 - Immich foto roteren"
     id: ha_display_7_immich_foto_roteren

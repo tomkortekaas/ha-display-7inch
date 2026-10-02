@@ -67,13 +67,13 @@ home = find_by_id(lvgl.fetch("pages"), "page_home")
 check(home.is_a?(Hash), "missing page_home")
 expected = {
   "energie" => 0, "lichten" => 1, "weer" => 2, "agenda" => 3,
-  "fotos" => 4, "recepten" => 5, "timer" => 6
+  "fotos" => 4, "recepten" => 5, "timer" => 6, "radar" => 8
 }
 expected.each do |key, index|
   tile = find_by_id(home, "home_tile_#{key}")
   check(tile.is_a?(Hash), "missing tile home_tile_#{key}")
   check(deep_values(tile, "page_index") == [index], "home_tile_#{key} must open page #{index}")
-  check(tile.values_at("width", "height") == [232, 246], "home_tile_#{key} must be 232x246")
+  check(tile.values_at("width", "height") == [182, 246], "home_tile_#{key} must be 182x246 (5x2 grid)")
   check(find_by_id(tile, "home_val_#{key}").is_a?(Hash), "home_tile_#{key} needs a live value label")
 end
 music = find_by_id(home, "home_tile_muziek")
@@ -85,6 +85,9 @@ tiles.each do |tile|
   check(tile["x"] >= 0 && tile["x"] + tile["width"] <= 1024 && tile["y"] >= 56 &&
         tile["y"] + tile["height"] <= 600, "#{tile['id']} must sit on screen below the status bar")
 end
+slots = tiles.map { |tile| [tile["x"], tile["y"]] }
+check(slots.uniq.size == slots.size, "home tiles must not overlap")
+check(slots.all? { |x, _| [25, 223, 421, 619, 817].include?(x) }, "home tiles must sit on the 5-column grid")
 
 scripts = display.fetch("script")
 goto_page = find_by_id(scripts, "goto_page")
