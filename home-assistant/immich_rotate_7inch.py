@@ -754,6 +754,14 @@ def action_review_rotate(state):
     publish_review(state, "Geroteerd")
 
 
+def refresh_review_count(state):
+    """Badge meteen bijwerken na verwijderen of beoordelen, niet pas bij de 5-minutentik."""
+    try:
+        publish_review_count(len(fetch_today_queue(state)))
+    except Exception as exc:
+        sys.stderr.write(f"[immich] badge bijwerken faalde: {exc}\n")
+
+
 def action_review_count(state):
     """Badge bijwerken zonder sessie aan te maken."""
     publish_review_count(len(fetch_today_queue(state)))
@@ -788,6 +796,7 @@ def action_keep(state):
     state["last_action"] = {"asset_id": asset_id, "action": "keep"}
     action_next(state)
     publish_current(state, "Foto bewaard")
+    refresh_review_count(state)
 
 
 def action_skip(state):
@@ -800,6 +809,7 @@ def action_skip(state):
     state["last_action"] = {"asset_id": asset_id, "action": "skip"}
     action_next(state)
     publish_current(state, "Foto overgeslagen")
+    refresh_review_count(state)
 
 
 def action_undo(state):
@@ -825,6 +835,10 @@ def action_undo(state):
         state.setdefault("this_day", {})["fetched_at"] = 0
         save_state(state)
     publish_current(state, "Foto teruggezet" if last and last.get("action") == "trash" else "Laatste actie ongedaan")
+    if last and last.get("action") == "trash":
+        this_day_pool(state, force=True)
+        save_state(state)
+    refresh_review_count(state)
 
 
 def action_rotate(state):
@@ -869,6 +883,7 @@ def action_trash(state, confirm=False):
     state.pop("trash_pending_until", None)
     action_next(state)
     publish_current(state, "Foto naar Immich prullenbak")
+    refresh_review_count(state)
 
 
 def main():
