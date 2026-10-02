@@ -6166,12 +6166,51 @@ lvgl:
                           # een losse next erachteraan zou een foto overslaan.
                           - homeassistant.action:
                               action: shell_command.immich_photo_confirm_trash
+                          - script.execute: immich_undo_offer
                         widgets:
                           - label:
                               align: CENTER
                               text_font: font_roboto_20
                               text_color: 0xFFFFFF
                               text: "Verwijderen"
+
+              # Ongedaan maken — 6 s zichtbaar na verwijderen
+              - button:
+                  id: immich_undo_btn
+                  align: BOTTOM_MID
+                  y: -96
+                  width: 300
+                  height: 72
+                  radius: 36
+                  bg_color: 0x222222
+                  bg_opa: 85%
+                  border_width: 2
+                  border_color: 0xFFFFFF
+                  border_opa: 60%
+                  pad_all: 0
+                  scrollable: false
+                  hidden: true
+                  on_click:
+                    - lvgl.widget.hide: immich_undo_btn
+                    - script.stop: immich_undo_offer
+                    - lambda: |-
+                        lv_label_set_text(id(lbl_immich_status), "Terugzetten...");
+                        lv_obj_set_style_bg_opa(id(immich_toast), LV_OPA_70, LV_PART_MAIN);
+                    - homeassistant.action:
+                        action: shell_command.immich_photo_undo
+                  widgets:
+                    - label:
+                        align: LEFT_MID
+                        x: 28
+                        text_font: font_icon_28
+                        text_color: 0xFFFFFF
+                        text: "\U000F054C"  # mdi-undo
+                    - label:
+                        align: LEFT_MID
+                        x: 72
+                        text_font: font_roboto_20
+                        text_color: 0xFFFFFF
+                        text: "Ongedaan maken"
 
               - obj:
                   id: immich_toast
@@ -9725,6 +9764,15 @@ script:
           then:
             - homeassistant.action:
                 action: shell_command.immich_photo_confirm_trash
+            - script.execute: immich_undo_offer
+
+  # Na verwijderen staat "Ongedaan maken" 6 seconden in beeld.
+  - id: immich_undo_offer
+    mode: restart
+    then:
+      - lvgl.widget.show: immich_undo_btn
+      - delay: 6s
+      - lvgl.widget.hide: immich_undo_btn
 
   - id: page_background_tap
     then:

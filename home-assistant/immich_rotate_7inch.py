@@ -451,7 +451,13 @@ def publish_current(state, status="Immich foto actief"):
         if 0 <= idx < len(state.get("history", [])):
             state["history"][idx] = asset
             save_state(state)
-    photo_url = f"{PHOTO_BASE}/local/immich/current.jpg?v={int(time.time() * 1000)}"
+    # Versie volgt het bestand, niet de klok: een tweede publish voor dezelfde
+    # foto (alleen een andere statustekst) laat het scherm dan niet opnieuw laden.
+    try:
+        version = int(os.path.getmtime(OUT_JPG) * 1000)
+    except OSError:
+        version = int(time.time() * 1000)
+    photo_url = f"{PHOTO_BASE}/local/immich/current.jpg?v={version}"
     common_attrs = {
         "asset_id": asset["id"],
         "original_file_name": asset.get("originalFileName") or asset.get("fileName") or "",
@@ -780,8 +786,19 @@ def action_undo(state):
             pass
     notify_photo_swipe(last_asset_id or "", "undo", last_asset_id)
     state["last_action"] = None
-    action_prev(state)
-    publish_current(state, "Laatste actie ongedaan")
+    # Terug naar precies die foto, ook als er na het verwijderen al verder is geveegd.
+    history = state.get("history", [])
+    idx = next((i for i in range(len(history) - 1, -1, -1) if history[i]["id"] == last_asset_id), None)
+    if idx is None:
+        action_prev(state)
+    else:
+        state["index"] = idx
+        state["zoom"] = False
+        save_rendered(history[idx], OUT_JPG, zoom=False)
+        # Pool bij de volgende keuze opnieuw ophalen, met de teruggezette foto erin.
+        state.setdefault("this_day", {})["fetched_at"] = 0
+        save_state(state)
+    publish_current(state, "Foto teruggezet" if last and last.get("action") == "trash" else "Laatste actie ongedaan")
 
 
 def action_rotate(state):
